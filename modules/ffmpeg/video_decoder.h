@@ -59,6 +59,7 @@ extern "C" {
 #include "libswresample/swresample.h"
 #include "libswscale/swscale.h"
 }
+#endif
 
 #include <thread>
 
@@ -213,7 +214,5 @@ public:
 	VideoDecoder(Ref<FileAccess> p_file);
 	~VideoDecoder();
 };
-
-#endif // VIDEO_DECODER_H
 
 #endif // VIDEO_DECODER_H
