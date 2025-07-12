@@ -6,7 +6,7 @@
 [subrepo]
 	remote = https://github.com/EIRTeam/EIRTeam.FFmpeg.git
 	branch = master
-	commit = b25ade5ed5b33bbaf96fa2d862f7981918ffea05
-	parent = 15e339d6a7e2412ef34921f4f3cf6f90a6ee9d95
+	commit = 4b311999cd323744557ef215f214a52a788465e0
+	parent = 3bc43c90bb955c23d2be09891e4ae8e81c99d6bf
 	method = merge
 	cmdver = 0.4.6
