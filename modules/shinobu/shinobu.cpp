@@ -8,6 +8,10 @@
 #define MINIAUDIO_IMPLEMENTATION
 #define MA_DEBUG_OUTPUT
 
+#ifdef ANDROID_ENABLED
+#include <android/log.h>
+#endif
+
 /* clang-format off */
 #include "miniaudio/miniaudio.h"
 #include "shinobu_channel_remap.h"
