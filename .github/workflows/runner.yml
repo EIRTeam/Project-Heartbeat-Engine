@@ -15,10 +15,9 @@ jobs:
 
   # # Second stage: Run all the builds and some of the tests.
 
-  # android-build:
-  #   name: 🤖 Android
-  #   needs: static-checks
-  #   uses: ./.github/workflows/android_builds.yml
+  android-build:
+    name: 🤖 Android
+    uses: ./.github/workflows/android_builds.yml
 
   # ios-build:
   #   name: 🍏 iOS
@@ -34,5 +33,5 @@ jobs:
     uses: ./.github/workflows/windows_builds.yml
 
   upload-release:
-    needs: [windows-build, linux-build]
+    needs: [windows-build, linux-build, android-build]
     uses: ./.github/workflows/upload_release.yml

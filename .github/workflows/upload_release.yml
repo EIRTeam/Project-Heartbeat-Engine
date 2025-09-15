@@ -40,6 +40,8 @@ jobs:
             artifact-name: linux-engine
           - name: Linux editor
             artifact-name: linux-editor
+          - name: Android engine
+            artifact-name: android-engine
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -62,4 +64,4 @@ jobs:
           mv ../engine/*.syms ../pdbs/ || true
           zip -j -r ${{ matrix.artifact-name }}.zip ../engine/*
           cd $GITHUB_WORKSPACE/repo
-          gh release upload latest $(for a in ../pdbs/*; do echo $a; done) ../${{ matrix.artifact-name }}/${{ matrix.artifact-name }}.zip
+          gh release upload latest $(for a in ../pdbs/*; do [ -e "$a" ] || continue; echo $a; done) ../${{ matrix.artifact-name }}/${{ matrix.artifact-name }}.zip

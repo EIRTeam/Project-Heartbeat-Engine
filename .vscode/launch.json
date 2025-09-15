@@ -1,0 +1,25 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug",
+            "program": "${workspaceFolder}/engine/bin/godot.linuxbsd.editor.dev.x86_64",
+            "args": ["--path", "/mnt/wwn-0x50026b7782b0ee9e-part1/repos/Project-Heartbeat"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug ffmptest",
+            "program": "${workspaceFolder}/engine/bin/godot.linuxbsd.editor.dev.x86_64",
+            "args": ["--path", "/home/eirexe/ffmpeg_stream_info_test", "res://control.tscn"],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
