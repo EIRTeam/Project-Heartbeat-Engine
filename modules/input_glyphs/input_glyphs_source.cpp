@@ -45,7 +45,7 @@ Ref<InputGlyphsSource> InputGlyphsSource::create() {
 	return _create_func();
 }
 
-Ref<Texture2D> InputGlyphsSourceBuiltin::get_input_glyph(const InputGlyphsConstants::InputType &p_input_type, const InputGlyphsConstants::InputOrigin &p_input_origin, const BitField<InputGlyphStyle> &p_glyphs_style, const InputGlyphSize &p_size) {
+Ref<Image> InputGlyphsSourceBuiltin::get_input_glyph(const InputGlyphsConstants::InputType &p_input_type, const InputGlyphsConstants::InputOrigin &p_input_origin, const BitField<InputGlyphStyle> &p_glyphs_style, const InputGlyphSize &p_size) {
 	int theme = p_glyphs_style & 0b11;
 	int abxy_overrides = p_glyphs_style & 0b110000;
 	abxy_overrides = abxy_overrides >> 4;
@@ -97,13 +97,10 @@ Ref<Texture2D> InputGlyphsSourceBuiltin::get_input_glyph(const InputGlyphsConsta
 	// We convert it to a String and then into a PackedByteArray so we can get the proper bounds
 	PackedByteArray pba = String(svg_data).to_utf8_buffer();
 	if (InputGlyphSVGDecode::render_svg(out_image, pba, size) != OK) {
-		Ref<PlaceholderTexture2D> placeholder = memnew(PlaceholderTexture2D);
-		placeholder->set_size(size);
+		Ref<Image> placeholder = Image::create_empty(size.x, size.y, false, Image::FORMAT_R8);
 		return placeholder;
 	}
-	Ref<ImageTexture> image_texture = ImageTexture::create_from_image(out_image);
-	image_texture->set_meta("glyph_path", "BUILT_IN");
-	return image_texture;
+	return out_image;
 }
 
 static unsigned char nibble(unsigned char c) {

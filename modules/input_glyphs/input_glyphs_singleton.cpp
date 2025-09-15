@@ -31,32 +31,32 @@
 #include "input_glyphs_singleton.h"
 #include "core/config/project_settings.h"
 #include "core/input/input_map.h"
+#include "core/object/callable_method_pointer.h"
+#include "core/object/worker_thread_pool.h"
+#include "core/string/print_string.h"
 #include "scene/main/scene_tree.h"
 #include "scene/main/window.h"
 #include "scene/resources/image_texture.h"
 
 InputGlyphsSingleton *InputGlyphsSingleton::singleton = nullptr;
 
-void InputGlyphsSingleton::_join_task(WorkerThreadPool::TaskID p_task_id) {
-	WorkerThreadPool::get_singleton()->wait_for_task_completion(p_task_id);
-}
-
 void InputGlyphsSingleton::_glyph_loaded_callback(GlyphLoadTask *p_task) {
 	InputGlyphsSingleton *igs = InputGlyphsSingleton::get_singleton();
+	WorkerThreadPool::get_singleton()->wait_for_task_completion(p_task->task_id);
 	p_task->task_mutex.lock();
 	igs->mutex.lock();
 	InputGlyphs::GlyphUID uid = p_task->glyph_info.get_uid();
-	if (igs->current_tasks.has(uid) && !p_task->aborted) {
+	if (!p_task->aborted) {
+		Ref<ImageTexture> texture = ImageTexture::create_from_image(p_task->texture);
 		igs->loaded_glyphs.insert(uid, p_task->texture);
-		igs->current_tasks.erase(uid);
 	}
-	callable_mp_static(&InputGlyphsSingleton::_join_task).call_deferred(p_task->task_id);
 	p_task->task_mutex.unlock();
 	igs->mutex.unlock();
 	memdelete(p_task);
 }
 
 void InputGlyphsSingleton::init() {
+	print_line("INIT GLYPHS");
 	SceneTree::get_singleton()->get_root()->connect("window_input", callable_mp(this, &InputGlyphsSingleton::_input_event));
 	glyph_source = InputGlyphsSource::create();
 	if (glyph_source.is_valid()) {
@@ -162,12 +162,25 @@ void InputGlyphsSingleton::_load_glyph_thread(void *p_userdata) {
 	task->task_mutex.lock();
 	if (!task->aborted) {
 		Ref<InputGlyphsSource> glyph_src = InputGlyphsSingleton::get_singleton()->glyph_source;
-		Ref<Texture2D> texture = glyph_src->get_input_glyph(task->glyph_info.type, task->glyph_info.origin, task->glyph_info.style, task->glyph_info.size);
+		Ref<Image> texture = glyph_src->get_input_glyph(task->glyph_info.type, task->glyph_info.origin, task->glyph_info.style, task->glyph_info.size);
 		task->texture = texture;
 	}
 	task->task_mutex.unlock();
 
-	_glyph_loaded_callback(task);
+	callable_mp(InputGlyphsSingleton::get_singleton(), &InputGlyphsSingleton::_on_task_finished);
+}
+
+void InputGlyphsSingleton::_on_task_finished() {
+	auto it = current_tasks.begin();
+	while (it != current_tasks.end()) {
+		if (WorkerThreadPool::get_singleton()->is_task_completed(it->value->task_id)) {
+			InputGlyphs::GlyphUID gid = it->key;
+			_glyph_loaded_callback(it->value);
+			--it;
+			current_tasks.erase(gid);
+		}
+		++it;
+	}
 }
 
 void InputGlyphsSingleton::_on_input_glyphs_changed() {

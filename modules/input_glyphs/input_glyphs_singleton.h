@@ -73,14 +73,13 @@ class InputGlyphsSingleton : public Object {
 		Mutex task_mutex;
 		GlyphInfo glyph_info;
 		WorkerThreadPool::TaskID task_id;
-		Ref<Texture2D> texture;
+		Ref<Image> texture;
 	};
 
 	Mutex mutex;
 	HashMap<InputGlyphs::GlyphUID, GlyphLoadTask *> current_tasks;
 
-	static void _join_task(WorkerThreadPool::TaskID p_task_id);
-	static void _glyph_loaded_callback(GlyphLoadTask *p_task);
+	void _glyph_loaded_callback(GlyphLoadTask *p_task);
 
 	static InputGlyphsSingleton *singleton;
 	void _input_event(const Ref<InputEvent> &p_input_event);
@@ -96,6 +95,7 @@ private:
 	InputGlyphSize default_glyph_size = InputGlyphSize::GLYPH_SIZE_SMALL;
 
 	static void _load_glyph_thread(void *p_userdata);
+	void _on_task_finished();
 
 	void _on_input_glyphs_changed();
 
@@ -116,6 +116,7 @@ public:
 	String input_type_to_localized_string(InputGlyphsConstants::InputType p_origin) const;
 	List<StringName> get_game_actions() const;
 	String get_event_display_string(const Ref<InputEvent> p_event) const;
+
 	InputGlyphsSingleton();
 };
 

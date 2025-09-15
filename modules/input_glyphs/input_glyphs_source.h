@@ -43,7 +43,7 @@ protected:
 	static Ref<InputGlyphsSource> (*_create_func)();
 
 public:
-	virtual Ref<Texture2D> get_input_glyph(const InputGlyphsConstants::InputType &p_input_type, const InputGlyphsConstants::InputOrigin &p_input_origin, const BitField<InputGlyphStyle> &p_glyphs_style, const InputGlyphSize &p_size) = 0;
+	virtual Ref<Image> get_input_glyph(const InputGlyphsConstants::InputType &p_input_type, const InputGlyphsConstants::InputOrigin &p_input_origin, const BitField<InputGlyphStyle> &p_glyphs_style, const InputGlyphSize &p_size) = 0;
 	static Ref<InputGlyphsSource> create();
 	virtual InputGlyphsConstants::InputType identify_joy(int p_device) const = 0;
 };
@@ -52,7 +52,7 @@ class InputGlyphsSourceBuiltin : public InputGlyphsSource {
 	GDCLASS(InputGlyphsSourceBuiltin, InputGlyphsSource);
 
 private:
-	virtual Ref<Texture2D> get_input_glyph(const InputGlyphsConstants::InputType &p_input_type, const InputGlyphsConstants::InputOrigin &p_input_origin, const BitField<InputGlyphStyle> &p_glyphs_style, const InputGlyphSize &p_size) override;
+	virtual Ref<Image> get_input_glyph(const InputGlyphsConstants::InputType &p_input_type, const InputGlyphsConstants::InputOrigin &p_input_origin, const BitField<InputGlyphStyle> &p_glyphs_style, const InputGlyphSize &p_size) override;
 
 public:
 	static Ref<InputGlyphsSource> _create_current() {
