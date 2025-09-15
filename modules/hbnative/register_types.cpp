@@ -83,6 +83,10 @@ void initialize_hbnative_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_ABSTRACT_CLASS(HBRectPack);
 	Engine::get_singleton()->add_singleton(Engine::Singleton("PHAudioStreamPreviewGenerator", PHAudioStreamPreviewGenerator::get_singleton()));
 	Engine::get_singleton()->add_singleton(Engine::Singleton("PHNative", PHNative::get_singleton()));
+#ifdef ANDROID_ENABLED
+	// stub-out DiscordRPC...
+	Engine::get_singleton()->add_singleton(Engine::Singleton("DiscordRPC", nullptr));
+#endif
 }
 
 void uninitialize_hbnative_module(ModuleInitializationLevel p_level) {
