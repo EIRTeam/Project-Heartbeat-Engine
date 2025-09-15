@@ -2,6 +2,7 @@
 from misc.utility.scons_hints import *
 
 import steamworks_builders
+import steamworks_generate_stub
 
 Import("env")
 Import("env_modules")
@@ -12,10 +13,20 @@ env_steamworks = env_modules.Clone()
 
 module_obj = []
 
+steam_api_json_path = "thirdparty/steamworks/public/steam/steam_api.json"
+
+if env["platform"] not in ["windows", "linuxbsd"]:
+    env_steamworks.Append(CPPDEFINES=["USE_STEAMWORKS_STUB"])
+    env_steamworks.Depends("steamworks.stub.gen.cpp", steam_api_json_path)
+    env_steamworks.Depends("steamworks.stub.gen.cpp", "steamworks_generate_stub.py")
+    env.CommandNoCache(
+        "steamworks.stub.gen.cpp",
+        steam_api_json_path,
+        env.Run(steamworks_generate_stub.generate_stub),
+    )
 sources = [
     Glob("*.cpp"),
 ]
-
 # For SVG rendering
 if "svg" in env.module_list:
     env_steamworks.Prepend(
@@ -50,7 +61,6 @@ elif env["platform"] == "windows":
     else:
         lib = "steam_api64"
 
-steam_api_json_path = "thirdparty/steamworks/public/steam/steam_api.json"
 env_steamworks.Depends("steamworks_constants.gen.h", steam_api_json_path)
 env_steamworks.Depends("steamworks_constants.gen.h", "steamworks_builders.py")
 env.CommandNoCache(

@@ -125,7 +125,7 @@ ESteamInputGlyphSize input_glph_size_to_steamworks(const InputGlyphSize &p_glyph
 	return (ESteamInputGlyphSize)p_glyph_size;
 }
 
-Ref<Texture2D> HBSteamworksInputGlyphsSource::get_input_glyph(const InputGlyphsConstants::InputType &p_input_type, const InputGlyphsConstants::InputOrigin &p_input_origin, const BitField<InputGlyphStyle> &p_glyphs_style, const InputGlyphSize &p_size) {
+Ref<Image> HBSteamworksInputGlyphsSource::get_input_glyph(const InputGlyphsConstants::InputType &p_input_type, const InputGlyphsConstants::InputOrigin &p_input_origin, const BitField<InputGlyphStyle> &p_glyphs_style, const InputGlyphSize &p_size) {
 	HBSteamInput *input = Steamworks::get_singleton()->get_input();
 	// Convert from xbox 360 reference origin to the destination input type
 	SWC::InputActionOrigin steamworks_origin = (SWC::InputActionOrigin)origin_to_steamworks_xbox_origin(p_input_origin);
@@ -221,7 +221,7 @@ void HBSteamworksInputGlyphDumpTool::_dump_input_type(InputDumpInfo &p_dump_info
 				SWC::InputActionOrigin input_origin = HBSteamworksInputGlyphsSource::origin_to_steamworks_xbox_origin(origin);
 				input_origin = input->translate_action_origin(steam_input_type, input_origin);
 
-				Ref<Texture2D> tex = p_source->get_input_glyph(p_input_type, origin, style, size);
+				Ref<Image> tex = p_source->get_input_glyph(p_input_type, origin, style, size);
 				String svg_path = input->get_glyph_svg_for_action_origin(input_origin, style);
 				String new_file_path = theme_name + "/" + svg_path.get_file();
 				if (!svg_path.is_empty()) {
@@ -241,7 +241,7 @@ void HBSteamworksInputGlyphDumpTool::_dump_input_type(InputDumpInfo &p_dump_info
 				SWC::InputActionOrigin input_origin = HBSteamworksInputGlyphsSource::origin_to_steamworks_xbox_origin(origin);
 				input_origin = input->translate_action_origin(steam_input_type, input_origin);
 
-				Ref<Texture2D> tex = p_source->get_input_glyph(p_input_type, origin, glyph_style, size);
+				Ref<Image> tex = p_source->get_input_glyph(p_input_type, origin, glyph_style, size);
 				String svg_path = input->get_glyph_svg_for_action_origin(input_origin, base_style);
 				String new_file_path;
 				if (!svg_path.is_empty()) {

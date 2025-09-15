@@ -1,6 +1,6 @@
 def can_build(env, platform):
     env.module_add_dependencies("steamworks", ["input_glyphs"], True)
-    return platform == "windows" or platform == "linuxbsd"
+    return platform == "windows" or platform == "linuxbsd" or platform == "android"
 
 
 def configure(env):
