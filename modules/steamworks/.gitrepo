@@ -7,6 +7,6 @@
 	remote = git@github.com:EIRTeam/EIRTeam.Steamworks.git
 	branch = master
 	commit = b5bf743198c8692e8261e10633027f1ea4281f62
-	parent = fb673f6d6701fb028885addfcffc368c8795a1d2
+	parent = bafbcf0b44c8fa08798530d6bf929319f13d6d82
 	method = merge
 	cmdver = 0.4.9
