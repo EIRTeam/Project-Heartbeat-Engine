@@ -40,6 +40,8 @@ jobs:
             artifact-name: linux-engine
           - name: Linux editor
             artifact-name: linux-editor
+          - name: Android engine
+            artifact-name: android-engine
     steps:
       - name: Checkout
         uses: actions/checkout@v3
