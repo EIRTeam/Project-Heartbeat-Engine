@@ -34,26 +34,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Need newer mesa for lavapipe to work properly.
-      - name: Linux dependencies for tests
-        if: matrix.proj-test
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys EB8B81E14DA65431D7504EA8F63F0F2B90935439
-          sudo add-apt-repository "deb https://ppa.launchpadcontent.net/kisak/turtle/ubuntu jammy main"
-          sudo apt-get install -qq mesa-vulkan-drivers
-
-      # TODO: Figure out somehow how to embed this one.
-      - name: wayland-scanner dependency
-        run: |
-          sudo apt-get install libwayland-bin
-
       - name: Restore Godot build cache
         uses: ./.github/actions/godot-cache-restore
         with:
           cache-name: ${{ matrix.cache-name }}
         continue-on-error: true
-
+      - name: Save space
+        run: |
+          echo "100 largest packages:"
+          dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
+          sudo apt-get remove -y azure-cli google-cloud-cli google-chrome-stable firefox powershell mono-devel mysql-server-core-8.0 kubectl microsoft-edge-stable containerd.io podman postgresql-14 
+          sudo apt-get autoremove -y
+          sudo apt-get clean
       - name: Setup Python and SCons
         if: "!matrix.legacy-scons"
         uses: ./.github/actions/godot-deps
@@ -99,6 +91,9 @@ jobs:
           export ANDROID_NDK_HOME=$ANDROID_NDK_ROOT
           sudo apt install meson nasm ninja-build
           ./buildeps/ffmpeg-android-maker/ffmpeg-android-maker.sh -all-free -all-gpl -android=19 -abis=arm64-v8a
+          mkdir ./buildeps/ffmpeg-android
+          cp -r ./buildeps/ffmpeg-android-maker/build/ffmpeg/arm64-v8a/* ./buildeps/ffmpeg-android
+          rm -rf ./buildeps/ffmpeg-android-maker
       
       - name: Compilation
         uses: ./.github/actions/godot-build
