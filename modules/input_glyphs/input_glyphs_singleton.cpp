@@ -48,7 +48,7 @@ void InputGlyphsSingleton::_glyph_loaded_callback(GlyphLoadTask *p_task) {
 	InputGlyphs::GlyphUID uid = p_task->glyph_info.get_uid();
 	if (!p_task->aborted) {
 		Ref<ImageTexture> texture = ImageTexture::create_from_image(p_task->texture);
-		igs->loaded_glyphs.insert(uid, p_task->texture);
+		igs->loaded_glyphs.insert(uid, texture);
 	}
 	p_task->task_mutex.unlock();
 	igs->mutex.unlock();
@@ -56,7 +56,6 @@ void InputGlyphsSingleton::_glyph_loaded_callback(GlyphLoadTask *p_task) {
 }
 
 void InputGlyphsSingleton::init() {
-	print_line("INIT GLYPHS");
 	SceneTree::get_singleton()->get_root()->connect("window_input", callable_mp(this, &InputGlyphsSingleton::_input_event));
 	glyph_source = InputGlyphsSource::create();
 	if (glyph_source.is_valid()) {
@@ -167,7 +166,7 @@ void InputGlyphsSingleton::_load_glyph_thread(void *p_userdata) {
 	}
 	task->task_mutex.unlock();
 
-	callable_mp(InputGlyphsSingleton::get_singleton(), &InputGlyphsSingleton::_on_task_finished);
+	callable_mp(InputGlyphsSingleton::get_singleton(), &InputGlyphsSingleton::_on_task_finished).call_deferred();
 }
 
 void InputGlyphsSingleton::_on_task_finished() {
