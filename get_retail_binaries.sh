@@ -14,6 +14,8 @@ wget -N https://github.com/EIRTeam/Project-Heartbeat-Engine/releases/download/la
 unzip windows-engine
 wget -N https://github.com/EIRTeam/Project-Heartbeat-Engine/releases/download/latest/linux-engine.zip
 unzip linux-engine
+wget -N https://github.com/EIRTeam/Project-Heartbeat-Engine/releases/download/latest/android-engine.zip
+unzip android-engine
 wget -N https://github.com/EIRTeam/Project-Heartbeat-Engine/releases/download/latest/linux-editor.zip
 unzip linux-editor
 wget -N https://github.com/EIRTeam/Project-Heartbeat-Engine/releases/download/latest/godot.linuxbsd.template_release.x86_64.syms
