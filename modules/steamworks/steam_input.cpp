@@ -107,7 +107,7 @@ void HBSteamInput::init(bool p_call_run_frame_automatically) {
 	}
 	Input::get_singleton()->connect("joy_connection_changed", callable_mp(this, &HBSteamInput::_on_joy_connection_changed));
 #ifdef MODULE_INPUT_GLYPHS_ENABLED
-	HBSteamworksInputGlyphsSource::make_current();
+	//HBSteamworksInputGlyphsSource::make_current();
 #endif
 }
 
