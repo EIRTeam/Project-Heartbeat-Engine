@@ -71,6 +71,9 @@ public:
 	uint64_t get_actual_buffer_size() const;
 	String get_current_backend_name() const;
 
+	void pause();
+	void resume();
+
 	Shinobu();
 	~Shinobu();
 };

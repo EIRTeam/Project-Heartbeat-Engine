@@ -44,6 +44,8 @@ void Shinobu::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_dsp_time"), &Shinobu::get_dsp_time);
 	ClassDB::bind_method(D_METHOD("get_actual_buffer_size"), &Shinobu::get_actual_buffer_size);
 	ClassDB::bind_method(D_METHOD("get_current_backend_name"), &Shinobu::get_current_backend_name);
+	ClassDB::bind_method(D_METHOD("pause"), &Shinobu::pause);
+	ClassDB::bind_method(D_METHOD("resume"), &Shinobu::resume);
 }
 
 String Shinobu::get_initialization_error() const {
@@ -345,6 +347,18 @@ Error Shinobu::set_dsp_time(uint64_t m_new_time_msec) {
 
 String Shinobu::get_current_backend_name() const {
 	return ma_get_backend_name(context.backend);
+}
+
+void Shinobu::pause() {
+	if (ma_device_is_started(&device)) {
+		ma_device_stop(&device);
+	}
+}
+
+void Shinobu::resume() {
+	if (!ma_device_is_started(&device)) {
+		ma_device_stop(&device);
+	}
 }
 
 uint64_t Shinobu::get_actual_buffer_size() const {
