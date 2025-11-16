@@ -53,6 +53,7 @@ public:
 	bool is_on_steam_deck() const;
 	bool show_gamepad_text_input(SWC::GamepadTextInputMode p_input_mode, SWC::GamepadTextInputLineMode p_line_input_mode, String p_description, String p_existing_text, uint32_t p_max_text) const;
 	bool show_floating_gamepad_text_input(SWC::FloatingGamepadTextInputMode p_input_mode, Rect2i p_text_field_rect) const;
+	bool is_overlay_enabled() const;
 	void init_interface();
 	ISteamUtils *get_interface();
 	bool is_valid() const;

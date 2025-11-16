@@ -32,8 +32,9 @@
 #include "scene/resources/image_texture.h"
 #include "steam/steam_api_flat.h"
 #include "sw_error_macros.h"
+#include <steam/isteamfriends.h>
 
-HashMap<uint64_t, HBSteamFriend*> HBSteamFriend::friend_cache = HashMap<uint64_t, HBSteamFriend*>();
+HashMap<uint64_t, HBSteamFriend *> HBSteamFriend::friend_cache = HashMap<uint64_t, HBSteamFriend *>();
 
 void HBSteamFriends::_on_lobby_join_requested(Ref<SteamworksCallbackData> p_callback) {
 	const GameLobbyJoinRequested_t *req = p_callback->get_data<GameLobbyJoinRequested_t>();
@@ -44,6 +45,7 @@ void HBSteamFriends::_on_lobby_join_requested(Ref<SteamworksCallbackData> p_call
 void HBSteamFriends::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("activate_game_overlay_invite_dialog", "lobby"), &HBSteamFriends::activate_game_overlay_invite_dialog);
 	ClassDB::bind_method(D_METHOD("activate_game_overlay_to_web_page", "web_page", "modal"), &HBSteamFriends::activate_game_overlay_to_web_page);
+	ClassDB::bind_method(D_METHOD("activate_game_overlay_to_store", "app_id", "add_to_cart"), &HBSteamFriends::activate_game_overlay_to_store);
 	ClassDB::bind_method(D_METHOD("set_rich_presence", "key", "value"), &HBSteamFriends::set_rich_presence);
 	ADD_SIGNAL(MethodInfo("lobby_join_requested", PropertyInfo(Variant::OBJECT, "lobby", PROPERTY_HINT_RESOURCE_TYPE, "HBSteamLobby")));
 }
@@ -68,6 +70,10 @@ void HBSteamFriends::activate_game_overlay_to_web_page(const String &p_web_page,
 		mode = EActivateGameOverlayToWebPageMode::k_EActivateGameOverlayToWebPageMode_Modal;
 	}
 	SteamAPI_ISteamFriends_ActivateGameOverlayToWebPage(steam_friends, p_web_page.utf8(), mode);
+}
+
+void HBSteamFriends::activate_game_overlay_to_store(const int64_t p_app_id, bool p_add_to_cart) const {
+	SteamAPI_ISteamFriends_ActivateGameOverlayToStore(steam_friends, p_app_id, p_add_to_cart ? k_EOverlayToStoreFlag_AddToCartAndShow : k_EOverlayToStoreFlag_None);
 }
 
 void HBSteamFriends::set_rich_presence(const String &p_key, const String &p_value) {

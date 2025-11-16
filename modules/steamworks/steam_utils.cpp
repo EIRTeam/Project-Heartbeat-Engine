@@ -49,6 +49,7 @@ void HBSteamUtils::_on_floating_gamepad_text_input_dismissed(Ref<SteamworksCallb
 void HBSteamUtils::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_in_big_picture_mode"), &HBSteamUtils::is_in_big_picture_mode);
 	ClassDB::bind_method(D_METHOD("is_on_steam_deck"), &HBSteamUtils::is_on_steam_deck);
+	ClassDB::bind_method(D_METHOD("is_overlay_enabled"), &HBSteamUtils::is_overlay_enabled);
 	ClassDB::bind_method(D_METHOD("show_gamepad_text_input", "input_mode", "line_input_mode", "description", "existing_text", "max_text"), &HBSteamUtils::show_gamepad_text_input);
 	ClassDB::bind_method(D_METHOD("show_floating_gamepad_text_input", "input_mode", "text_field_rect"), &HBSteamUtils::show_floating_gamepad_text_input);
 	ADD_SIGNAL(MethodInfo("gamepad_text_input_dismissed", PropertyInfo(Variant::BOOL, "submitted"), PropertyInfo(Variant::STRING, "text")));
@@ -81,6 +82,10 @@ bool HBSteamUtils::show_floating_gamepad_text_input(SWC::FloatingGamepadTextInpu
 			p_text_field_rect.position.y,
 			p_text_field_rect.size.x,
 			p_text_field_rect.size.y);
+}
+
+bool HBSteamUtils::is_overlay_enabled() const {
+	return SteamAPI_ISteamUtils_IsOverlayEnabled(steam_utils);
 }
 
 void HBSteamUtils::init_interface() {

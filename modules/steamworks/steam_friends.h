@@ -44,7 +44,7 @@ class HBSteamFriend : public RefCounted {
 private:
 	Ref<Texture2D> avatar;
 	uint64_t steam_id;
-	static HashMap<uint64_t, HBSteamFriend*> friend_cache;
+	static HashMap<uint64_t, HBSteamFriend *> friend_cache;
 	void _on_persona_state_change(Ref<SteamworksCallbackData> p_callback);
 
 protected:
@@ -75,6 +75,7 @@ public:
 	bool is_valid() const;
 	void activate_game_overlay_invite_dialog(Ref<HBSteamLobby> p_lobby) const;
 	void activate_game_overlay_to_web_page(const String &p_web_page, bool p_modal) const;
+	void activate_game_overlay_to_store(const int64_t p_app_id, bool p_add_to_cart) const;
 	void set_rich_presence(const String &p_key, const String &p_value);
 	ISteamFriends *get_interface() const;
 };
