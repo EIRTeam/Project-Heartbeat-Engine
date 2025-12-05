@@ -58,11 +58,6 @@ using namespace godot;
 
 #include "ffmpeg_codec.h"
 #include "ffmpeg_frame.h"
-extern "C" {
-#include "libavformat/avformat.h"
-#include "libswresample/swresample.h"
-#include "libswscale/swscale.h"
-}
 
 #include <thread>
 
@@ -108,6 +103,16 @@ public:
 	PackedFloat32Array get_sample_data() const;
 	DecodedAudioFrame(double p_time) { time = p_time; };
 };
+
+struct SwsContext;
+struct SwrContext;
+struct AVStream;
+struct AVIOContext;
+struct AVFormatContext;
+struct AVCodecContext;
+struct AVCodec;
+struct AVFrame;
+enum AVHWDeviceType;
 
 class VideoDecoder : public RefCounted {
 public:
@@ -200,7 +205,6 @@ public:
 	};
 	void seek(double p_time, bool p_wait = false);
 	void start_decoding();
-	Vector<AvailableDecoderInfo> get_available_video_decoders(const AVInputFormat *p_format, AVCodecID p_codec_id, BitField<HardwareVideoDecoder> p_target_decoders);
 	void return_frames(Vector<Ref<DecodedFrame>> p_frames);
 	void return_frame(Ref<DecodedFrame> p_frame);
 	Vector<Ref<DecodedFrame>> get_decoded_frames();

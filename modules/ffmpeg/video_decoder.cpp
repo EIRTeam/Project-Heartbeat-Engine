@@ -33,6 +33,11 @@
 
 #include "libavcodec/codec.h"
 #include "libavcodec/codec_id.h"
+extern "C" {
+#include "libavformat/avformat.h"
+#include "libswresample/swresample.h"
+#include "libswscale/swscale.h"
+}
 #include "tracy_import.h"
 #include <cstdio>
 #include <iterator>
