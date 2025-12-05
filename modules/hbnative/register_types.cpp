@@ -13,6 +13,8 @@
 #include "ph_audio_stream_preview.h"
 #include "ph_blur_controls.h"
 #include "ph_singleton.h"
+#include "ph_zip.h"
+#include "ph_zip_video_stream.h"
 
 #include "process/process.h"
 #include "process/process_tiny_process_lib.h"
@@ -80,7 +82,9 @@ void initialize_hbnative_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(DIVABoneDB);
 	GDREGISTER_CLASS(DIVASkeleton);
 	GDREGISTER_CLASS(DIVAObjectSet);
+	GDREGISTER_CLASS(PHZipArchive);
 	GDREGISTER_ABSTRACT_CLASS(HBRectPack);
+	GDREGISTER_ABSTRACT_CLASS(PHZipFFmpegVideoStream);
 	Engine::get_singleton()->add_singleton(Engine::Singleton("PHAudioStreamPreviewGenerator", PHAudioStreamPreviewGenerator::get_singleton()));
 	Engine::get_singleton()->add_singleton(Engine::Singleton("PHNative", PHNative::get_singleton()));
 #ifdef ANDROID_ENABLED
