@@ -30,9 +30,6 @@
 
 #ifndef FFMPEG_CODEC_H
 #define FFMPEG_CODEC_H
-extern "C" {
-#include "libavcodec/avcodec.h"
-}
 
 #ifdef GDEXTENSION
 
@@ -49,6 +46,9 @@ using namespace godot;
 #include "core/templates/vector.h"
 
 #endif
+
+struct AVCodec;
+enum AVHWDeviceType;
 
 class FFmpegCodec : public RefCounted {
 	const AVCodec *codec = nullptr;
