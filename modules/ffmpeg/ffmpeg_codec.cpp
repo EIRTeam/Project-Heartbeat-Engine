@@ -31,25 +31,6 @@
 #include "ffmpeg_codec.h"
 #include "libavcodec/codec.h"
 
-Vector<AVHWDeviceType> FFmpegCodec::get_supported_hw_device_types() {
-	if (has_cached_hw_device_types) {
-		return hw_device_types;
-	}
-	has_cached_hw_device_types = true;
-	{
-		const AVCodecHWConfig *hw_config;
-		int i = 0;
-		do {
-			hw_config = avcodec_get_hw_config(codec, i);
-			if (hw_config != NULL) {
-				hw_device_types.push_back(hw_config->device_type);
-			}
-			i++;
-		} while (hw_config != NULL);
-	}
-	return hw_device_types;
-}
-
 const AVCodec *FFmpegCodec::get_codec_ptr() const {
 	return codec;
 }

@@ -48,15 +48,12 @@ using namespace godot;
 #endif
 
 struct AVCodec;
-enum AVHWDeviceType;
 
 class FFmpegCodec : public RefCounted {
 	const AVCodec *codec = nullptr;
 	bool has_cached_hw_device_types = false;
-	Vector<AVHWDeviceType> hw_device_types;
 
 public:
-	Vector<AVHWDeviceType> get_supported_hw_device_types();
 	const AVCodec *get_codec_ptr() const;
 	FFmpegCodec(const AVCodec *p_codec);
 };

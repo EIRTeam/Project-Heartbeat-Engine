@@ -31,9 +31,10 @@
 #include "video_decoder.h"
 #include "ffmpeg_frame.h"
 
+extern "C" {
+#include "libavcodec/avcodec.h"
 #include "libavcodec/codec.h"
 #include "libavcodec/codec_id.h"
-extern "C" {
 #include "libavformat/avformat.h"
 #include "libswresample/swresample.h"
 #include "libswscale/swscale.h"
@@ -76,6 +77,21 @@ bool is_hardware_pixel_format(AVPixelFormat p_fmt) {
 		}
 	}
 	return false;
+}
+
+String _codec_id_to_libvpx(AVCodecID p_codec_id) {
+	String out;
+	switch (p_codec_id) {
+		case AVCodecID::AV_CODEC_ID_VP8: {
+			out = "libvpx";
+		} break;
+		case AVCodecID::AV_CODEC_ID_VP9: {
+			out = "libvpx-vp9";
+		}
+		default: {
+		} break;
+	}
+	return out;
 }
 
 int VideoDecoder::_read_packet_callback(void *p_opaque, uint8_t *p_buf, int p_buf_size) {
@@ -641,21 +657,6 @@ AVFrame *VideoDecoder::_ensure_frame_audio_format(AVFrame *p_frame, AVSampleForm
 	}
 
 	return out_frame;
-}
-
-String VideoDecoder::_codec_id_to_libvpx(AVCodecID p_codec_id) const {
-	String out;
-	switch (p_codec_id) {
-		case AVCodecID::AV_CODEC_ID_VP8: {
-			out = "libvpx";
-		} break;
-		case AVCodecID::AV_CODEC_ID_VP9: {
-			out = "libvpx-vp9";
-		}
-		default: {
-		} break;
-	}
-	return out;
 }
 
 void VideoDecoder::seek(double p_time, bool p_wait) {

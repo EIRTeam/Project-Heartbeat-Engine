@@ -112,7 +112,7 @@ struct AVFormatContext;
 struct AVCodecContext;
 struct AVCodec;
 struct AVFrame;
-enum AVHWDeviceType;
+struct AVPacket;
 
 class VideoDecoder : public RefCounted {
 public:
@@ -180,7 +180,6 @@ private:
 	static int64_t _stream_seek_callback(void *p_opaque, int64_t p_offset, int p_whence);
 	void prepare_decoding();
 	Error recreate_codec_context();
-	static HardwareVideoDecoder from_av_hw_device_type(AVHWDeviceType p_device_type);
 
 	void _seek_command(double p_target_timestamp);
 	static void _thread_func(void *userdata);
@@ -196,12 +195,10 @@ private:
 	Ref<FFmpegFrame> _ensure_frame_pixel_format(Ref<FFmpegFrame> p_frame, AVPixelFormat p_target_pixel_format);
 	Ref<DecodedFrame> _unwrap_yuv_frame(double p_frame_time, Ref<FFmpegFrame> p_frame, FFmpegFrameFormat p_out_format);
 	AVFrame *_ensure_frame_audio_format(AVFrame *p_frame, AVSampleFormat p_target_audio_format);
-	String _codec_id_to_libvpx(AVCodecID p_codec_id) const;
 
 public:
 	struct AvailableDecoderInfo {
 		Ref<FFmpegCodec> codec;
-		AVHWDeviceType device_type;
 	};
 	void seek(double p_time, bool p_wait = false);
 	void start_decoding();

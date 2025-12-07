@@ -44,6 +44,14 @@
 Ref<VideoStreamFFMpegLoader> ffmpeg_loader;
 
 static void print_codecs() {
+	void *fmt_opaque = NULL;
+
+	print_line("Supported demuxers:");
+
+	while (const AVInputFormat *demuxer = av_demuxer_iterate(&fmt_opaque)) {
+		print_line(vformat("\t %s", demuxer->name));
+	}
+
 	const AVCodecDescriptor *desc = NULL;
 	char msg[512] = { 0 };
 	print_line("Supported video codecs:");
