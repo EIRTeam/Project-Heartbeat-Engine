@@ -192,9 +192,9 @@ private:
 	void _hw_transfer_frame_return(Ref<FFmpegFrame> p_hw_frame);
 	void _scaler_frame_return(Ref<FFmpegFrame> p_hw_frame);
 
-	Ref<FFmpegFrame> _ensure_frame_pixel_format(Ref<FFmpegFrame> p_frame, AVPixelFormat p_target_pixel_format);
+	Ref<FFmpegFrame> _ensure_frame_pixel_format(Ref<FFmpegFrame> p_frame, int p_target_pixel_format);
 	Ref<DecodedFrame> _unwrap_yuv_frame(double p_frame_time, Ref<FFmpegFrame> p_frame, FFmpegFrameFormat p_out_format);
-	AVFrame *_ensure_frame_audio_format(AVFrame *p_frame, AVSampleFormat p_target_audio_format);
+	AVFrame *_ensure_frame_audio_format(AVFrame *p_frame, int p_target_audio_format);
 
 public:
 	struct AvailableDecoderInfo {

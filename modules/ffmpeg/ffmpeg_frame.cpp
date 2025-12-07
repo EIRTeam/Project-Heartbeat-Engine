@@ -34,6 +34,10 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 #endif
 
+extern "C" {
+#include "libavutil/frame.h"
+}
+
 void FFmpegFrame::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("return_frame", PropertyInfo(Variant::OBJECT, "frame", PROPERTY_HINT_RESOURCE_TYPE, "FFmpegFrame")));
 }

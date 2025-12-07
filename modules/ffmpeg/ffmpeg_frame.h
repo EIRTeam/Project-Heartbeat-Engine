@@ -45,9 +45,8 @@ using namespace godot;
 #include "core/object/ref_counted.h"
 
 #endif
-extern "C" {
-#include "libavutil/frame.h"
-}
+
+struct AVFrame;
 
 class FFmpegFrame : public RefCounted {
 	GDCLASS(FFmpegFrame, RefCounted);

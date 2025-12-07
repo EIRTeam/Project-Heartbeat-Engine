@@ -519,10 +519,10 @@ void VideoDecoder::_scaler_frame_return(Ref<FFmpegFrame> p_scaler_frame) {
 	scaler_frames.push_back(p_scaler_frame);
 }
 
-Ref<FFmpegFrame> VideoDecoder::_ensure_frame_pixel_format(Ref<FFmpegFrame> p_frame, AVPixelFormat p_target_pixel_format) {
+Ref<FFmpegFrame> VideoDecoder::_ensure_frame_pixel_format(Ref<FFmpegFrame> p_frame, int p_target_pixel_format) {
 	ZoneScopedN("Video decoder rescale");
 
-	if (p_frame->get_frame()->format == p_target_pixel_format) {
+	if (p_frame->get_frame()->format == (AVPixelFormat)p_target_pixel_format) {
 		return p_frame;
 	}
 
@@ -532,7 +532,7 @@ Ref<FFmpegFrame> VideoDecoder::_ensure_frame_pixel_format(Ref<FFmpegFrame> p_fra
 	sws_context = sws_getCachedContext(
 			sws_context,
 			width, height, (AVPixelFormat)p_frame->get_frame()->format,
-			width, height, p_target_pixel_format,
+			width, height, (AVPixelFormat)p_target_pixel_format,
 			1, nullptr, nullptr, nullptr);
 
 	Ref<FFmpegFrame> scaler_frame;
@@ -616,7 +616,7 @@ Ref<DecodedFrame> VideoDecoder::_unwrap_yuv_frame(double p_frame_time, Ref<FFmpe
 	return out_frame;
 }
 
-AVFrame *VideoDecoder::_ensure_frame_audio_format(AVFrame *p_frame, AVSampleFormat p_target_audio_format) {
+AVFrame *VideoDecoder::_ensure_frame_audio_format(AVFrame *p_frame, int p_target_audio_format) {
 	ZoneScopedN("Audio decoder rescale");
 	if (p_frame->format == p_target_audio_format) {
 		return p_frame;
@@ -624,7 +624,7 @@ AVFrame *VideoDecoder::_ensure_frame_audio_format(AVFrame *p_frame, AVSampleForm
 
 	int obtain_swr_ctx_result = swr_alloc_set_opts2(
 			&swr_context,
-			&audio_codec_context->ch_layout, p_target_audio_format, audio_codec_context->sample_rate,
+			&audio_codec_context->ch_layout, (AVSampleFormat)p_target_audio_format, audio_codec_context->sample_rate,
 			&audio_codec_context->ch_layout, audio_codec_context->sample_fmt, audio_codec_context->sample_rate,
 			0, nullptr);
 
