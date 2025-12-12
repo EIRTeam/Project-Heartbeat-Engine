@@ -357,7 +357,7 @@ void Shinobu::pause() {
 
 void Shinobu::resume() {
 	if (!ma_device_is_started(&device)) {
-		ma_device_stop(&device);
+		ma_device_start(&device);
 	}
 }
 
