@@ -140,7 +140,7 @@ void FileAccessEncrypted::_close() {
 	}
 
 	if (writing) {
-		Vector<uint8_t> compressed;
+		LocalVector<uint8_t> compressed;
 		uint64_t len = data.size();
 		if (len % 16) {
 			len += 16 - (len % 16);
@@ -150,10 +150,8 @@ void FileAccessEncrypted::_close() {
 		ERR_FAIL_COND(CryptoCore::md5(data.ptr(), data.size(), hash) != OK); // Bug?
 
 		compressed.resize(len);
-		memset(compressed.ptrw(), 0, len);
-		for (int i = 0; i < data.size(); i++) {
-			compressed.write[i] = data[i];
-		}
+		memcpy(compressed.ptr(), data.ptr(), data.size());
+		memset(compressed.ptr() + data.size(), 0, len - data.size());
 
 		CryptoCore::AESContext ctx;
 		ctx.set_encode_key(key.ptrw(), 256);
@@ -166,7 +164,7 @@ void FileAccessEncrypted::_close() {
 		file->store_64(data.size());
 		file->store_buffer(iv.ptr(), 16);
 
-		ctx.encrypt_cfb(len, iv.ptrw(), compressed.ptrw(), compressed.ptrw());
+		ctx.encrypt_cfb(len, iv.ptrw(), compressed.ptr(), compressed.ptr());
 
 		file->store_buffer(compressed.ptr(), compressed.size());
 		data.clear();
@@ -279,7 +277,27 @@ bool FileAccessEncrypted::file_exists(const String &p_name) {
 }
 
 uint64_t FileAccessEncrypted::_get_modified_time(const String &p_file) {
-	return 0;
+	if (file.is_valid()) {
+		return file->get_modified_time(p_file);
+	} else {
+		return 0;
+	}
+}
+
+uint64_t FileAccessEncrypted::_get_access_time(const String &p_file) {
+	if (file.is_valid()) {
+		return file->get_access_time(p_file);
+	} else {
+		return 0;
+	}
+}
+
+int64_t FileAccessEncrypted::_get_size(const String &p_file) {
+	if (file.is_valid()) {
+		return file->get_size(p_file);
+	} else {
+		return -1;
+	}
 }
 
 BitField<FileAccess::UnixPermissionFlags> FileAccessEncrypted::_get_unix_permissions(const String &p_file) {

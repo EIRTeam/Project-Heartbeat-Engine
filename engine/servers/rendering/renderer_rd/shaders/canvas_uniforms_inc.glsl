@@ -8,8 +8,6 @@
 
 #define INSTANCE_FLAGS_CLIP_RECT_UV (1 << 4)
 #define INSTANCE_FLAGS_TRANSPOSE_RECT (1 << 5)
-#define INSTANCE_FLAGS_USE_MSDF (1 << 6)
-#define INSTANCE_FLAGS_USE_LCD (1 << 7)
 
 #define INSTANCE_FLAGS_NINEPATCH_DRAW_CENTER_SHIFT 8
 #define INSTANCE_FLAGS_NINEPATCH_H_MODE_SHIFT 9
@@ -26,8 +24,7 @@ struct InstanceData {
 	vec2 world_x;
 	vec2 world_y;
 	vec2 world_ofs;
-	uint flags;
-	uint instance_uniforms_ofs;
+	vec2 ninepatch_pixel_size;
 #ifdef USE_PRIMITIVE
 	vec2 points[3];
 	vec2 uvs[3];
@@ -40,7 +37,8 @@ struct InstanceData {
 	vec2 pad;
 
 #endif
-	vec2 color_texture_pixel_size;
+	uint flags;
+	uint instance_uniforms_ofs;
 	uvec4 lights;
 };
 
@@ -56,11 +54,25 @@ struct InstanceData {
 #define BATCH_FLAGS_USE_CLIPPING_PLANES (1 << 11)
 
 layout(push_constant, std430) uniform Params {
-	uint base_instance_index; // base index to instance data
 	uint sc_packed_0;
 	uint specular_shininess;
 	uint batch_flags;
 	uint clipping_plane_index;
+
+	vec2 msdf;
+	vec2 color_texture_pixel_size;
+#ifdef USE_ATTRIBUTES
+	// Particles and meshes
+	vec2 world_x;
+	vec2 world_y;
+
+	vec2 world_ofs;
+	uint flags;
+	uint instance_uniforms_ofs;
+
+	vec4 modulation;
+	uvec4 lights;
+#endif
 }
 params;
 
@@ -88,6 +100,14 @@ bool sc_use_lighting() {
 	return ((sc_packed_0() >> 0) & 1U) != 0;
 }
 
+bool sc_use_msdf() {
+	return ((sc_packed_0() >> 1) & 1U) != 0;
+}
+
+bool sc_use_lcd() {
+	return ((sc_packed_0() >> 2) & 1U) != 0;
+}
+
 // In vulkan, sets should always be ordered using the following logic:
 // Lower Sets: Sets that change format and layout less often
 // Higher sets: Sets that change format and layout very often
@@ -97,6 +117,7 @@ bool sc_use_lighting() {
 /* SET0: Globals */
 
 #define CANVAS_FLAGS_CONVERT_ATTRIBUTES_TO_LINEAR (1 << 0)
+#define CANVAS_FLAGS_USE_3D_TRANSFORM (1 << 1)
 
 // The values passed per draw primitives are cached within it
 
@@ -120,8 +141,8 @@ layout(set = 0, binding = 1, std140) uniform CanvasData {
 
 	uint directional_light_count;
 	float tex_to_sdf;
+	float shadow_pixel_size;
 	uint flags;
-	bool use_3d_transform;
 }
 canvas_data;
 
@@ -154,8 +175,8 @@ struct Light {
 	vec4 atlas_rect;
 };
 
-layout(set = 0, binding = 2, std140) uniform LightData {
-	Light data[MAX_LIGHTS];
+layout(set = 0, binding = 2, std430) restrict readonly buffer LightData {
+	Light data[];
 }
 light_array;
 
@@ -174,6 +195,11 @@ layout(set = 0, binding = 9, std430) restrict readonly buffer GlobalShaderUnifor
 }
 global_shader_uniforms;
 
+layout(set = 0, binding = 10, std430) restrict readonly buffer ClippingPlaneUniformData {
+	ClippingPlaneSet data[];
+}
+clipping_planes;
+
 /* SET1: Is reserved for the material */
 
 //
@@ -191,13 +217,3 @@ layout(set = 3, binding = 0) uniform texture2D color_texture;
 layout(set = 3, binding = 1) uniform texture2D normal_texture;
 layout(set = 3, binding = 2) uniform texture2D specular_texture;
 layout(set = 3, binding = 3) uniform sampler texture_sampler;
-
-layout(set = 3, binding = 4, std430) restrict readonly buffer DrawData {
-	InstanceData data[];
-}
-instances;
-
-layout(set = 3, binding = 5, std430) restrict readonly buffer ClippingPlaneSets {
-	ClippingPlaneSet data[];
-}
-clipping_planes;

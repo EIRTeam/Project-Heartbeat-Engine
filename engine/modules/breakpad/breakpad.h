@@ -28,8 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef BREAKPAD_H
-#define BREAKPAD_H
+#pragma once
 
 void initialize_breakpad(bool register_handlers);
 void disable_breakpad();
@@ -44,5 +43,3 @@ void breakpad_handle_signal(int sig);
 // Windows crash handling goes through this
 // TODO: should Windows header be included here to use an actual type?
 void breakpad_handle_exception_pointers(void *exinfo);
-
-#endif // BREAKPAD_H

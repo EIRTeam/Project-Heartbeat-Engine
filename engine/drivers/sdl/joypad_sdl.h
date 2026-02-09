@@ -28,98 +28,48 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef JOYPAD_SDL_H
-#define JOYPAD_SDL_H
-
-#ifdef SDL_ENABLED
+#pragma once
 
 #include "core/input/input.h"
 #include "core/os/thread.h"
 
-typedef int32_t SDL_JoystickID;
+typedef uint32_t SDL_JoystickID;
+typedef struct SDL_Joystick SDL_Joystick;
+typedef struct SDL_Gamepad SDL_Gamepad;
 
 class JoypadSDL {
-	// SDL differentiates between game controllers and generic joysticks
-	// game controllers refer to playstation/xbox style controllers
-	enum JoypadType {
-		GAME_CONTROLLER,
-		JOYSTICK
-	};
+public:
+	JoypadSDL();
+	~JoypadSDL();
 
-	struct Joypad {
+	static JoypadSDL *get_singleton();
+
+	Error initialize();
+	void process_events();
+
+private:
+	class Joypad : public Input::JoypadFeatures {
+	public:
 		bool attached = false;
-		JoypadType type;
 		StringName guid;
 
 		SDL_JoystickID sdl_instance_idx;
 
 		bool supports_force_feedback = false;
-		uint64_t ff_effect_timestamp;
-		bool needs_ff_update = false;
-		float ff_weak = 0.0f;
-		float ff_strong = 0.0f;
-		int ff_duration_ms = 0;
+		uint64_t ff_effect_timestamp = 0;
+
+		virtual bool has_joy_light() const override;
+		virtual void set_joy_light(const Color &p_color) override;
+
+		SDL_Joystick *get_sdl_joystick() const;
+		SDL_Gamepad *get_sdl_gamepad() const;
 	};
+
+	static JoypadSDL *singleton;
 
 	Joypad joypads[Input::JOYPADS_MAX];
 	HashMap<SDL_JoystickID, int> sdl_instance_id_to_joypad_id;
-	Mutex joypads_lock[Input::JOYPADS_MAX];
 
-	Input *input;
-
-	enum JoypadEventType {
-		DEVICE_ADDED,
-		DEVICE_REMOVED,
-		AXIS,
-		BUTTON,
-		HAT
-	};
-
-	struct JoypadEvent {
-		String device_name;
-		String device_guid;
-		JoypadEventType type;
-		SDL_JoystickID sdl_joystick_instance_id;
-		uint64_t timestamp;
-		union {
-			JoyAxis axis;
-			JoyButton button;
-			JoypadType device_type;
-		};
-		BitField<HatMask> hat_mask;
-		union {
-			float value = 0.0f;
-			bool pressed;
-			bool device_supports_force_feedback;
-		};
-	};
-
-	Vector<JoypadEvent> joypad_event_queue;
-	Mutex joypad_event_queue_lock;
-
-	SafeFlag process_inputs_exit;
-	Thread process_inputs_thread;
-
-	static JoypadSDL *singleton;
-	static void process_inputs_thread_func(void *p_userdata);
-	void process_inputs_run();
-	void joypad_vibration_start(int p_pad_idx, float p_weak, float p_strong, float p_duration, uint64_t timestamp);
-	void joypad_vibration_stop(int p_pad_idx, uint64_t timestamp);
-
-public:
-	JoypadSDL(Input *in);
-	~JoypadSDL();
-	Error initialize();
-	void process_events();
-	bool is_device_game_controller(int p_joy_device_idx) const {
-		return joypads[p_joy_device_idx].type == JoypadType::GAME_CONTROLLER;
-	}
-	StringName get_device_guid(int p_joy_device_idx) const;
-	static JoypadSDL *get_singleton() {
-		return singleton;
-	}
+	void close_joypad(int p_pad_idx);
+	static uint64_t get_time();
 };
-
-#endif // SDL_ENABLED
-
-#endif // JOYPAD_SDL_H

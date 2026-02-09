@@ -28,8 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef STENCIL_WRITE_GLES3_H
-#define STENCIL_WRITE_GLES3_H
+#pragma once
 
 #include "shaders/canvas_stencil_write.glsl.gen.h"
 
@@ -66,5 +65,3 @@ public:
 
 	~StencilWriteGLES3();
 };
-
-#endif // STENCIL_WRITE_GLES3_H

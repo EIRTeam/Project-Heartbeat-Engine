@@ -32,9 +32,9 @@
 
 #include "core/io/config_file.h"
 #include "editor/editor_node.h"
-#include "editor/editor_settings.h"
 #include "editor/editor_string_names.h"
 #include "editor/plugins/editor_plugin.h"
+#include "editor/settings/editor_settings.h"
 #include "scene/gui/box_container.h"
 #include "scene/gui/button.h"
 
@@ -233,6 +233,25 @@ EditorPlugin *EditorMainScreen::get_plugin_by_name(const String &p_plugin_name) 
 	return main_editor_plugins[p_plugin_name];
 }
 
+bool EditorMainScreen::can_auto_switch_screens() const {
+	if (selected_plugin == nullptr) {
+		return true;
+	}
+	// Only allow auto-switching if the selected button is to the left of the Script button.
+	for (int i = 0; i < button_hb->get_child_count(); i++) {
+		Button *button = Object::cast_to<Button>(button_hb->get_child(i));
+		if (button->get_text() == "Script") {
+			// Selected button is at or after the Script button.
+			return false;
+		}
+		if (button->get_text() == selected_plugin->get_plugin_name()) {
+			// Selected button is before the Script button.
+			return true;
+		}
+	}
+	return false;
+}
+
 VBoxContainer *EditorMainScreen::get_control() const {
 	return main_screen_vbox;
 }
@@ -243,6 +262,11 @@ void EditorMainScreen::add_main_plugin(EditorPlugin *p_editor) {
 	tb->set_theme_type_variation("MainScreenButton");
 	tb->set_name(p_editor->get_plugin_name());
 	tb->set_text(p_editor->get_plugin_name());
+
+	Ref<Shortcut> shortcut = EditorSettings::get_singleton()->get_shortcut("editor/editor_" + p_editor->get_plugin_name().to_lower());
+	if (shortcut.is_valid()) {
+		tb->set_shortcut(shortcut);
+	}
 
 	Ref<Texture2D> icon = p_editor->get_plugin_icon();
 	if (icon.is_null() && has_theme_icon(p_editor->get_plugin_name(), EditorStringName(EditorIcons))) {
