@@ -28,8 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef BREAKPAD_REGISTER_TYPES_H
-#define BREAKPAD_REGISTER_TYPES_H
+#pragma once
 
 /**
 	@author Henri Hyyryläinen
@@ -39,5 +38,3 @@
 
 inline void initialize_breakpad_module(ModuleInitializationLevel p_level) {}
 inline void uninitialize_breakpad_module(ModuleInitializationLevel p_level) {}
-
-#endif // BREAKPAD_REGISTER_TYPES_H

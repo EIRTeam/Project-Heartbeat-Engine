@@ -57,6 +57,7 @@
 
 
 
+#include <cstdlib>
 #include <string>
 #include <memory.h>
 #include "tvgCompressor.h"
@@ -468,7 +469,7 @@ size_t b64Decode(const char* encoded, const size_t len, char** decoded)
         encoded += 4;
     }
     *decoded = output;
-    return reserved;
+    return idx;
 }
 
 
@@ -478,6 +479,8 @@ size_t b64Decode(const char* encoded, const size_t len, char** decoded)
 
 unsigned long djb2Encode(const char* str)
 {
+    if (!str) return 0;
+
     unsigned long hash = 5381;
     int c;
 
