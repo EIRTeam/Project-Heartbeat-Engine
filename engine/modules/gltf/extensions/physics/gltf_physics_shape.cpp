@@ -80,7 +80,7 @@ String GLTFPhysicsShape::get_shape_type() const {
 	return shape_type;
 }
 
-void GLTFPhysicsShape::set_shape_type(const String &p_shape_type) {
+void GLTFPhysicsShape::set_shape_type(String p_shape_type) {
 	shape_type = p_shape_type;
 }
 
@@ -88,7 +88,7 @@ Vector3 GLTFPhysicsShape::get_size() const {
 	return size;
 }
 
-void GLTFPhysicsShape::set_size(const Vector3 &p_size) {
+void GLTFPhysicsShape::set_size(Vector3 p_size) {
 	size = p_size;
 }
 
@@ -128,13 +128,13 @@ Ref<ImporterMesh> GLTFPhysicsShape::get_importer_mesh() const {
 	return importer_mesh;
 }
 
-void GLTFPhysicsShape::set_importer_mesh(const Ref<ImporterMesh> &p_importer_mesh) {
+void GLTFPhysicsShape::set_importer_mesh(Ref<ImporterMesh> p_importer_mesh) {
 	importer_mesh = p_importer_mesh;
 }
 
 Ref<ImporterMesh> _convert_hull_points_to_mesh(const Vector<Vector3> &p_hull_points) {
 	Ref<ImporterMesh> importer_mesh;
-	ERR_FAIL_COND_V_MSG(p_hull_points.size() < 3, importer_mesh, "GLTFPhysicsShape: Convex hull has fewer points (" + itos(p_hull_points.size()) + ") than the minimum of 3. At least 3 points are required in order to save to glTF, since it uses a mesh to represent convex hulls.");
+	ERR_FAIL_COND_V_MSG(p_hull_points.size() < 3, importer_mesh, "GLTFPhysicsShape: Convex hull has fewer points (" + itos(p_hull_points.size()) + ") than the minimum of 3. At least 3 points are required in order to save to GLTF, since it uses a mesh to represent convex hulls.");
 	if (p_hull_points.size() > 255) {
 		WARN_PRINT("GLTFPhysicsShape: Convex hull has more points (" + itos(p_hull_points.size()) + ") than the recommended maximum of 255. This may not load correctly in other engines.");
 	}
@@ -229,7 +229,7 @@ Ref<GLTFPhysicsShape> GLTFPhysicsShape::from_resource(const Ref<Shape3D> &p_shap
 }
 
 Ref<Shape3D> GLTFPhysicsShape::to_resource(bool p_cache_shapes) {
-	if (!p_cache_shapes || _shape_cache.is_null()) {
+	if (!p_cache_shapes || _shape_cache == nullptr) {
 		if (shape_type == "box") {
 			Ref<BoxShape3D> box;
 			box.instantiate();
@@ -267,7 +267,7 @@ Ref<Shape3D> GLTFPhysicsShape::to_resource(bool p_cache_shapes) {
 	return _shape_cache;
 }
 
-Ref<GLTFPhysicsShape> GLTFPhysicsShape::from_dictionary(const Dictionary &p_dictionary) {
+Ref<GLTFPhysicsShape> GLTFPhysicsShape::from_dictionary(const Dictionary p_dictionary) {
 	ERR_FAIL_COND_V_MSG(!p_dictionary.has("type"), Ref<GLTFPhysicsShape>(), "Failed to parse GLTFPhysicsShape, missing required field 'type'.");
 	Ref<GLTFPhysicsShape> gltf_shape;
 	gltf_shape.instantiate();

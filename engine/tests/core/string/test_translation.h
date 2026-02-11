@@ -28,12 +28,12 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef TEST_TRANSLATION_H
+#define TEST_TRANSLATION_H
 
 #include "core/string/optimized_translation.h"
-#include "core/string/plural_rules.h"
 #include "core/string/translation.h"
-#include "core/string/translation_server.h"
+#include "core/string/translation_po.h"
 
 #ifdef TOOLS_ENABLED
 #include "editor/import/resource_importer_csv_translation.h"
@@ -45,8 +45,7 @@
 namespace TestTranslation {
 
 TEST_CASE("[Translation] Messages") {
-	Ref<Translation> translation;
-	translation.instantiate();
+	Ref<Translation> translation = memnew(Translation);
 	translation->set_locale("fr");
 	translation->add_message("Hello", "Bonjour");
 	CHECK(translation->get_message("Hello") == "Bonjour");
@@ -71,9 +70,8 @@ TEST_CASE("[Translation] Messages") {
 	CHECK(messages.find("Hello3"));
 }
 
-TEST_CASE("[Translation] Messages with context") {
-	Ref<Translation> translation;
-	translation.instantiate();
+TEST_CASE("[TranslationPO] Messages with context") {
+	Ref<TranslationPO> translation = memnew(TranslationPO);
 	translation->set_locale("fr");
 	translation->add_message("Hello", "Bonjour");
 	translation->add_message("Hello", "Salut", "friendly");
@@ -91,8 +89,11 @@ TEST_CASE("[Translation] Messages with context") {
 	List<StringName> messages;
 	translation->get_message_list(&messages);
 
+	// `get_message_count()` takes all contexts into account.
 	CHECK(translation->get_message_count() == 1);
-	CHECK(messages.size() == 1);
+	// Only the default context is taken into account.
+	// Since "Hello" is now only present in a non-default context, it is not counted in the list of messages.
+	CHECK(messages.size() == 0);
 
 	translation->add_message("Hello2", "Bonjour2");
 	translation->add_message("Hello2", "Salut2", "friendly");
@@ -100,96 +101,32 @@ TEST_CASE("[Translation] Messages with context") {
 	messages.clear();
 	translation->get_message_list(&messages);
 
+	// `get_message_count()` takes all contexts into account.
 	CHECK(translation->get_message_count() == 4);
-	CHECK(messages.size() == 4);
+	// Only the default context is taken into account.
+	CHECK(messages.size() == 2);
 	// Messages are stored in a Map, don't assume ordering.
 	CHECK(messages.find("Hello2"));
 	CHECK(messages.find("Hello3"));
-	// Context and untranslated string are separated by EOT.
-	CHECK(messages.find("friendly\x04Hello2"));
 }
 
-TEST_CASE("[Translation] Plural messages") {
-	{
-		Ref<Translation> translation;
-		translation.instantiate();
-		translation->set_locale("fr");
-		CHECK(translation->get_nplurals() == 2);
-	}
+TEST_CASE("[TranslationPO] Plural messages") {
+	Ref<TranslationPO> translation = memnew(TranslationPO);
+	translation->set_locale("fr");
+	translation->set_plural_rule("Plural-Forms: nplurals=2; plural=(n >= 2);");
+	CHECK(translation->get_plural_forms() == 2);
 
-	{
-		Ref<Translation> translation;
-		translation.instantiate();
-		translation->set_locale("invalid");
-		CHECK(translation->get_nplurals() == 2);
-	}
-
-	{
-		Ref<Translation> translation;
-		translation.instantiate();
-		translation->set_plural_rules_override("Plural-Forms: nplurals=2; plural=(n >= 2);");
-		CHECK(translation->get_nplurals() == 2);
-
-		PackedStringArray plurals;
-		plurals.push_back("Il y a %d pomme");
-		plurals.push_back("Il y a %d pommes");
-		translation->add_plural_message("There are %d apples", plurals);
-		ERR_PRINT_OFF;
-		// This is invalid, as the number passed to `get_plural_message()` may not be negative.
-		CHECK(vformat(translation->get_plural_message("There are %d apples", "", -1), -1) == "");
-		ERR_PRINT_ON;
-		CHECK(vformat(translation->get_plural_message("There are %d apples", "", 0), 0) == "Il y a 0 pomme");
-		CHECK(vformat(translation->get_plural_message("There are %d apples", "", 1), 1) == "Il y a 1 pomme");
-		CHECK(vformat(translation->get_plural_message("There are %d apples", "", 2), 2) == "Il y a 2 pommes");
-	}
-}
-
-TEST_CASE("[Translation] Plural rules parsing") {
+	PackedStringArray plurals;
+	plurals.push_back("Il y a %d pomme");
+	plurals.push_back("Il y a %d pommes");
+	translation->add_plural_message("There are %d apples", plurals);
 	ERR_PRINT_OFF;
-	{
-		CHECK(PluralRules::parse("") == nullptr);
-
-		CHECK(PluralRules::parse("plurals=(n != 1);") == nullptr);
-		CHECK(PluralRules::parse("nplurals; plurals=(n != 1);") == nullptr);
-		CHECK(PluralRules::parse("nplurals=; plurals=(n != 1);") == nullptr);
-		CHECK(PluralRules::parse("nplurals=0; plurals=(n != 1);") == nullptr);
-		CHECK(PluralRules::parse("nplurals=-1; plurals=(n != 1);") == nullptr);
-
-		CHECK(PluralRules::parse("nplurals=2;") == nullptr);
-		CHECK(PluralRules::parse("nplurals=2; plurals;") == nullptr);
-		CHECK(PluralRules::parse("nplurals=2; plurals=;") == nullptr);
-	}
+	// This is invalid, as the number passed to `get_plural_message()` may not be negative.
+	CHECK(vformat(translation->get_plural_message("There are %d apples", "", -1), -1) == "");
 	ERR_PRINT_ON;
-
-	{
-		PluralRules *pr = PluralRules::parse("nplurals=3; plural=(n==0 ? 0 : n==1 ? 1 : 2);");
-		REQUIRE(pr != nullptr);
-
-		CHECK(pr->get_nplurals() == 3);
-		CHECK(pr->get_plural() == "(n==0 ? 0 : n==1 ? 1 : 2)");
-
-		CHECK(pr->evaluate(0) == 0);
-		CHECK(pr->evaluate(1) == 1);
-		CHECK(pr->evaluate(2) == 2);
-		CHECK(pr->evaluate(3) == 2);
-
-		memdelete(pr);
-	}
-
-	{
-		PluralRules *pr = PluralRules::parse("nplurals=1; plural=0;");
-		REQUIRE(pr != nullptr);
-
-		CHECK(pr->get_nplurals() == 1);
-		CHECK(pr->get_plural() == "0");
-
-		CHECK(pr->evaluate(0) == 0);
-		CHECK(pr->evaluate(1) == 0);
-		CHECK(pr->evaluate(2) == 0);
-		CHECK(pr->evaluate(3) == 0);
-
-		memdelete(pr);
-	}
+	CHECK(vformat(translation->get_plural_message("There are %d apples", "", 0), 0) == "Il y a 0 pomme");
+	CHECK(vformat(translation->get_plural_message("There are %d apples", "", 1), 1) == "Il y a 1 pomme");
+	CHECK(vformat(translation->get_plural_message("There are %d apples", "", 2), 2) == "Il y a 2 pommes");
 }
 
 #ifdef TOOLS_ENABLED
@@ -223,43 +160,45 @@ TEST_CASE("[TranslationCSV] CSV import") {
 
 	List<String> gen_files;
 
-	Error result = import_csv_translation->import(0, TestUtils::get_data_path("translations.csv"),
+	Error result = import_csv_translation->import(TestUtils::get_data_path("translations.csv"),
 			"", options, nullptr, &gen_files);
 	CHECK(result == OK);
 	CHECK(gen_files.size() == 4);
 
-	Ref<TranslationDomain> td = TranslationServer::get_singleton()->get_or_add_domain("godot.test");
+	TranslationServer *ts = TranslationServer::get_singleton();
+
 	for (const String &file : gen_files) {
 		Ref<Translation> translation = ResourceLoader::load(file);
 		CHECK(translation.is_valid());
-		td->add_translation(translation);
+		ts->add_translation(translation);
 	}
 
-	td->set_locale_override("en");
+	ts->set_locale("en");
 
-	CHECK(td->translate("GOOD_MORNING", StringName()) == "Good Morning");
-	CHECK(td->translate("GOOD_EVENING", StringName()) == "Good Evening");
+	// `tr` can be called on any Object, we reuse TranslationServer for convenience.
+	CHECK(ts->tr("GOOD_MORNING") == "Good Morning");
+	CHECK(ts->tr("GOOD_EVENING") == "Good Evening");
 
-	td->set_locale_override("de");
+	ts->set_locale("de");
 
-	CHECK(td->translate("GOOD_MORNING", StringName()) == "Guten Morgen");
-	CHECK(td->translate("GOOD_EVENING", StringName()) == "Good Evening"); // Left blank in CSV, should source from 'en'.
+	CHECK(ts->tr("GOOD_MORNING") == "Guten Morgen");
+	CHECK(ts->tr("GOOD_EVENING") == "Good Evening"); // Left blank in CSV, should source from 'en'.
 
-	td->set_locale_override("ja");
+	ts->set_locale("ja");
 
-	CHECK(td->translate("GOOD_MORNING", StringName()) == String::utf8("おはよう"));
-	CHECK(td->translate("GOOD_EVENING", StringName()) == String::utf8("こんばんは"));
+	CHECK(ts->tr("GOOD_MORNING") == String::utf8("おはよう"));
+	CHECK(ts->tr("GOOD_EVENING") == String::utf8("こんばんは"));
 
 	/* FIXME: This passes, but triggers a chain reaction that makes test_viewport
 	 * and test_text_edit explode in a billion glittery Unicode particles.
-	td->set_locale_override("fa");
+	ts->set_locale("fa");
 
-	CHECK(td->translate("GOOD_MORNING", String()) == String::utf8("صبح بخیر"));
-	CHECK(td->translate("GOOD_EVENING", String()) == String::utf8("عصر بخیر"));
+	CHECK(ts->tr("GOOD_MORNING") == String::utf8("صبح بخیر"));
+	CHECK(ts->tr("GOOD_EVENING") == String::utf8("عصر بخیر"));
 	*/
-
-	TranslationServer::get_singleton()->remove_domain("godot.test");
 }
 #endif // TOOLS_ENABLED
 
 } // namespace TestTranslation
+
+#endif // TEST_TRANSLATION_H

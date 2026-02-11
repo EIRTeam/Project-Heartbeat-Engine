@@ -138,7 +138,7 @@ namespace Godot.SourceGenerators
 
             source.Append(attributes);
             source.Append("\npartial class ");
-            source.Append(symbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat));
+            source.Append(symbol.NameWithTypeParameters());
             source.Append("\n{\n}\n");
 
             if (hasNamespace)

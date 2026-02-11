@@ -1,2 +1,2 @@
 GDTEST_ANALYZER_ERROR
->> ERROR at line 11: Could not resolve member "f": Cyclic reference.
+Could not resolve member "f": Cyclic reference.

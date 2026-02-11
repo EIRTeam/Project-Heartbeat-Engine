@@ -32,7 +32,6 @@
 
 #include "animation_blend_tree.h"
 #include "core/math/geometry_2d.h"
-#include "scene/resources/material.h"
 
 void AnimationNodeBlendSpace2D::get_parameter_list(List<PropertyInfo> *r_list) const {
 	AnimationNode::get_parameter_list(r_list);
@@ -47,7 +46,7 @@ Variant AnimationNodeBlendSpace2D::get_parameter_default_value(const StringName 
 	}
 
 	if (p_parameter == closest) {
-		return (int)-1;
+		return -1;
 	} else {
 		return Vector2();
 	}
@@ -317,7 +316,7 @@ void AnimationNodeBlendSpace2D::_set_triangles(const Vector<int> &p_triangles) {
 
 Vector<int> AnimationNodeBlendSpace2D::_get_triangles() const {
 	Vector<int> t;
-	if (auto_triangles && triangles_dirty) {
+	if (auto_triangles && trianges_dirty) {
 		return t;
 	}
 
@@ -331,20 +330,20 @@ Vector<int> AnimationNodeBlendSpace2D::_get_triangles() const {
 }
 
 void AnimationNodeBlendSpace2D::_queue_auto_triangles() {
-	if (!auto_triangles || triangles_dirty) {
+	if (!auto_triangles || trianges_dirty) {
 		return;
 	}
 
-	triangles_dirty = true;
+	trianges_dirty = true;
 	callable_mp(this, &AnimationNodeBlendSpace2D::_update_triangles).call_deferred();
 }
 
 void AnimationNodeBlendSpace2D::_update_triangles() {
-	if (!auto_triangles || !triangles_dirty) {
+	if (!auto_triangles || !trianges_dirty) {
 		return;
 	}
 
-	triangles_dirty = false;
+	trianges_dirty = false;
 	triangles.clear();
 	if (blend_points_used < 3) {
 		emit_signal(SNAME("triangles_updated"));
@@ -368,7 +367,7 @@ void AnimationNodeBlendSpace2D::_update_triangles() {
 Vector2 AnimationNodeBlendSpace2D::get_closest_point(const Vector2 &p_point) {
 	_update_triangles();
 
-	if (triangles.is_empty()) {
+	if (triangles.size() == 0) {
 		return Vector2();
 	}
 
@@ -386,9 +385,11 @@ Vector2 AnimationNodeBlendSpace2D::get_closest_point(const Vector2 &p_point) {
 		}
 
 		for (int j = 0; j < 3; j++) {
-			const Vector2 segment_a = points[j];
-			const Vector2 segment_b = points[(j + 1) % 3];
-			Vector2 closest_point = Geometry2D::get_closest_point_to_segment(p_point, segment_a, segment_b);
+			Vector2 s[2] = {
+				points[j],
+				points[(j + 1) % 3]
+			};
+			Vector2 closest_point = Geometry2D::get_closest_point_to_segment(p_point, s);
 			if (first || closest_point.distance_to(p_point) < best_point.distance_to(p_point)) {
 				best_point = closest_point;
 				first = false;
@@ -480,20 +481,22 @@ AnimationNode::NodeTimeInfo AnimationNodeBlendSpace2D::_process(const AnimationM
 			}
 
 			for (int j = 0; j < 3; j++) {
-				const Vector2 segment_a = points[j];
-				const Vector2 segment_b = points[(j + 1) % 3];
-				Vector2 closest2 = Geometry2D::get_closest_point_to_segment(blend_pos, segment_a, segment_b);
+				Vector2 s[2] = {
+					points[j],
+					points[(j + 1) % 3]
+				};
+				Vector2 closest2 = Geometry2D::get_closest_point_to_segment(blend_pos, s);
 				if (first || closest2.distance_to(blend_pos) < best_point.distance_to(blend_pos)) {
 					best_point = closest2;
 					blend_triangle = i;
 					first = false;
-					const real_t d = segment_a.distance_to(segment_b);
+					float d = s[0].distance_to(s[1]);
 					if (d == 0.0) {
 						blend_weights[j] = 1.0;
 						blend_weights[(j + 1) % 3] = 0.0;
 						blend_weights[(j + 2) % 3] = 0.0;
 					} else {
-						const real_t c = segment_a.distance_to(closest2) / d;
+						float c = s[0].distance_to(closest2) / d;
 
 						blend_weights[j] = 1.0 - c;
 						blend_weights[(j + 1) % 3] = c;
@@ -548,26 +551,21 @@ AnimationNode::NodeTimeInfo AnimationNodeBlendSpace2D::_process(const AnimationM
 		}
 
 		if (new_closest != cur_closest && new_closest != -1) {
+			NodeTimeInfo from;
 			if (blend_mode == BLEND_MODE_DISCRETE_CARRY && cur_closest != -1) {
-				NodeTimeInfo from;
-				// For ping-pong loop.
+				//for ping-pong loop
 				Ref<AnimationNodeAnimation> na_c = static_cast<Ref<AnimationNodeAnimation>>(blend_points[cur_closest].node);
 				Ref<AnimationNodeAnimation> na_n = static_cast<Ref<AnimationNodeAnimation>>(blend_points[new_closest].node);
-				if (na_c.is_valid() && na_n.is_valid()) {
-					na_n->process_state = process_state;
-					na_c->process_state = process_state;
-
+				if (!na_c.is_null() && !na_n.is_null()) {
 					na_n->set_backward(na_c->is_backward());
-
-					na_n = nullptr;
-					na_c = nullptr;
 				}
-				// See how much animation remains.
+				//see how much animation remains
 				pi.seeked = false;
 				pi.weight = 0;
-				from = blend_node(blend_points[cur_closest].node, blend_points[cur_closest].name, pi, FILTER_IGNORE, true, true);
-				pi.time = from.position;
+				from = blend_node(blend_points[cur_closest].node, blend_points[cur_closest].name, pi, FILTER_IGNORE, true, p_test_only);
 			}
+
+			pi.time = from.position;
 			pi.seeked = true;
 			pi.weight = 1.0;
 			mind = blend_node(blend_points[new_closest].node, blend_points[new_closest].name, pi, FILTER_IGNORE, true, p_test_only);

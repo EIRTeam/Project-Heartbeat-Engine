@@ -33,15 +33,12 @@
 #include "core/config/project_settings.h"
 #include "core/io/config_file.h"
 #include "core/math/delaunay_3d.h"
-#include "core/object/object.h"
-#include "scene/3d/lightmap_probe.h"
+#include "lightmap_probe.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/resources/camera_attributes.h"
 #include "scene/resources/environment.h"
 #include "scene/resources/image_texture.h"
 #include "scene/resources/sky.h"
-
-#include "modules/modules_enabled.gen.h" // For lightmapper_rd.
 
 void LightmapGIData::add_user(const NodePath &p_path, const Rect2 &p_uv_scale, int p_slice_index, int32_t p_sub_instance) {
 	User user;
@@ -81,8 +78,9 @@ void LightmapGIData::clear_users() {
 }
 
 void LightmapGIData::_set_user_data(const Array &p_data) {
+	ERR_FAIL_COND(p_data.is_empty());
 	ERR_FAIL_COND((p_data.size() % 4) != 0);
-	users.clear();
+
 	for (int i = 0; i < p_data.size(); i += 4) {
 		add_user(p_data[i + 0], p_data[i + 1], p_data[i + 2], p_data[i + 3]);
 	}
@@ -100,15 +98,15 @@ Array LightmapGIData::_get_user_data() const {
 }
 
 void LightmapGIData::set_lightmap_textures(const TypedArray<TextureLayered> &p_data) {
-	storage_light_textures = p_data;
+	light_textures = p_data;
 	if (p_data.is_empty()) {
-		combined_light_texture = Ref<TextureLayered>();
+		light_texture = Ref<TextureLayered>();
 		_reset_lightmap_textures();
 		return;
 	}
 
 	if (p_data.size() == 1) {
-		combined_light_texture = p_data[0];
+		light_texture = p_data[0];
 	} else {
 		Vector<Ref<Image>> images;
 		for (int i = 0; i < p_data.size(); i++) {
@@ -123,59 +121,13 @@ void LightmapGIData::set_lightmap_textures(const TypedArray<TextureLayered> &p_d
 		combined_texture.instantiate();
 
 		combined_texture->create_from_images(images);
-		combined_light_texture = combined_texture;
+		light_texture = combined_texture;
 	}
 	_reset_lightmap_textures();
 }
 
 TypedArray<TextureLayered> LightmapGIData::get_lightmap_textures() const {
-	return storage_light_textures;
-}
-
-void LightmapGIData::set_shadowmask_textures(const TypedArray<TextureLayered> &p_data) {
-	storage_shadowmask_textures = p_data;
-
-	if (p_data.is_empty()) {
-		combined_shadowmask_texture = Ref<TextureLayered>();
-		_reset_shadowmask_textures();
-		return;
-	}
-
-	if (p_data.size() == 1) {
-		combined_shadowmask_texture = p_data[0];
-
-	} else {
-		Vector<Ref<Image>> images;
-		for (int i = 0; i < p_data.size(); i++) {
-			Ref<TextureLayered> texture = p_data[i];
-			ERR_FAIL_COND_MSG(texture.is_null(), vformat("Invalid TextureLayered at index %d.", i));
-			for (int j = 0; j < texture->get_layers(); j++) {
-				images.push_back(texture->get_layer_data(j));
-			}
-		}
-
-		Ref<Texture2DArray> combined_texture;
-		combined_texture.instantiate();
-
-		combined_texture->create_from_images(images);
-		combined_shadowmask_texture = combined_texture;
-	}
-
-	_reset_shadowmask_textures();
-}
-
-TypedArray<TextureLayered> LightmapGIData::get_shadowmask_textures() const {
-	return storage_shadowmask_textures;
-}
-
-void LightmapGIData::clear_shadowmask_textures() {
-	RS::get_singleton()->lightmap_set_shadowmask_textures(lightmap, RID());
-	storage_shadowmask_textures.clear();
-	combined_shadowmask_texture.unref();
-}
-
-bool LightmapGIData::has_shadowmask_textures() {
-	return !storage_shadowmask_textures.is_empty() && combined_shadowmask_texture.is_valid();
+	return light_textures;
 }
 
 RID LightmapGIData::get_rid() const {
@@ -187,11 +139,7 @@ void LightmapGIData::clear() {
 }
 
 void LightmapGIData::_reset_lightmap_textures() {
-	RS::get_singleton()->lightmap_set_textures(lightmap, combined_light_texture.is_valid() ? combined_light_texture->get_rid() : RID(), uses_spherical_harmonics);
-}
-
-void LightmapGIData::_reset_shadowmask_textures() {
-	RS::get_singleton()->lightmap_set_shadowmask_textures(lightmap, combined_shadowmask_texture.is_valid() ? combined_shadowmask_texture->get_rid() : RID());
+	RS::get_singleton()->lightmap_set_textures(lightmap, light_texture.is_valid() ? light_texture->get_rid() : RID(), uses_spherical_harmonics);
 }
 
 void LightmapGIData::set_uses_spherical_harmonics(bool p_enable) {
@@ -203,23 +151,7 @@ bool LightmapGIData::is_using_spherical_harmonics() const {
 	return uses_spherical_harmonics;
 }
 
-void LightmapGIData::_set_uses_packed_directional(bool p_enable) {
-	_uses_packed_directional = p_enable;
-}
-
-bool LightmapGIData::_is_using_packed_directional() const {
-	return _uses_packed_directional;
-}
-
-void LightmapGIData::update_shadowmask_mode(ShadowmaskMode p_mode) {
-	RS::get_singleton()->lightmap_set_shadowmask_mode(lightmap, (RS::ShadowmaskMode)p_mode);
-}
-
-LightmapGIData::ShadowmaskMode LightmapGIData::get_shadowmask_mode() const {
-	return (ShadowmaskMode)RS::get_singleton()->lightmap_get_shadowmask_mode(lightmap);
-}
-
-void LightmapGIData::set_capture_data(const AABB &p_bounds, bool p_interior, const PackedVector3Array &p_points, const PackedColorArray &p_point_sh, const PackedInt32Array &p_tetrahedra, const PackedInt32Array &p_bsp_tree, float p_baked_exposure, uint32_t p_lightprobe_hash) {
+void LightmapGIData::set_capture_data(const AABB &p_bounds, bool p_interior, const PackedVector3Array &p_points, const PackedColorArray &p_point_sh, const PackedInt32Array &p_tetrahedra, const PackedInt32Array &p_bsp_tree, float p_baked_exposure) {
 	if (p_points.size()) {
 		int pc = p_points.size();
 		ERR_FAIL_COND(pc * 9 != p_point_sh.size());
@@ -235,7 +167,6 @@ void LightmapGIData::set_capture_data(const AABB &p_bounds, bool p_interior, con
 	}
 	RS::get_singleton()->lightmap_set_baked_exposure_normalization(lightmap, p_baked_exposure);
 	baked_exposure = p_baked_exposure;
-	lightprobe_hash = p_lightprobe_hash;
 	interior = p_interior;
 	bounds = p_bounds;
 }
@@ -254,10 +185,6 @@ PackedInt32Array LightmapGIData::get_capture_tetrahedra() const {
 
 PackedInt32Array LightmapGIData::get_capture_bsp_tree() const {
 	return RS::get_singleton()->lightmap_get_probe_capture_bsp_tree(lightmap);
-}
-
-uint32_t LightmapGIData::get_lightprobe_hash() const {
-	return lightprobe_hash;
 }
 
 AABB LightmapGIData::get_capture_bounds() const {
@@ -280,12 +207,7 @@ void LightmapGIData::_set_probe_data(const Dictionary &p_data) {
 	ERR_FAIL_COND(!p_data.has("sh"));
 	ERR_FAIL_COND(!p_data.has("interior"));
 	ERR_FAIL_COND(!p_data.has("baked_exposure"));
-
-	uint32_t phash = 0;
-	if (p_data.has("lightprobe_hash")) { // Older versions will not have it.
-		phash = p_data["lightprobe_hash"];
-	}
-	set_capture_data(p_data["bounds"], p_data["interior"], p_data["points"], p_data["sh"], p_data["tetrahedra"], p_data["bsp"], p_data["baked_exposure"], phash);
+	set_capture_data(p_data["bounds"], p_data["interior"], p_data["points"], p_data["sh"], p_data["tetrahedra"], p_data["bsp"], p_data["baked_exposure"]);
 }
 
 Dictionary LightmapGIData::_get_probe_data() const {
@@ -297,21 +219,21 @@ Dictionary LightmapGIData::_get_probe_data() const {
 	d["sh"] = get_capture_sh();
 	d["interior"] = is_interior();
 	d["baked_exposure"] = get_baked_exposure();
-	d["lightprobe_hash"] = lightprobe_hash;
 	return d;
 }
 
 #ifndef DISABLE_DEPRECATED
 void LightmapGIData::set_light_texture(const Ref<TextureLayered> &p_light_texture) {
-	TypedArray<TextureLayered> arr = { p_light_texture };
+	TypedArray<TextureLayered> arr;
+	arr.append(p_light_texture);
 	set_lightmap_textures(arr);
 }
 
 Ref<TextureLayered> LightmapGIData::get_light_texture() const {
-	if (storage_light_textures.is_empty()) {
+	if (light_textures.is_empty()) {
 		return Ref<TextureLayered>();
 	}
-	return storage_light_textures.get(0);
+	return light_textures.get(0);
 }
 
 void LightmapGIData::_set_light_textures_data(const Array &p_data) {
@@ -319,7 +241,7 @@ void LightmapGIData::_set_light_textures_data(const Array &p_data) {
 }
 
 Array LightmapGIData::_get_light_textures_data() const {
-	return Array(storage_light_textures);
+	return Array(light_textures);
 }
 #endif
 
@@ -330,14 +252,8 @@ void LightmapGIData::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_lightmap_textures", "light_textures"), &LightmapGIData::set_lightmap_textures);
 	ClassDB::bind_method(D_METHOD("get_lightmap_textures"), &LightmapGIData::get_lightmap_textures);
 
-	ClassDB::bind_method(D_METHOD("set_shadowmask_textures", "shadowmask_textures"), &LightmapGIData::set_shadowmask_textures);
-	ClassDB::bind_method(D_METHOD("get_shadowmask_textures"), &LightmapGIData::get_shadowmask_textures);
-
 	ClassDB::bind_method(D_METHOD("set_uses_spherical_harmonics", "uses_spherical_harmonics"), &LightmapGIData::set_uses_spherical_harmonics);
 	ClassDB::bind_method(D_METHOD("is_using_spherical_harmonics"), &LightmapGIData::is_using_spherical_harmonics);
-
-	ClassDB::bind_method(D_METHOD("_set_uses_packed_directional", "_uses_packed_directional"), &LightmapGIData::_set_uses_packed_directional);
-	ClassDB::bind_method(D_METHOD("_is_using_packed_directional"), &LightmapGIData::_is_using_packed_directional);
 
 	ClassDB::bind_method(D_METHOD("add_user", "path", "uv_scale", "slice_index", "sub_instance"), &LightmapGIData::add_user);
 	ClassDB::bind_method(D_METHOD("get_user_count"), &LightmapGIData::get_user_count);
@@ -347,12 +263,10 @@ void LightmapGIData::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_set_probe_data", "data"), &LightmapGIData::_set_probe_data);
 	ClassDB::bind_method(D_METHOD("_get_probe_data"), &LightmapGIData::_get_probe_data);
 
-	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "lightmap_textures", PROPERTY_HINT_ARRAY_TYPE, "TextureLayered", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY), "set_lightmap_textures", "get_lightmap_textures");
-	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "shadowmask_textures", PROPERTY_HINT_ARRAY_TYPE, "TextureLayered", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY), "set_shadowmask_textures", "get_shadowmask_textures");
+	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "lightmap_textures", PROPERTY_HINT_ARRAY_TYPE, "TextureLayered", PROPERTY_USAGE_NO_EDITOR), "set_lightmap_textures", "get_lightmap_textures");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "uses_spherical_harmonics", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "set_uses_spherical_harmonics", "is_using_spherical_harmonics");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "user_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_user_data", "_get_user_data");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "probe_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_probe_data", "_get_probe_data");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "_uses_packed_directional", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_uses_packed_directional", "_is_using_packed_directional");
 
 #ifndef DISABLE_DEPRECATED
 	ClassDB::bind_method(D_METHOD("set_light_texture", "light_texture"), &LightmapGIData::set_light_texture);
@@ -361,13 +275,9 @@ void LightmapGIData::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_set_light_textures_data", "data"), &LightmapGIData::_set_light_textures_data);
 	ClassDB::bind_method(D_METHOD("_get_light_textures_data"), &LightmapGIData::_get_light_textures_data);
 
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "light_texture", PROPERTY_HINT_RESOURCE_TYPE, "TextureLayered", PROPERTY_USAGE_NONE), "set_light_texture", "get_light_texture");
-	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "light_textures", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_INTERNAL), "_set_light_textures_data", "_get_light_textures_data");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "light_texture", PROPERTY_HINT_RESOURCE_TYPE, "TextureLayered", PROPERTY_USAGE_EDITOR), "set_light_texture", "get_light_texture");
+	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "light_textures", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_light_textures_data", "_get_light_textures_data");
 #endif
-
-	BIND_ENUM_CONSTANT(SHADOWMASK_MODE_NONE);
-	BIND_ENUM_CONSTANT(SHADOWMASK_MODE_REPLACE);
-	BIND_ENUM_CONSTANT(SHADOWMASK_MODE_OVERLAY);
 }
 
 LightmapGIData::LightmapGIData() {
@@ -376,7 +286,7 @@ LightmapGIData::LightmapGIData() {
 
 LightmapGIData::~LightmapGIData() {
 	ERR_FAIL_NULL(RenderingServer::get_singleton());
-	RS::get_singleton()->free_rid(lightmap);
+	RS::get_singleton()->free(lightmap);
 }
 
 ///////////////////////////
@@ -411,7 +321,9 @@ void LightmapGI::_find_meshes_and_lights(Node *p_at_node, Vector<MeshesFound> &m
 				mf.node_path = get_path_to(mi);
 				mf.subindex = -1;
 				mf.mesh = mesh;
-				mf.lightmap_scale = mi->get_lightmap_texel_scale();
+
+				static const int lightmap_scale[GeometryInstance3D::LIGHTMAP_SCALE_MAX] = { 1, 2, 4, 8 };
+				mf.lightmap_scale = lightmap_scale[mi->get_lightmap_scale()];
 
 				Ref<Material> all_override = mi->get_material_override();
 				for (int i = 0; i < mesh->get_surface_count(); i++) {
@@ -435,7 +347,7 @@ void LightmapGI::_find_meshes_and_lights(Node *p_at_node, Vector<MeshesFound> &m
 			Transform3D xf = get_global_transform().affine_inverse() * s->get_global_transform();
 			for (int i = 0; i < bmeshes.size(); i += 2) {
 				Ref<Mesh> mesh = bmeshes[i];
-				if (mesh.is_null()) {
+				if (!mesh.is_valid()) {
 					continue;
 				}
 
@@ -445,7 +357,7 @@ void LightmapGI::_find_meshes_and_lights(Node *p_at_node, Vector<MeshesFound> &m
 				mf.xform = xf * mesh_xf;
 				mf.node_path = get_path_to(s);
 				mf.subindex = i / 2;
-				mf.lightmap_scale = 1.0;
+				mf.lightmap_scale = 1;
 				mf.mesh = mesh;
 
 				meshes.push_back(mf);
@@ -479,7 +391,7 @@ void LightmapGI::_find_meshes_and_lights(Node *p_at_node, Vector<MeshesFound> &m
 	}
 }
 
-int LightmapGI::_bsp_get_simplex_side(const LocalVector<Vector3> &p_points, const LocalVector<BSPSimplex> &p_simplices, const Plane &p_plane, uint32_t p_simplex) const {
+int LightmapGI::_bsp_get_simplex_side(const Vector<Vector3> &p_points, const LocalVector<BSPSimplex> &p_simplices, const Plane &p_plane, uint32_t p_simplex) const {
 	int over = 0;
 	int under = 0;
 	const BSPSimplex &s = p_simplices[p_simplex];
@@ -509,7 +421,7 @@ int LightmapGI::_bsp_get_simplex_side(const LocalVector<Vector3> &p_points, cons
 
 //#define DEBUG_BSP
 
-int32_t LightmapGI::_compute_bsp_tree(const LocalVector<Vector3> &p_points, const LocalVector<Plane> &p_planes, LocalVector<int32_t> &planes_tested, const LocalVector<BSPSimplex> &p_simplices, const LocalVector<int32_t> &p_simplex_indices, LocalVector<BSPNode> &bsp_nodes) {
+int32_t LightmapGI::_compute_bsp_tree(const Vector<Vector3> &p_points, const LocalVector<Plane> &p_planes, LocalVector<int32_t> &planes_tested, const LocalVector<BSPSimplex> &p_simplices, const LocalVector<int32_t> &p_simplex_indices, LocalVector<BSPNode> &bsp_nodes) {
 	ERR_FAIL_COND_V(p_simplex_indices.size() < 2, -1);
 
 	int32_t node_index = (int32_t)bsp_nodes.size();
@@ -708,7 +620,7 @@ int32_t LightmapGI::_compute_bsp_tree(const LocalVector<Vector3> &p_points, cons
 	BSPNode node;
 	node.plane = best_plane;
 
-	if (indices_under.is_empty()) {
+	if (indices_under.size() == 0) {
 		//nothing to do here
 		node.under = BSPNode::EMPTY_LEAF;
 	} else if (indices_under.size() == 1) {
@@ -717,7 +629,7 @@ int32_t LightmapGI::_compute_bsp_tree(const LocalVector<Vector3> &p_points, cons
 		node.under = _compute_bsp_tree(p_points, p_planes, planes_tested, p_simplices, indices_under, bsp_nodes);
 	}
 
-	if (indices_over.is_empty()) {
+	if (indices_over.size() == 0) {
 		//nothing to do here
 		node.over = BSPNode::EMPTY_LEAF;
 	} else if (indices_over.size() == 1) {
@@ -797,7 +709,7 @@ void LightmapGI::_gen_new_positions_from_octree(const GenProbesOctree *p_cell, f
 			const Vector3 *pp = probe_positions.ptr();
 			bool exists = false;
 			for (int j = 0; j < ppcount; j++) {
-				if (pp[j].distance_to(real_pos) < (p_cell_size * 0.5f)) {
+				if (pp[j].is_equal_approx(real_pos)) {
 					exists = true;
 					break;
 				}
@@ -814,83 +726,6 @@ void LightmapGI::_gen_new_positions_from_octree(const GenProbesOctree *p_cell, f
 			_gen_new_positions_from_octree(p_cell->children[i], p_cell_size, probe_positions, new_probe_positions, positions_used, p_bounds);
 		}
 	}
-}
-
-LightmapGI::BakeError LightmapGI::_save_and_reimport_atlas_textures(const Ref<Lightmapper> p_lightmapper, const String &p_base_name, TypedArray<TextureLayered> &r_textures, bool p_is_shadowmask) const {
-	Vector<Ref<Image>> images;
-	images.resize(p_is_shadowmask ? p_lightmapper->get_shadowmask_texture_count() : p_lightmapper->get_bake_texture_count());
-
-	for (int i = 0; i < images.size(); i++) {
-		images.set(i, p_is_shadowmask ? p_lightmapper->get_shadowmask_texture(i) : p_lightmapper->get_bake_texture(i));
-	}
-
-	const int slice_count = images.size();
-	const int slice_width = images[0]->get_width();
-	const int slice_height = images[0]->get_height();
-
-	const int slices_per_texture = Image::MAX_HEIGHT / slice_height;
-	const int texture_count = Math::ceil(slice_count / (float)slices_per_texture);
-	const int last_count = slice_count % slices_per_texture;
-
-	r_textures.resize(texture_count);
-
-	for (int i = 0; i < texture_count; i++) {
-		const int texture_slice_count = (i == texture_count - 1 && last_count != 0) ? last_count : slices_per_texture;
-
-		Ref<Image> texture_image = Image::create_empty(slice_width, slice_height * texture_slice_count, false, images[0]->get_format());
-
-		for (int j = 0; j < texture_slice_count; j++) {
-			texture_image->blit_rect(images[i * slices_per_texture + j], Rect2i(0, 0, slice_width, slice_height), Point2i(0, slice_height * j));
-		}
-
-		const String atlas_path = (texture_count > 1 ? p_base_name + "_" + itos(i) : p_base_name) + (p_is_shadowmask ? ".png" : ".exr");
-		const String config_path = atlas_path + ".import";
-
-		Ref<ConfigFile> config;
-		config.instantiate();
-
-		// Load an import configuration if present.
-		if (FileAccess::exists(config_path)) {
-			config->load(config_path);
-		}
-
-		config->set_value("remap", "importer", "2d_array_texture");
-		config->set_value("remap", "type", "CompressedTexture2DArray");
-		if (!config->has_section_key("params", "compress/mode")) {
-			// Do not override an existing compression mode.
-			config->set_value("params", "compress/mode", 2);
-		}
-		config->set_value("params", "compress/channel_pack", 1);
-		config->set_value("params", "mipmaps/generate", false);
-		config->set_value("params", "slices/horizontal", 1);
-		config->set_value("params", "slices/vertical", texture_slice_count);
-
-		config->save(config_path);
-
-		if (supersampling_enabled) {
-			texture_image->resize(texture_image->get_width() / supersampling_factor, texture_image->get_height() / supersampling_factor, Image::INTERPOLATE_TRILINEAR);
-		}
-
-		// Save the file.
-		Error save_err;
-		if (p_is_shadowmask) {
-			save_err = texture_image->save_png(atlas_path);
-		} else {
-			save_err = texture_image->save_exr(atlas_path, false);
-		}
-
-		ERR_FAIL_COND_V(save_err, LightmapGI::BAKE_ERROR_CANT_CREATE_IMAGE);
-
-		// Reimport the file.
-		ResourceLoader::import(atlas_path);
-		Ref<TextureLayered> t = ResourceLoader::load(atlas_path); // If already loaded, it will be updated on refocus?
-		ERR_FAIL_COND_V(t.is_null(), LightmapGI::BAKE_ERROR_CANT_CREATE_IMAGE);
-
-		// Store the atlas in the array.
-		r_textures[i] = t;
-	}
-
-	return LightmapGI::BAKE_ERROR_OK;
 }
 
 LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_path, Lightmapper::BakeStepFunc p_bake_step, void *p_bake_userdata) {
@@ -926,7 +761,7 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 		Vector<MeshesFound> meshes_found;
 		_find_meshes_and_lights(p_from_node ? p_from_node : get_parent(), meshes_found, lights_found, probes_found);
 
-		if (meshes_found.is_empty()) {
+		if (meshes_found.size() == 0) {
 			return BAKE_ERROR_NO_MESHES;
 		}
 		// create mesh data for insert
@@ -946,8 +781,7 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 				// For now set to basic size to avoid crash.
 				mesh_lightmap_size = Size2i(64, 64);
 			}
-			// Double lightmap texel density if downsampling is enabled, as the final texture size will be halved before saving lightmaps.
-			Size2i lightmap_size = Size2i(Size2(mesh_lightmap_size) * mf.lightmap_scale * texel_scale) * (supersampling_enabled ? supersampling_factor : 1.0);
+			Size2i lightmap_size = Size2i(Size2(mesh_lightmap_size) * mf.lightmap_scale * texel_scale);
 			ERR_FAIL_COND_V(lightmap_size.x == 0 || lightmap_size.y == 0, BAKE_ERROR_LIGHTMAP_TOO_SMALL);
 
 			TypedArray<RID> overrides;
@@ -998,7 +832,7 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 					w_albedo[i + 0] = uint8_t(CLAMP(float(r_aa[i + 0]) * (1.0 - float(r_orm[i + 2] / 255.0)), 0, 255));
 					w_albedo[i + 1] = uint8_t(CLAMP(float(r_aa[i + 1]) * (1.0 - float(r_orm[i + 2] / 255.0)), 0, 255));
 					w_albedo[i + 2] = uint8_t(CLAMP(float(r_aa[i + 2]) * (1.0 - float(r_orm[i + 2] / 255.0)), 0, 255));
-					w_albedo[i + 3] = r_aa[i + 3];
+					w_albedo[i + 3] = 255;
 				}
 
 				md.albedo_on_uv2.instantiate();
@@ -1019,11 +853,6 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 					continue;
 				}
 				Array a = mf.mesh->surface_get_arrays(i);
-				Ref<Material> mat = mf.mesh->surface_get_material(i);
-				RID mat_rid;
-				if (mat.is_valid()) {
-					mat_rid = mat->get_rid();
-				}
 
 				Vector<Vector3> vertices = a[Mesh::ARRAY_VERTEX];
 				const Vector3 *vr = vertices.ptr();
@@ -1033,8 +862,8 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 				const Vector3 *nr = nullptr;
 				Vector<int> index = a[Mesh::ARRAY_INDEX];
 
-				ERR_CONTINUE(uv.is_empty());
-				ERR_CONTINUE(normals.is_empty());
+				ERR_CONTINUE(uv.size() == 0);
+				ERR_CONTINUE(normals.size() == 0);
 
 				uvr = uv.ptr();
 				nr = normals.ptr();
@@ -1073,7 +902,6 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 
 						md.uv2.push_back(uvr[vidx[k]]);
 						md.normal.push_back(normal_xform.xform(nr[vidx[k]]).normalized());
-						md.material.push_back(mat_rid);
 					}
 				}
 			}
@@ -1198,20 +1026,20 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 			if (Object::cast_to<DirectionalLight3D>(light)) {
 				DirectionalLight3D *l = Object::cast_to<DirectionalLight3D>(light);
 				if (l->get_sky_mode() != DirectionalLight3D::SKY_MODE_SKY_ONLY) {
-					lightmapper->add_directional_light(light->get_name(), light->get_bake_mode() == Light3D::BAKE_STATIC, -xf.basis.get_column(Vector3::AXIS_Z).normalized(), linear_color, energy, indirect_energy, l->get_param(Light3D::PARAM_SIZE), l->get_param(Light3D::PARAM_SHADOW_BLUR));
+					lightmapper->add_directional_light(light->get_bake_mode() == Light3D::BAKE_STATIC, -xf.basis.get_column(Vector3::AXIS_Z).normalized(), linear_color, energy, indirect_energy, l->get_param(Light3D::PARAM_SIZE), l->get_param(Light3D::PARAM_SHADOW_BLUR));
 				}
 			} else if (Object::cast_to<OmniLight3D>(light)) {
 				OmniLight3D *l = Object::cast_to<OmniLight3D>(light);
 				if (use_physical_light_units) {
-					energy *= (1.0 / (Math::PI * 4.0));
+					energy *= (1.0 / (Math_PI * 4.0));
 				}
-				lightmapper->add_omni_light(light->get_name(), light->get_bake_mode() == Light3D::BAKE_STATIC, xf.origin, linear_color, energy, indirect_energy, l->get_param(Light3D::PARAM_RANGE), l->get_param(Light3D::PARAM_ATTENUATION), l->get_param(Light3D::PARAM_SIZE), l->get_param(Light3D::PARAM_SHADOW_BLUR));
+				lightmapper->add_omni_light(light->get_bake_mode() == Light3D::BAKE_STATIC, xf.origin, linear_color, energy, indirect_energy, l->get_param(Light3D::PARAM_RANGE), l->get_param(Light3D::PARAM_ATTENUATION), l->get_param(Light3D::PARAM_SIZE), l->get_param(Light3D::PARAM_SHADOW_BLUR));
 			} else if (Object::cast_to<SpotLight3D>(light)) {
 				SpotLight3D *l = Object::cast_to<SpotLight3D>(light);
 				if (use_physical_light_units) {
-					energy *= (1.0 / Math::PI);
+					energy *= (1.0 / Math_PI);
 				}
-				lightmapper->add_spot_light(light->get_name(), light->get_bake_mode() == Light3D::BAKE_STATIC, xf.origin, -xf.basis.get_column(Vector3::AXIS_Z).normalized(), linear_color, energy, indirect_energy, l->get_param(Light3D::PARAM_RANGE), l->get_param(Light3D::PARAM_ATTENUATION), l->get_param(Light3D::PARAM_SPOT_ANGLE), l->get_param(Light3D::PARAM_SPOT_ATTENUATION), l->get_param(Light3D::PARAM_SIZE), l->get_param(Light3D::PARAM_SHADOW_BLUR));
+				lightmapper->add_spot_light(light->get_bake_mode() == Light3D::BAKE_STATIC, xf.origin, -xf.basis.get_column(Vector3::AXIS_Z).normalized(), linear_color, energy, indirect_energy, l->get_param(Light3D::PARAM_RANGE), l->get_param(Light3D::PARAM_ATTENUATION), l->get_param(Light3D::PARAM_SPOT_ANGLE), l->get_param(Light3D::PARAM_SPOT_ATTENUATION), l->get_param(Light3D::PARAM_SIZE), l->get_param(Light3D::PARAM_SHADOW_BLUR));
 			}
 		}
 		for (int i = 0; i < probes_found.size(); i++) {
@@ -1244,7 +1072,6 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 
 					if (env.is_valid()) {
 						environment_image = RS::get_singleton()->environment_bake_panorama(env->get_rid(), true, Size2i(128, 64));
-						environment_transform = Basis::from_euler(env->get_sky_rotation()).inverse();
 					}
 				}
 			} break;
@@ -1275,9 +1102,7 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 		}
 	}
 
-	Lightmapper::BakeError bake_err = lightmapper->bake(Lightmapper::BakeQuality(bake_quality), use_denoiser, denoiser_strength, denoiser_range, bounces,
-			bounce_indirect_energy, bias, max_texture_size, directional, shadowmask_mode != LightmapGIData::SHADOWMASK_MODE_NONE, use_texture_for_bounces,
-			Lightmapper::GenerateProbes(gen_probes), environment_image, environment_transform, _lightmap_bake_step_function, &bsud, exposure_normalization, (supersampling_enabled ? supersampling_factor : 1));
+	Lightmapper::BakeError bake_err = lightmapper->bake(Lightmapper::BakeQuality(bake_quality), use_denoiser, denoiser_strength, denoiser_range, bounces, bounce_indirect_energy, bias, max_texture_size, directional, use_texture_for_bounces, Lightmapper::GenerateProbes(gen_probes), environment_image, environment_transform, _lightmap_bake_step_function, &bsud, exposure_normalization);
 
 	if (bake_err == Lightmapper::BAKE_ERROR_TEXTURE_EXCEEDS_MAX_SIZE) {
 		return BAKE_ERROR_TEXTURE_SIZE_TOO_SMALL;
@@ -1285,50 +1110,83 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 		return BAKE_ERROR_MESHES_INVALID;
 	} else if (bake_err == Lightmapper::BAKE_ERROR_ATLAS_TOO_SMALL) {
 		return BAKE_ERROR_ATLAS_TOO_SMALL;
-	} else if (bake_err == Lightmapper::BAKE_ERROR_USER_ABORTED) {
-		return BAKE_ERROR_USER_ABORTED;
 	}
 
 	// POSTBAKE: Save Textures.
-	TypedArray<TextureLayered> lightmap_textures;
-	TypedArray<TextureLayered> shadowmask_textures;
 
-	const String texture_filename = p_image_data_path.get_basename();
-	const int shadowmask_texture_count = lightmapper->get_shadowmask_texture_count();
-	const bool save_shadowmask = shadowmask_mode != LightmapGIData::SHADOWMASK_MODE_NONE && shadowmask_texture_count > 0;
+	TypedArray<TextureLayered> textures;
+	{
+		Vector<Ref<Image>> images;
+		images.resize(lightmapper->get_bake_texture_count());
+		for (int i = 0; i < images.size(); i++) {
+			images.set(i, lightmapper->get_bake_texture(i));
+		}
 
-	// Save the lightmap atlases.
-	BakeError save_err = _save_and_reimport_atlas_textures(lightmapper, texture_filename, lightmap_textures, false);
-	ERR_FAIL_COND_V(save_err != BAKE_ERROR_OK, save_err);
+		int slice_count = images.size();
+		int slice_width = images[0]->get_width();
+		int slice_height = images[0]->get_height();
 
-	if (save_shadowmask) {
-		// Save the shadowmask atlases.
-		save_err = _save_and_reimport_atlas_textures(lightmapper, texture_filename + "_shadow", shadowmask_textures, true);
-		ERR_FAIL_COND_V(save_err != BAKE_ERROR_OK, save_err);
+		int slices_per_texture = Image::MAX_HEIGHT / slice_height;
+		int texture_count = Math::ceil(slice_count / (float)slices_per_texture);
+
+		textures.resize(texture_count);
+
+		String base_path = p_image_data_path.get_basename();
+
+		int last_count = slice_count % slices_per_texture;
+		for (int i = 0; i < texture_count; i++) {
+			int texture_slice_count = (i == texture_count - 1 && last_count != 0) ? last_count : slices_per_texture;
+
+			Ref<Image> texture_image = Image::create_empty(slice_width, slice_height * texture_slice_count, false, images[0]->get_format());
+
+			for (int j = 0; j < texture_slice_count; j++) {
+				texture_image->blit_rect(images[i * slices_per_texture + j], Rect2i(0, 0, slice_width, slice_height), Point2i(0, slice_height * j));
+			}
+
+			String texture_path = texture_count > 1 ? base_path + "_" + itos(i) + ".exr" : base_path + ".exr";
+
+			Ref<ConfigFile> config;
+			config.instantiate();
+
+			if (FileAccess::exists(texture_path + ".import")) {
+				config->load(texture_path + ".import");
+			}
+
+			config->set_value("remap", "importer", "2d_array_texture");
+			config->set_value("remap", "type", "CompressedTexture2DArray");
+			if (!config->has_section_key("params", "compress/mode")) {
+				// User may want another compression, so leave it be, but default to VRAM uncompressed.
+				config->set_value("params", "compress/mode", 3);
+			}
+			config->set_value("params", "compress/channel_pack", 1);
+			config->set_value("params", "mipmaps/generate", false);
+			config->set_value("params", "slices/horizontal", 1);
+			config->set_value("params", "slices/vertical", texture_slice_count);
+
+			config->save(texture_path + ".import");
+
+			Error err = texture_image->save_exr(texture_path, false);
+			ERR_FAIL_COND_V(err, BAKE_ERROR_CANT_CREATE_IMAGE);
+			ResourceLoader::import(texture_path);
+			Ref<TextureLayered> t = ResourceLoader::load(texture_path); // If already loaded, it will be updated on refocus?
+			ERR_FAIL_COND_V(t.is_null(), BAKE_ERROR_CANT_CREATE_IMAGE);
+			textures[i] = t;
+		}
 	}
 
-	// POSTBAKE: Save Light Data.
-	Ref<LightmapGIData> gi_data;
+	/* POSTBAKE: Save Light Data */
 
+	Ref<LightmapGIData> gi_data;
 	if (get_light_data().is_valid()) {
 		gi_data = get_light_data();
-		set_light_data(Ref<LightmapGIData>()); // Clear.
+		set_light_data(Ref<LightmapGIData>()); //clear
 		gi_data->clear();
-
 	} else {
 		gi_data.instantiate();
 	}
 
-	gi_data->set_lightmap_textures(lightmap_textures);
-
-	if (save_shadowmask) {
-		gi_data->set_shadowmask_textures(shadowmask_textures);
-	} else {
-		gi_data->clear_shadowmask_textures();
-	}
-
+	gi_data->set_lightmap_textures(textures);
 	gi_data->set_uses_spherical_harmonics(directional);
-	gi_data->_set_uses_packed_directional(directional); // New SH lightmaps are packed automatically.
 
 	for (int i = 0; i < lightmapper->get_bake_mesh_count(); i++) {
 		Dictionary d = lightmapper->get_bake_mesh_userdata(i);
@@ -1343,46 +1201,34 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 		gi_data->add_user(np, uv_scale, slice_index, subindex);
 	}
 
-	int probe_count = lightmapper->get_bake_probe_count();
-
-	// Probe SH may change between bakes.
-	LocalVector<Color> probe_sh;
-	LocalVector<Vector3> probe_points;
-	probe_sh.resize(probe_count * 9);
-	probe_points.resize(probe_count);
-
-	uint32_t bake_probe_hash = HASH_MURMUR3_SEED;
-	for (int i = 0; i < probe_count; i++) {
-		// Calculate the hash from probe positions.
-		Vector3 point = lightmapper->get_bake_probe_point(i);
-		bake_probe_hash = hash_murmur3_one_double(point.x, bake_probe_hash);
-		bake_probe_hash = hash_murmur3_one_double(point.y, bake_probe_hash);
-		bake_probe_hash = hash_murmur3_one_double(point.z, bake_probe_hash);
-
-		probe_points[i] = point;
-		Vector<Color> colors = lightmapper->get_bake_probe_sh(i);
-		ERR_CONTINUE(colors.size() != 9);
-		for (int j = 0; j < 9; j++) {
-			probe_sh[i * 9 + j] = colors[j];
+	{
+		// create tetrahedrons
+		Vector<Vector3> points;
+		Vector<Color> sh;
+		points.resize(lightmapper->get_bake_probe_count());
+		sh.resize(lightmapper->get_bake_probe_count() * 9);
+		for (int i = 0; i < lightmapper->get_bake_probe_count(); i++) {
+			points.write[i] = lightmapper->get_bake_probe_point(i);
+			Vector<Color> colors = lightmapper->get_bake_probe_sh(i);
+			ERR_CONTINUE(colors.size() != 9);
+			for (int j = 0; j < 9; j++) {
+				sh.write[i * 9 + j] = colors[j];
+			}
 		}
-	}
 
-	// If the probe hash doesn't match, build the BSP tree from scratch.
-	if (bake_probe_hash != gi_data->get_lightprobe_hash()) {
-		// Obtain solved simplices.
+		//Obtain solved simplices
+
 		if (p_bake_step) {
 			p_bake_step(0.8, RTR("Generating Probe Volumes"), p_bake_userdata, true);
 		}
-
-		Vector<Delaunay3D::OutputSimplex> solved_simplices = Delaunay3D::tetrahedralize(Vector<Vector3>(probe_points));
-		int64_t simplex_count = solved_simplices.size();
+		Vector<Delaunay3D::OutputSimplex> solved_simplices = Delaunay3D::tetrahedralize(points);
 
 		LocalVector<BSPSimplex> bsp_simplices;
 		LocalVector<Plane> bsp_planes;
 		LocalVector<int32_t> bsp_simplex_indices;
 		PackedInt32Array tetrahedrons;
 
-		for (int i = 0; i < simplex_count; i++) {
+		for (int i = 0; i < solved_simplices.size(); i++) {
 			//Prepare a special representation of the simplex, which uses a BSP Tree
 			BSPSimplex bsp_simplex;
 			for (int j = 0; j < 4; j++) {
@@ -1395,9 +1241,9 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 					{ 0, 1, 3 },
 					{ 1, 2, 3 }
 				};
-				Vector3 a = probe_points[solved_simplices[i].points[face_order[j][0]]];
-				Vector3 b = probe_points[solved_simplices[i].points[face_order[j][1]]];
-				Vector3 c = probe_points[solved_simplices[i].points[face_order[j][2]]];
+				Vector3 a = points[solved_simplices[i].points[face_order[j][0]]];
+				Vector3 b = points[solved_simplices[i].points[face_order[j][1]]];
+				Vector3 c = points[solved_simplices[i].points[face_order[j][2]]];
 
 				//store planes in an array, but ensure they are reused, to speed up processing
 
@@ -1432,7 +1278,7 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 			for (uint32_t i = 0; i < bsp_simplices.size(); i++) {
 				f->store_line("o Simplex" + itos(i));
 				for (int j = 0; j < 4; j++) {
-					f->store_line(vformat("v %f %f %f", probe_points[bsp_simplices[i].vertices[j]].x, probe_points[bsp_simplices[i].vertices[j]].y, probe_points[bsp_simplices[i].vertices[j]].z));
+					f->store_line(vformat("v %f %f %f", points[bsp_simplices[i].vertices[j]].x, points[bsp_simplices[i].vertices[j]].y, points[bsp_simplices[i].vertices[j]].z));
 				}
 				static const int face_order[4][3] = {
 					{ 1, 2, 3 },
@@ -1459,8 +1305,7 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 			p_bake_step(0.9, RTR("Generating Probe Acceleration Structures"), p_bake_userdata, true);
 		}
 
-		// Compute a BSP tree of the simplices, so it's easy to find the exact one.
-		_compute_bsp_tree(probe_points, bsp_planes, planes_tested, bsp_simplices, bsp_simplex_indices, bsp_nodes);
+		_compute_bsp_tree(points, bsp_planes, planes_tested, bsp_simplices, bsp_simplex_indices, bsp_nodes);
 
 		PackedInt32Array bsp_array;
 		bsp_array.resize(bsp_nodes.size() * 6); // six 32 bits values used for each BSP node
@@ -1484,9 +1329,10 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 #endif
 		}
 
-		gi_data->set_capture_data(bounds, interior, Vector<Vector3>(probe_points), Vector<Color>(probe_sh), tetrahedrons, bsp_array, exposure_normalization, bake_probe_hash);
-	} else {
-		gi_data->set_capture_data(bounds, interior, Vector<Vector3>(probe_points), Vector<Color>(probe_sh), gi_data->get_capture_tetrahedra(), gi_data->get_capture_bsp_tree(), exposure_normalization, bake_probe_hash);
+		/* Obtain the colors from the images, they will be re-created as cubemaps on the server, depending on the driver */
+
+		gi_data->set_capture_data(bounds, interior, points, sh, tetrahedrons, bsp_array, exposure_normalization);
+		/* Compute a BSP tree of the simplices, so it's easy to find the exact one */
 	}
 
 	gi_data->set_path(p_image_data_path, true);
@@ -1497,7 +1343,6 @@ LightmapGI::BakeError LightmapGI::bake(Node *p_from_node, String p_image_data_pa
 	}
 
 	set_light_data(gi_data);
-	update_configuration_warnings();
 
 	return BAKE_ERROR_OK;
 }
@@ -1506,23 +1351,11 @@ void LightmapGI::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_POST_ENTER_TREE: {
 			if (light_data.is_valid()) {
-				ERR_FAIL_COND_MSG(
-						light_data->is_using_spherical_harmonics() && !light_data->_is_using_packed_directional(),
-						vformat(
-								"%s (%s): The directional lightmap textures are stored in a format that isn't supported anymore. Please bake lightmaps again to make lightmaps display from this node again.",
-								get_light_data()->get_path(), get_name()));
-
-				if (last_owner && last_owner != get_owner()) {
-					light_data->clear_users();
-				}
-
 				_assign_lightmaps();
 			}
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
-			last_owner = get_owner();
-
 			if (light_data.is_valid()) {
 				_clear_lightmaps();
 			}
@@ -1531,17 +1364,10 @@ void LightmapGI::_notification(int p_what) {
 }
 
 void LightmapGI::_assign_lightmaps() {
-	ERR_FAIL_COND(light_data.is_null());
-
-	Vector<String> missing_node_paths;
+	ERR_FAIL_COND(!light_data.is_valid());
 
 	for (int i = 0; i < light_data->get_user_count(); i++) {
-		NodePath user_path = light_data->get_user_path(i);
-		Node *node = get_node_or_null(user_path);
-		if (!node) {
-			missing_node_paths.push_back(String(user_path));
-			continue;
-		}
+		Node *node = get_node(light_data->get_user_path(i));
 		int instance_idx = light_data->get_user_sub_instance(i);
 		if (instance_idx >= 0) {
 			RID instance_id = node->call("get_bake_mesh_instance", instance_idx);
@@ -1554,25 +1380,12 @@ void LightmapGI::_assign_lightmaps() {
 			RS::get_singleton()->instance_geometry_set_lightmap(vi->get_instance(), get_instance(), light_data->get_user_lightmap_uv_scale(i), light_data->get_user_lightmap_slice_index(i));
 		}
 	}
-
-	if (!missing_node_paths.is_empty()) {
-		String missing_paths_text;
-		if (missing_node_paths.size() <= 3) {
-			missing_paths_text = String(", ").join(missing_node_paths);
-		} else {
-			missing_paths_text = vformat("%s and %d more", String(", ").join(missing_node_paths.slice(0, 3)), missing_node_paths.size() - 3);
-		}
-		WARN_PRINT(vformat("%s couldn't find previously baked nodes and needs a rebake (missing nodes: %s).", get_name(), missing_paths_text));
-	}
 }
 
 void LightmapGI::_clear_lightmaps() {
-	ERR_FAIL_COND(light_data.is_null());
+	ERR_FAIL_COND(!light_data.is_valid());
 	for (int i = 0; i < light_data->get_user_count(); i++) {
-		Node *node = get_node_or_null(light_data->get_user_path(i));
-		if (!node) {
-			continue;
-		}
+		Node *node = get_node(light_data->get_user_path(i));
 		int instance_idx = light_data->get_user_sub_instance(i);
 		if (instance_idx >= 0) {
 			RID instance_id = node->call("get_bake_mesh_instance", instance_idx);
@@ -1601,7 +1414,6 @@ void LightmapGI::set_light_data(const Ref<LightmapGIData> &p_data) {
 		if (is_inside_tree()) {
 			_assign_lightmaps();
 		}
-		light_data->update_shadowmask_mode(shadowmask_mode);
 	}
 
 	update_gizmos();
@@ -1654,19 +1466,6 @@ void LightmapGI::set_directional(bool p_enable) {
 
 bool LightmapGI::is_directional() const {
 	return directional;
-}
-
-void LightmapGI::set_shadowmask_mode(LightmapGIData::ShadowmaskMode p_mode) {
-	shadowmask_mode = p_mode;
-	if (light_data.is_valid()) {
-		light_data->update_shadowmask_mode(p_mode);
-	}
-
-	update_configuration_warnings();
-}
-
-LightmapGIData::ShadowmaskMode LightmapGI::get_shadowmask_mode() const {
-	return shadowmask_mode;
 }
 
 void LightmapGI::set_use_texture_for_bounces(bool p_enable) {
@@ -1764,26 +1563,6 @@ int LightmapGI::get_max_texture_size() const {
 	return max_texture_size;
 }
 
-void LightmapGI::set_supersampling_enabled(bool p_enable) {
-	supersampling_enabled = p_enable;
-
-	notify_property_list_changed();
-}
-
-bool LightmapGI::is_supersampling_enabled() const {
-	return supersampling_enabled;
-}
-
-void LightmapGI::set_supersampling_factor(float p_factor) {
-	ERR_FAIL_COND(p_factor < 1);
-
-	supersampling_factor = p_factor;
-}
-
-float LightmapGI::get_supersampling_factor() const {
-	return supersampling_factor;
-}
-
 void LightmapGI::set_generate_probes(GenerateProbes p_generate_probes) {
 	gen_probes = p_generate_probes;
 }
@@ -1801,48 +1580,31 @@ Ref<CameraAttributes> LightmapGI::get_camera_attributes() const {
 }
 
 PackedStringArray LightmapGI::get_configuration_warnings() const {
-	PackedStringArray warnings = VisualInstance3D::get_configuration_warnings();
+	PackedStringArray warnings = Node::get_configuration_warnings();
 
-#ifdef MODULE_LIGHTMAPPER_RD_ENABLED
-	if (!DisplayServer::get_singleton()->can_create_rendering_device()) {
-		warnings.push_back(vformat(RTR("Lightmaps can only be baked from a GPU that supports the RenderingDevice backends.\nYour GPU (%s) does not support RenderingDevice, as it does not support Vulkan, Direct3D 12, or Metal.\nLightmap baking will not be available on this device, although rendering existing baked lightmaps will work."), RenderingServer::get_singleton()->get_video_adapter_name()));
+	if (OS::get_singleton()->get_current_rendering_method() == "gl_compatibility") {
+		warnings.push_back(RTR("Lightmap can only be baked from a device that supports the RD backends. Lightmap baking may fail."));
 		return warnings;
 	}
-
-	if (shadowmask_mode != LightmapGIData::SHADOWMASK_MODE_NONE && light_data.is_valid() && !light_data->has_shadowmask_textures()) {
-		warnings.push_back(RTR("The lightmap has no baked shadowmask textures. Please rebake with the Shadowmask Mode set to anything other than None."));
-	}
-
-#elif defined(ANDROID_ENABLED) || defined(APPLE_EMBEDDED_ENABLED)
-	warnings.push_back(vformat(RTR("Lightmaps cannot be baked on %s. Rendering existing baked lightmaps will still work."), OS::get_singleton()->get_name()));
-#else
-	warnings.push_back(RTR("Lightmaps cannot be baked, as the `lightmapper_rd` module was disabled at compile-time. Rendering existing baked lightmaps will still work."));
-#endif
 
 	return warnings;
 }
 
 void LightmapGI::_validate_property(PropertyInfo &p_property) const {
-	if (!Engine::get_singleton()->is_editor_hint()) {
-		return;
-	}
-	if (p_property.name == "supersampling_factor" && !supersampling_enabled) {
-		p_property.usage = PROPERTY_USAGE_NO_EDITOR;
-	}
 	if (p_property.name == "environment_custom_sky" && environment_mode != ENVIRONMENT_MODE_CUSTOM_SKY) {
-		p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+		p_property.usage = PROPERTY_USAGE_NONE;
 	}
 	if (p_property.name == "environment_custom_color" && environment_mode != ENVIRONMENT_MODE_CUSTOM_COLOR) {
-		p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+		p_property.usage = PROPERTY_USAGE_NONE;
 	}
 	if (p_property.name == "environment_custom_energy" && environment_mode != ENVIRONMENT_MODE_CUSTOM_COLOR && environment_mode != ENVIRONMENT_MODE_CUSTOM_SKY) {
-		p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+		p_property.usage = PROPERTY_USAGE_NONE;
 	}
 	if (p_property.name == "denoiser_strength" && !use_denoiser) {
-		p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+		p_property.usage = PROPERTY_USAGE_NONE;
 	}
 	if (p_property.name == "denoiser_range" && !use_denoiser) {
-		p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+		p_property.usage = PROPERTY_USAGE_NONE;
 	}
 }
 
@@ -1883,12 +1645,6 @@ void LightmapGI::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_max_texture_size", "max_texture_size"), &LightmapGI::set_max_texture_size);
 	ClassDB::bind_method(D_METHOD("get_max_texture_size"), &LightmapGI::get_max_texture_size);
 
-	ClassDB::bind_method(D_METHOD("set_supersampling_enabled", "enable"), &LightmapGI::set_supersampling_enabled);
-	ClassDB::bind_method(D_METHOD("is_supersampling_enabled"), &LightmapGI::is_supersampling_enabled);
-
-	ClassDB::bind_method(D_METHOD("set_supersampling_factor", "factor"), &LightmapGI::set_supersampling_factor);
-	ClassDB::bind_method(D_METHOD("get_supersampling_factor"), &LightmapGI::get_supersampling_factor);
-
 	ClassDB::bind_method(D_METHOD("set_use_denoiser", "use_denoiser"), &LightmapGI::set_use_denoiser);
 	ClassDB::bind_method(D_METHOD("is_using_denoiser"), &LightmapGI::is_using_denoiser);
 
@@ -1904,9 +1660,6 @@ void LightmapGI::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_directional", "directional"), &LightmapGI::set_directional);
 	ClassDB::bind_method(D_METHOD("is_directional"), &LightmapGI::is_directional);
 
-	ClassDB::bind_method(D_METHOD("set_shadowmask_mode", "mode"), &LightmapGI::set_shadowmask_mode);
-	ClassDB::bind_method(D_METHOD("get_shadowmask_mode"), &LightmapGI::get_shadowmask_mode);
-
 	ClassDB::bind_method(D_METHOD("set_use_texture_for_bounces", "use_texture_for_bounces"), &LightmapGI::set_use_texture_for_bounces);
 	ClassDB::bind_method(D_METHOD("is_using_texture_for_bounces"), &LightmapGI::is_using_texture_for_bounces);
 
@@ -1917,12 +1670,9 @@ void LightmapGI::_bind_methods() {
 
 	ADD_GROUP("Tweaks", "");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "quality", PROPERTY_HINT_ENUM, "Low,Medium,High,Ultra"), "set_bake_quality", "get_bake_quality");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "supersampling"), "set_supersampling_enabled", "is_supersampling_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "supersampling_factor", PROPERTY_HINT_RANGE, "1,8,1"), "set_supersampling_factor", "get_supersampling_factor");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "bounces", PROPERTY_HINT_RANGE, "0,6,1,or_greater"), "set_bounces", "get_bounces");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "bounce_indirect_energy", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_bounce_indirect_energy", "get_bounce_indirect_energy");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "directional"), "set_directional", "is_directional");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "shadowmask_mode", PROPERTY_HINT_ENUM, "None,Replace,Overlay"), "set_shadowmask_mode", "get_shadowmask_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_texture_for_bounces"), "set_use_texture_for_bounces", "is_using_texture_for_bounces");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "interior"), "set_interior", "is_interior");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_denoiser"), "set_use_denoiser", "is_using_denoiser");

@@ -30,7 +30,7 @@
 
 const GodotDisplayVK = {
 
-	$GodotDisplayVK__deps: ['$GodotRuntime', '$GodotConfig', '$GodotEventListeners', '$GodotInput'],
+	$GodotDisplayVK__deps: ['$GodotRuntime', '$GodotConfig', '$GodotEventListeners'],
 	$GodotDisplayVK__postset: 'GodotOS.atexit(function(resolve, reject) { GodotDisplayVK.clear(); resolve(); });',
 	$GodotDisplayVK: {
 		textinput: null,
@@ -61,17 +61,6 @@ const GodotDisplayVK = {
 					input_cb(c_str, elem.selectionEnd);
 					GodotRuntime.free(c_str);
 				}, false);
-				if (what === 'input') {
-					// Handling the "Enter" key.
-					const onKey = (pEvent, pEventName) => {
-						if (pEvent.key !== 'Enter') {
-							return;
-						}
-						GodotInput.onKeyEvent(pEventName === 'keydown', pEvent);
-					};
-					GodotEventListeners.add(elem, 'keydown', (pEvent) => onKey(pEvent, 'keydown'), false);
-					GodotEventListeners.add(elem, 'keyup', (pEvent) => onKey(pEvent, 'keyup'), false);
-				}
 				GodotEventListeners.add(elem, 'blur', function (evt) {
 					elem.style.display = 'none';
 					elem.readonly = true;
@@ -317,11 +306,11 @@ const GodotDisplayScreen = {
 			const scale = GodotDisplayScreen.getPixelRatio();
 			if (isFullscreen || wantsFullWindow) {
 				// We need to match screen size.
-				width = Math.floor(window.innerWidth * scale);
-				height = Math.floor(window.innerHeight * scale);
+				width = window.innerWidth * scale;
+				height = window.innerHeight * scale;
 			}
-			const csw = `${Math.floor(width / scale)}px`;
-			const csh = `${Math.floor(height / scale)}px`;
+			const csw = `${width / scale}px`;
+			const csh = `${height / scale}px`;
 			if (canvas.style.width !== csw || canvas.style.height !== csh || canvas.width !== width || canvas.height !== height) {
 				// Size doesn't match.
 				// Resize canvas, set correct CSS pixel size, update GL.

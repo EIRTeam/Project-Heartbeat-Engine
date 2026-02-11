@@ -1,5 +1,4 @@
-#!/usr/bin/env bash
-
+#!/bin/bash
 set -o pipefail
 
 if [ ! -f "version.py" ]; then
@@ -9,7 +8,6 @@ fi
 
 if [ $# != 1 ]; then
   echo "Usage: @0 <path-to-godot-executable>"
-  exit 1
 fi
 
 api_validation_dir="$( dirname -- "$( dirname -- "${BASH_SOURCE[0]//\.\//}" )" )/extension_api_validation/"
@@ -37,36 +35,27 @@ make_annotation()
 get_expected_output()
 {
   local parts=()
-  IFS='_' read -ra parts <<< "$(basename "$1")"
+  IFS='_' read -ra parts <<< "$(basename -s .expected "$1")"
 
   if [[ "${#parts[@]}" == "2" ]]; then
-    while read -r file; do
-      cat "$file" >> "$expected_errors"
-    done <<< "$(find "$1" -type f -name "*.txt")"
-
-    next="$(find "$api_validation_dir" -type d -name "${parts[1]}*")"
-    if [[ "$next" != "" ]]; then
-      get_expected_output "$next"
-    fi
+    cat "$1" >> "$expected_errors"
+    get_expected_output "$(find "$api_validation_dir" -name "${parts[1]}*.expected")"
     reference_tag="${parts[0]}"
     warn_extra=0
   else
-    while read -r file; do
-      cat "$file" >> "$expected_errors"
-    done <<< "$(find "$1" -type f -name "*.txt")"
-
+    cat "$1" >> "$expected_errors"
     reference_tag="${parts[0]}"
     warn_extra=1
   fi
 }
 
-while read -r dir; do
+while read -r file; do
     reference_file="$(mktemp)"
     validate="$(mktemp)"
     validation_output="$(mktemp)"
     allowed_errors="$(mktemp)"
     expected_errors="$(mktemp)"
-    get_expected_output "$dir"
+    get_expected_output "$file"
 
     # Download the reference extension_api.json
     wget -nv --retry-on-http-error=503 --tries=5 --timeout=60 -cO "$reference_file" "https://raw.githubusercontent.com/godotengine/godot-cpp/godot-$reference_tag/gdextension/extension_api.json" || has_problems=1
@@ -81,9 +70,7 @@ while read -r dir; do
     obsolete_validation_error="$(comm -13 "$validation_output" "$allowed_errors")"
 
     if [ -n "$obsolete_validation_error" ] && [ "$warn_extra" = "1" ]; then
-        #make_annotation "The following validation errors no longer occur (compared to $reference_tag):" "$obsolete_validation_error" warning "$file"
-        echo "The following validation errors no longer occur (compared to $reference_tag):"
-        echo "$obsolete_validation_error"
+        make_annotation "The following validation errors no longer occur (compared to $reference_tag):" "$obsolete_validation_error" warning "$file"
     fi
     if [ -n "$new_validation_error" ]; then
         make_annotation "Compatibility to $reference_tag is broken in the following ways:" "$new_validation_error" error "$file"
@@ -91,6 +78,6 @@ while read -r dir; do
     fi
 
     rm -f "$reference_file" "$validate" "$validation_output" "$allowed_errors" "$expected_errors"
-done <<< "$(find "$api_validation_dir" -type d -mindepth 1 -maxdepth 1)"
+done <<< "$(find "$api_validation_dir" -name "*.expected")"
 
 exit $has_problems

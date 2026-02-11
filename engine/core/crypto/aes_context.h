@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AES_CONTEXT_H
+#define AES_CONTEXT_H
 
 #include "core/crypto/crypto_core.h"
 #include "core/object/ref_counted.h"
@@ -37,7 +38,7 @@ class AESContext : public RefCounted {
 	GDCLASS(AESContext, RefCounted);
 
 public:
-	enum Mode : int32_t {
+	enum Mode {
 		MODE_ECB_ENCRYPT,
 		MODE_ECB_DECRYPT,
 		MODE_CBC_ENCRYPT,
@@ -58,6 +59,10 @@ public:
 	PackedByteArray update(const PackedByteArray &p_src);
 	PackedByteArray get_iv_state();
 	void finish();
+
+	AESContext();
 };
 
 VARIANT_ENUM_CAST(AESContext::Mode);
+
+#endif // AES_CONTEXT_H

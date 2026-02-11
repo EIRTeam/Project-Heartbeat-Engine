@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AUDIO_STREAM_SYNCHRONIZED_H
+#define AUDIO_STREAM_SYNCHRONIZED_H
 
 #include "servers/audio/audio_stream.h"
 
@@ -53,7 +54,6 @@ private:
 public:
 	virtual double get_bpm() const override;
 	virtual int get_beat_count() const override;
-	virtual int get_bar_beats() const override;
 	virtual bool has_loop() const override;
 	void set_stream_count(int p_count);
 	int get_stream_count() const;
@@ -65,8 +65,6 @@ public:
 	virtual Ref<AudioStreamPlayback> instantiate_playback() override;
 	virtual String get_stream_name() const override;
 	virtual double get_length() const override;
-	virtual bool is_meta_stream() const override { return true; }
-
 	AudioStreamSynchronized();
 
 protected:
@@ -117,3 +115,5 @@ public:
 	AudioStreamPlaybackSynchronized();
 	~AudioStreamPlaybackSynchronized();
 };
+
+#endif // AUDIO_STREAM_SYNCHRONIZED_H

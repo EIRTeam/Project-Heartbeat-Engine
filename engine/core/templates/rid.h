@@ -28,9 +28,9 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef RID_H
+#define RID_H
 
-#include "core/templates/hashfuncs.h"
 #include "core/typedefs.h"
 
 class RID_AllocBase;
@@ -70,8 +70,7 @@ public:
 	}
 	_ALWAYS_INLINE_ uint64_t get_id() const { return _id; }
 
-	uint32_t hash() const { return HashMapHasherDefault::hash(_id); }
+	_ALWAYS_INLINE_ RID() {}
 };
 
-template <>
-struct is_zero_constructible<RID> : std::true_type {};
+#endif // RID_H

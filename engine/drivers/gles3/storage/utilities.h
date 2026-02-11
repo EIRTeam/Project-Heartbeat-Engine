@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef UTILITIES_GLES3_H
+#define UTILITIES_GLES3_H
 
 #ifdef GLES3_ENABLED
 
@@ -164,8 +165,8 @@ public:
 
 	/* VISIBILITY NOTIFIER */
 
-	VisibilityNotifier *get_visibility_notifier(RID p_rid) { return visibility_notifier_owner.get_or_null(p_rid); }
-	bool owns_visibility_notifier(RID p_rid) const { return visibility_notifier_owner.owns(p_rid); }
+	VisibilityNotifier *get_visibility_notifier(RID p_rid) { return visibility_notifier_owner.get_or_null(p_rid); };
+	bool owns_visibility_notifier(RID p_rid) const { return visibility_notifier_owner.owns(p_rid); };
 
 	virtual RID visibility_notifier_allocate() override;
 	virtual void visibility_notifier_initialize(RID p_notifier) override;
@@ -225,10 +226,10 @@ public:
 	virtual String get_video_adapter_api_version() const override;
 
 	virtual Size2i get_maximum_viewport_size() const override;
-	virtual uint32_t get_maximum_shader_varyings() const override;
-	virtual uint64_t get_maximum_uniform_buffer_size() const override;
 };
 
 } // namespace GLES3
 
 #endif // GLES3_ENABLED
+
+#endif // UTILITIES_GLES3_H

@@ -28,11 +28,17 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef GI_GLES3_H
+#define GI_GLES3_H
 
 #ifdef GLES3_ENABLED
 
+#include "core/templates/local_vector.h"
+#include "core/templates/rid_owner.h"
+#include "core/templates/self_list.h"
 #include "servers/rendering/environment/renderer_gi.h"
+
+#include "platform_gl.h"
 
 namespace GLES3 {
 
@@ -86,3 +92,5 @@ public:
 }; // namespace GLES3
 
 #endif // GLES3_ENABLED
+
+#endif // GI_GLES3_H

@@ -374,12 +374,8 @@ static void _lineTo(SwStroke& stroke, const SwPoint& to)
 {
     auto delta = to - stroke.center;
 
-    //a zero-length lineto is a no-op
-    if (delta.zero()) {
-        //round and square caps are expected to be drawn as a dot even for zero-length lines
-        if (stroke.firstPt && stroke.cap != StrokeCap::Butt) _firstSubPath(stroke, 0, 0); 
-        return; 
-    }
+    //a zero-length lineto is a no-op; avoid creating a spurious corner
+    if (delta.zero()) return;
 
     /* The lineLength is used to determine the intersection of strokes outlines.
        The scale needs to be reverted since the stroke width has not been scaled.
@@ -445,26 +441,13 @@ static void _cubicTo(SwStroke& stroke, const SwPoint& ctrl1, const SwPoint& ctrl
         //initialize with current direction
         angleIn = angleOut = angleMid = stroke.angleIn;
 
-        auto valid = mathCubicAngle(arc, angleIn, angleMid, angleOut);
-
-        //valid size
-        if (valid > 0 && arc < limit) {
+        if (arc < limit && !mathSmallCubic(arc, angleIn, angleMid, angleOut)) {
             if (stroke.firstPt) stroke.angleIn = angleIn;
             mathSplitCubic(arc);
             arc += 3;
             continue;
         }
 
-        //ignoreable size
-        if (valid < 0 && arc == bezStack) {
-            stroke.center = to;
-
-            //round and square caps are expected to be drawn as a dot even for zero-length lines
-            if (stroke.firstPt && stroke.cap != StrokeCap::Butt) _firstSubPath(stroke, 0, 0);
-            return;
-        }
-
-        //small size
         if (firstArc) {
             firstArc = false;
             //process corner if necessary
@@ -679,7 +662,7 @@ static void _beginSubPath(SwStroke& stroke, const SwPoint& to, bool closed)
     /* Determine if we need to check whether the border radius is greater
        than the radius of curvature of a curve, to handle this case specially.
        This is only required if bevel joins or butt caps may be created because
-       round & miter joins and round & square caps cover the negative sector
+       round & miter joins and round & square caps cover the nagative sector
        created with wide strokes. */
     if ((stroke.join != StrokeJoin::Round) || (!stroke.closedSubPath && stroke.cap == StrokeCap::Butt))
         stroke.handleWideStrokes = true;
@@ -732,7 +715,7 @@ static void _endSubPath(SwStroke& stroke)
         _addCap(stroke, stroke.subPathAngle + SW_ANGLE_PI, 0);
 
         /* now end the right subpath accordingly. The left one is rewind
-           and doesn't need further processing */
+           and deosn't need further processing */
         _borderClose(right, false);
     }
 }
@@ -822,10 +805,15 @@ void strokeFree(SwStroke* stroke)
 }
 
 
-void strokeReset(SwStroke* stroke, const RenderShape* rshape, const Matrix& transform)
+void strokeReset(SwStroke* stroke, const RenderShape* rshape, const Matrix* transform)
 {
-    stroke->sx = sqrtf(powf(transform.e11, 2.0f) + powf(transform.e21, 2.0f));
-    stroke->sy = sqrtf(powf(transform.e12, 2.0f) + powf(transform.e22, 2.0f));
+    if (transform) {
+        stroke->sx = sqrtf(powf(transform->e11, 2.0f) + powf(transform->e21, 2.0f));
+        stroke->sy = sqrtf(powf(transform->e12, 2.0f) + powf(transform->e22, 2.0f));
+    } else {
+        stroke->sx = stroke->sy = 1.0f;
+    }
+
     stroke->width = HALF_STROKE(rshape->strokeWidth());
     stroke->cap = rshape->strokeCap();
     stroke->miterlimit = static_cast<SwFixed>(rshape->strokeMiterlimit() * 65536.0f);
@@ -862,25 +850,31 @@ bool strokeParseOutline(SwStroke* stroke, const SwOutline& outline)
 
         //A contour cannot start with a cubic control point
         if (type == SW_CURVE_TYPE_CUBIC) return false;
-        ++types;
 
         auto closed =  outline.closed.data ? outline.closed.data[i]: false;
 
         _beginSubPath(*stroke, start, closed);
 
         while (pt < limit) {
-            //emit a single line_to
+            ++pt;
+            ++types;
+
+            //emit a signel line_to
             if (types[0] == SW_CURVE_TYPE_POINT) {
-                ++pt;
-                ++types;
                 _lineTo(*stroke, *pt);
             //types cubic
             } else {
-                pt += 3;
-                types += 3;
-                if (pt <= limit) _cubicTo(*stroke, pt[-2], pt[-1], pt[0]);
-                else if (pt - 1 == limit) _cubicTo(*stroke, pt[-2], pt[-1], start);
-                else goto close;
+                if (pt + 1 > limit || types[1] != SW_CURVE_TYPE_CUBIC) return false;
+
+                pt += 2;
+                types += 2;
+
+                if (pt <= limit) {
+                    _cubicTo(*stroke, pt[-2], pt[-1], pt[0]);
+                    continue;
+                }
+                _cubicTo(*stroke, pt[-2], pt[-1], start);
+                goto close;
             }
         }
     close:

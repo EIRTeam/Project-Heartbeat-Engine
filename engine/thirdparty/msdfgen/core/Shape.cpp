@@ -3,9 +3,6 @@
 
 #include <cstdlib>
 #include "arithmetics.hpp"
-#include "convergent-curve-ordering.h"
-
-#define DECONVERGE_OVERSHOOT 1.11111111111111111 // moves control points slightly more than necessary to account for floating-point errors
 
 namespace msdfgen {
 
@@ -42,23 +39,13 @@ bool Shape::validate() const {
     return true;
 }
 
-static void deconvergeEdge(EdgeHolder &edgeHolder, int param, Vector2 vector) {
+static void deconvergeEdge(EdgeHolder &edgeHolder, int param) {
     switch (edgeHolder->type()) {
         case (int) QuadraticSegment::EDGE_TYPE:
             edgeHolder = static_cast<const QuadraticSegment *>(&*edgeHolder)->convertToCubic();
             // fallthrough
         case (int) CubicSegment::EDGE_TYPE:
-            {
-                Point2 *p = static_cast<CubicSegment *>(&*edgeHolder)->p;
-                switch (param) {
-                    case 0:
-                        p[1] += (p[1]-p[0]).length()*vector;
-                        break;
-                    case 1:
-                        p[2] += (p[2]-p[3]).length()*vector;
-                        break;
-                }
-            }
+            static_cast<CubicSegment *>(&*edgeHolder)->deconverge(param, MSDFGEN_DECONVERGENCE_FACTOR);
     }
 }
 
@@ -71,19 +58,14 @@ void Shape::normalize() {
             contour->edges.push_back(EdgeHolder(parts[0]));
             contour->edges.push_back(EdgeHolder(parts[1]));
             contour->edges.push_back(EdgeHolder(parts[2]));
-        } else if (!contour->edges.empty()) {
-            // Push apart convergent edge segments
+        } else {
             EdgeHolder *prevEdge = &contour->edges.back();
             for (std::vector<EdgeHolder>::iterator edge = contour->edges.begin(); edge != contour->edges.end(); ++edge) {
                 Vector2 prevDir = (*prevEdge)->direction(1).normalize();
                 Vector2 curDir = (*edge)->direction(0).normalize();
                 if (dotProduct(prevDir, curDir) < MSDFGEN_CORNER_DOT_EPSILON-1) {
-                    double factor = DECONVERGE_OVERSHOOT*sqrt(1-(MSDFGEN_CORNER_DOT_EPSILON-1)*(MSDFGEN_CORNER_DOT_EPSILON-1))/(MSDFGEN_CORNER_DOT_EPSILON-1);
-                    Vector2 axis = factor*(curDir-prevDir).normalize();
-                    if (convergentCurveOrdering(*prevEdge, *edge) < 0)
-                        axis = -axis;
-                    deconvergeEdge(*prevEdge, 1, axis.getOrthogonal(true));
-                    deconvergeEdge(*edge, 0, axis.getOrthogonal(false));
+                    deconvergeEdge(*prevEdge, 1);
+                    deconvergeEdge(*edge, 0);
                 }
                 prevEdge = &*edge;
             }
@@ -91,14 +73,14 @@ void Shape::normalize() {
     }
 }
 
-void Shape::bound(double &xMin, double &yMin, double &xMax, double &yMax) const {
+void Shape::bound(double &l, double &b, double &r, double &t) const {
     for (std::vector<Contour>::const_iterator contour = contours.begin(); contour != contours.end(); ++contour)
-        contour->bound(xMin, yMin, xMax, yMax);
+        contour->bound(l, b, r, t);
 }
 
-void Shape::boundMiters(double &xMin, double &yMin, double &xMax, double &yMax, double border, double miterLimit, int polarity) const {
+void Shape::boundMiters(double &l, double &b, double &r, double &t, double border, double miterLimit, int polarity) const {
     for (std::vector<Contour>::const_iterator contour = contours.begin(); contour != contours.end(); ++contour)
-        contour->boundMiters(xMin, yMin, xMax, yMax, border, miterLimit, polarity);
+        contour->boundMiters(l, b, r, t, border, miterLimit, polarity);
 }
 
 Shape::Bounds Shape::getBounds(double border, double miterLimit, int polarity) const {
@@ -195,14 +177,6 @@ void Shape::orientContours() {
     for (int i = 0; i < (int) contours.size(); ++i)
         if (orientations[i] < 0)
             contours[i].reverse();
-}
-
-YAxisOrientation Shape::getYAxisOrientation() const {
-    return inverseYAxis ? MSDFGEN_Y_AXIS_NONDEFAULT_ORIENTATION : MSDFGEN_Y_AXIS_DEFAULT_ORIENTATION;
-}
-
-void Shape::setYAxisOrientation(YAxisOrientation yAxisOrientation) {
-    inverseYAxis = yAxisOrientation != MSDFGEN_Y_AXIS_DEFAULT_ORIENTATION;
 }
 
 }

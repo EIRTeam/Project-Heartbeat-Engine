@@ -37,7 +37,7 @@ struct ItemPairs {
 				return n;
 			}
 		}
-		return uint32_t(-1);
+		return -1;
 	}
 
 	bool contains_pair_to(BVHHandle h) const {

@@ -395,11 +395,6 @@ public class MustBeVariantAnnotatedMethods
     public void MethodWithWrongAttribute()
     {
     }
-
-    [NestedGenericTypeAttributeContainer.NestedGenericTypeAttribute<bool>()]
-    public void MethodWithNestedAttribute()
-    {
-    }
 }
 
 [GenericTypeAttribute<bool>()]
@@ -661,12 +656,4 @@ public class ClassNonVariantAnnotated
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
 public class GenericTypeAttribute<[MustBeVariant] T> : Attribute
 {
-}
-
-public class NestedGenericTypeAttributeContainer
-{
-    [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
-    public class NestedGenericTypeAttribute<[MustBeVariant] T> : Attribute
-    {
-    }
 }

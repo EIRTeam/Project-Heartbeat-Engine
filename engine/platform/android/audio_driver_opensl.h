@@ -28,10 +28,11 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AUDIO_DRIVER_OPENSL_H
+#define AUDIO_DRIVER_OPENSL_H
 
 #include "core/os/mutex.h"
-#include "servers/audio/audio_server.h"
+#include "servers/audio_server.h"
 
 #include <SLES/OpenSLES.h>
 #include <SLES/OpenSLES_Android.h>
@@ -106,3 +107,5 @@ public:
 
 	AudioDriverOpenSL();
 };
+
+#endif // AUDIO_DRIVER_OPENSL_H

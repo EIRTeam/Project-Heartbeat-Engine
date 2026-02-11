@@ -28,12 +28,13 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef GLTF_DEFINES_H
+#define GLTF_DEFINES_H
 
 // This file should only be included by other headers.
 
 // GLTF classes.
-class GLTFAccessor;
+struct GLTFAccessor;
 class GLTFAnimation;
 class GLTFBufferView;
 class GLTFCamera;
@@ -42,7 +43,6 @@ class GLTFDocumentExtension;
 class GLTFLight;
 class GLTFMesh;
 class GLTFNode;
-class GLTFObjectModelProperty;
 class GLTFSkeleton;
 class GLTFSkin;
 class GLTFSpecGloss;
@@ -65,3 +65,5 @@ using GLTFSkeletonIndex = int;
 using GLTFSkinIndex = int;
 using GLTFTextureIndex = int;
 using GLTFTextureSamplerIndex = int;
+
+#endif // GLTF_DEFINES_H

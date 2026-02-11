@@ -67,7 +67,6 @@ bool PngLoader::open(const string& path)
 
 bool PngLoader::open(const char* data, uint32_t size, bool copy)
 {
-#ifdef THORVG_FILE_IO_SUPPORT
     image->opaque = NULL;
 
     if (!png_image_begin_read_from_memory(image, data, size)) return false;
@@ -76,9 +75,6 @@ bool PngLoader::open(const char* data, uint32_t size, bool copy)
     h = (float)image->height;
 
     return true;
-#else
-    return false;
-#endif
 }
 
 
@@ -88,12 +84,12 @@ bool PngLoader::read()
 
     if (w == 0 || h == 0) return false;
 
-    if (ImageLoader::cs == ColorSpace::ARGB8888 || ImageLoader::cs == ColorSpace::ARGB8888S) {
+    if (cs == ColorSpace::ARGB8888 || cs == ColorSpace::ARGB8888S) {
         image->format = PNG_FORMAT_BGRA;
-        surface.cs = ColorSpace::ARGB8888S;
+        surface.cs = ColorSpace::ARGB8888;
     } else {
         image->format = PNG_FORMAT_RGBA;
-        surface.cs = ColorSpace::ABGR8888S;
+        surface.cs = ColorSpace::ABGR8888;
     }
 
     auto buffer = static_cast<png_bytep>(malloc(PNG_IMAGE_SIZE((*image))));

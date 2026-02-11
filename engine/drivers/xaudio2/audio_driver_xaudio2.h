@@ -28,12 +28,13 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AUDIO_DRIVER_XAUDIO2_H
+#define AUDIO_DRIVER_XAUDIO2_H
 
 #include "core/os/mutex.h"
 #include "core/os/thread.h"
 #include "core/templates/safe_refcount.h"
-#include "servers/audio/audio_server.h"
+#include "servers/audio_server.h"
 
 #include <mmsystem.h>
 #define WIN32_LEAN_AND_MEAN
@@ -107,3 +108,5 @@ public:
 	AudioDriverXAudio2();
 	~AudioDriverXAudio2() {}
 };
+
+#endif // AUDIO_DRIVER_XAUDIO2_H

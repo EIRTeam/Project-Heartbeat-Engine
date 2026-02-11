@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef RENDER_DATA_RD_H
+#define RENDER_DATA_RD_H
 
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.h"
@@ -37,13 +38,16 @@
 class RenderDataRD : public RenderData {
 	GDCLASS(RenderDataRD, RenderData);
 
+protected:
+	static void _bind_methods();
+
 public:
 	// Access methods to expose data externally
-	virtual Ref<RenderSceneBuffers> get_render_scene_buffers() const override { return render_buffers; }
-	virtual RenderSceneData *get_render_scene_data() const override { return scene_data; }
+	virtual Ref<RenderSceneBuffers> get_render_scene_buffers() const override;
+	virtual RenderSceneData *get_render_scene_data() const override;
 
-	virtual RID get_environment() const override { return environment; }
-	virtual RID get_camera_attributes() const override { return camera_attributes; }
+	virtual RID get_environment() const override;
+	virtual RID get_camera_attributes() const override;
 
 	// Members are publicly accessible within the render engine.
 	Ref<RenderSceneBuffersRD> render_buffers;
@@ -72,13 +76,10 @@ public:
 	uint32_t directional_light_count = 0;
 	bool directional_light_soft_shadows = false;
 
-	bool lightmap_bicubic_filter = false;
-
 	RenderingMethod::RenderInfo *render_info = nullptr;
 
 	/* Viewport data */
 	bool transparent_bg = false;
-	Rect2i render_region;
 
 	/* Shadow data */
 	const RendererSceneRender::RenderShadowData *render_shadows = nullptr;
@@ -95,3 +96,5 @@ public:
 
 	uint32_t voxel_gi_count = 0;
 };
+
+#endif // RENDER_DATA_RD_H

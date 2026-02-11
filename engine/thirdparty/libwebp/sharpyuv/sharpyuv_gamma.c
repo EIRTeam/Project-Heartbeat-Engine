@@ -15,7 +15,6 @@
 #include <float.h>
 #include <math.h>
 
-#include "sharpyuv/sharpyuv.h"
 #include "src/webp/types.h"
 
 // Gamma correction compensates loss of resolution during chroma subsampling.
@@ -27,11 +26,13 @@ static uint32_t kGammaToLinearTabS[GAMMA_TO_LINEAR_TAB_SIZE + 2];
 #define LINEAR_TO_GAMMA_TAB_SIZE (1 << LINEAR_TO_GAMMA_TAB_BITS)
 static uint32_t kLinearToGammaTabS[LINEAR_TO_GAMMA_TAB_SIZE + 2];
 
+// -- GODOT start --
 #if defined(_MSC_VER)
 static const double kGammaF = 2.222222222222222;
 #else
 static const double kGammaF = 1. / 0.45;
 #endif
+// -- GODOT end --
 #define GAMMA_TO_LINEAR_BITS 16
 
 static volatile int kGammaTablesSOk = 0;

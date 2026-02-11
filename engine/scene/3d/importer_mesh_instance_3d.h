@@ -28,11 +28,13 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef IMPORTER_MESH_INSTANCE_3D_H
+#define IMPORTER_MESH_INSTANCE_3D_H
 
 #include "scene/3d/node_3d.h"
 #include "scene/3d/visual_instance_3d.h"
 #include "scene/resources/3d/skin.h"
+#include "scene/resources/immediate_mesh.h"
 
 class ImporterMesh;
 
@@ -88,3 +90,5 @@ public:
 	void set_visibility_range_fade_mode(GeometryInstance3D::VisibilityRangeFadeMode p_mode);
 	GeometryInstance3D::VisibilityRangeFadeMode get_visibility_range_fade_mode() const;
 };
+
+#endif // IMPORTER_MESH_INSTANCE_3D_H

@@ -169,13 +169,11 @@ _hb_buffer_serialize_glyphs_json (hb_buffer_t *buffer,
     if (flags & HB_BUFFER_SERIALIZE_FLAG_GLYPH_EXTENTS)
     {
       hb_glyph_extents_t extents;
-      if (hb_font_get_glyph_extents(font, info[i].codepoint, &extents))
-      {
-	p += hb_max (0, snprintf (p, ARRAY_LENGTH (b) - (p - b), ",\"xb\":%d,\"yb\":%d",
-				  extents.x_bearing, extents.y_bearing));
-	p += hb_max (0, snprintf (p, ARRAY_LENGTH (b) - (p - b), ",\"w\":%d,\"h\":%d",
-				  extents.width, extents.height));
-      }
+      hb_font_get_glyph_extents(font, info[i].codepoint, &extents);
+      p += hb_max (0, snprintf (p, ARRAY_LENGTH (b) - (p - b), ",\"xb\":%d,\"yb\":%d",
+                                extents.x_bearing, extents.y_bearing));
+      p += hb_max (0, snprintf (p, ARRAY_LENGTH (b) - (p - b), ",\"w\":%d,\"h\":%d",
+                                extents.width, extents.height));
     }
 
     *p++ = '}';
@@ -320,8 +318,8 @@ _hb_buffer_serialize_glyphs_text (hb_buffer_t *buffer,
     if (flags & HB_BUFFER_SERIALIZE_FLAG_GLYPH_EXTENTS)
     {
       hb_glyph_extents_t extents;
-      if (hb_font_get_glyph_extents(font, info[i].codepoint, &extents))
-	p += hb_max (0, snprintf (p, ARRAY_LENGTH (b) - (p - b), "<%d,%d,%d,%d>", extents.x_bearing, extents.y_bearing, extents.width, extents.height));
+      hb_font_get_glyph_extents(font, info[i].codepoint, &extents);
+      p += hb_max (0, snprintf (p, ARRAY_LENGTH (b) - (p - b), "<%d,%d,%d,%d>", extents.x_bearing, extents.y_bearing, extents.width, extents.height));
     }
 
     if (i == end-1) {
@@ -427,7 +425,7 @@ _hb_buffer_serialize_unicode_text (hb_buffer_t *buffer,
  *   #HB_BUFFER_SERIALIZE_FLAG_NO_GLYPH_NAMES flag is set. Then,
  *   - If #HB_BUFFER_SERIALIZE_FLAG_NO_CLUSTERS is not set, `=` then #hb_glyph_info_t.cluster.
  *   - If #HB_BUFFER_SERIALIZE_FLAG_NO_POSITIONS is not set, the #hb_glyph_position_t in the format:
- *     - If #hb_glyph_position_t.x_offset and #hb_glyph_position_t.y_offset are not both 0, `@x_offset,y_offset`. Then,
+ *     - If both #hb_glyph_position_t.x_offset and #hb_glyph_position_t.y_offset are not 0, `@x_offset,y_offset`. Then,
  *     - `+x_advance`, then `,y_advance` if #hb_glyph_position_t.y_advance is not 0. Then,
  *   - If #HB_BUFFER_SERIALIZE_FLAG_GLYPH_EXTENTS is set, the #hb_glyph_extents_t in the format `<x_bearing,y_bearing,width,height>`
  *
@@ -739,7 +737,8 @@ parse_hex (const char *pp, const char *end, uint32_t *pv)
  * Deserializes glyphs @buffer from textual representation in the format
  * produced by hb_buffer_serialize_glyphs().
  *
- * Return value: `true` if the full string was parsed, `false` otherwise.
+ * Return value: `true` if parse was successful, `false` if an error
+ * occurred.
  *
  * Since: 0.9.7
  **/
@@ -811,7 +810,8 @@ hb_buffer_deserialize_glyphs (hb_buffer_t *buffer,
  * Deserializes Unicode @buffer from textual representation in the format
  * produced by hb_buffer_serialize_unicode().
  *
- * Return value: `true` if the full string was parsed, `false` otherwise.
+ * Return value: `true` if parse was successful, `false` if an error
+ * occurred.
  *
  * Since: 2.7.3
  **/

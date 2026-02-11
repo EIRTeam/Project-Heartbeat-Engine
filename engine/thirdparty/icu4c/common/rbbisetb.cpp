@@ -120,7 +120,7 @@ void RBBISetBuilder::buildRanges() {
     //
     int  ni;
     for (ni=0; ; ni++) {        // Loop over each of the UnicodeSets encountered in the input rules
-        usetNode = static_cast<RBBINode*>(this->fRB->fUSetNodes->elementAt(ni));
+        usetNode = (RBBINode *)this->fRB->fUSetNodes->elementAt(ni);
         if (usetNode==nullptr) {
             break;
         }
@@ -251,7 +251,7 @@ void RBBISetBuilder::buildRanges() {
     UnicodeString eofString(u"eof");
     UnicodeString bofString(u"bof");
     for (ni=0; ; ni++) {        // Loop over each of the UnicodeSets encountered in the input rules
-        usetNode = static_cast<RBBINode*>(this->fRB->fUSetNodes->elementAt(ni));
+        usetNode = (RBBINode *)this->fRB->fUSetNodes->elementAt(ni);
         if (usetNode==nullptr) {
             break;
         }
@@ -328,10 +328,9 @@ int32_t RBBISetBuilder::getTrieSize()  {
             UCPTRIE_TYPE_FAST,
             use8Bits ? UCPTRIE_VALUE_BITS_8 : UCPTRIE_VALUE_BITS_16,
             fStatus);
-        UErrorCode bufferStatus = *fStatus;
-        fTrieSize = ucptrie_toBinary(fTrie, nullptr, 0, &bufferStatus);
-        if (bufferStatus != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(bufferStatus)) {
-            *fStatus = bufferStatus;
+        fTrieSize = ucptrie_toBinary(fTrie, nullptr, 0, fStatus);
+        if (*fStatus == U_BUFFER_OVERFLOW_ERROR) {
+            *fStatus = U_ZERO_ERROR;
         }
     }
     return fTrieSize;
@@ -370,22 +369,18 @@ void  RBBISetBuilder::addValToSets(UVector *sets, uint32_t val) {
     int32_t       ix;
 
     for (ix=0; ix<sets->size(); ix++) {
-        RBBINode* usetNode = static_cast<RBBINode*>(sets->elementAt(ix));
+        RBBINode *usetNode = (RBBINode *)sets->elementAt(ix);
         addValToSet(usetNode, val);
     }
 }
 
 void  RBBISetBuilder::addValToSet(RBBINode *usetNode, uint32_t val) {
-    RBBINode *leafNode = new RBBINode(RBBINode::leafChar, *fStatus);
-    if (U_FAILURE(*fStatus)) {
-        delete leafNode;
-        return;
-    }
+    RBBINode *leafNode = new RBBINode(RBBINode::leafChar);
     if (leafNode == nullptr) {
         *fStatus = U_MEMORY_ALLOCATION_ERROR;
         return;
     }
-    leafNode->fVal = static_cast<unsigned short>(val);
+    leafNode->fVal = (unsigned short)val;
     if (usetNode->fLeftChild == nullptr) {
         usetNode->fLeftChild = leafNode;
         leafNode->fParent    = usetNode;
@@ -393,13 +388,9 @@ void  RBBISetBuilder::addValToSet(RBBINode *usetNode, uint32_t val) {
         // There are already input symbols present for this set.
         // Set up an OR node, with the previous stuff as the left child
         //   and the new value as the right child.
-        RBBINode *orNode = new RBBINode(RBBINode::opOr, *fStatus);
+        RBBINode *orNode = new RBBINode(RBBINode::opOr);
         if (orNode == nullptr) {
             *fStatus = U_MEMORY_ALLOCATION_ERROR;
-        }
-        if (U_FAILURE(*fStatus)) {
-            delete orNode;
-            delete leafNode;
             return;
         }
         orNode->fLeftChild  = usetNode->fLeftChild;
@@ -450,7 +441,7 @@ UBool  RBBISetBuilder::sawBOF() const {
 //------------------------------------------------------------------------
 UChar32  RBBISetBuilder::getFirstChar(int32_t category) const {
     RangeDescriptor   *rlRange;
-    UChar32 retVal = static_cast<UChar32>(-1);
+    UChar32            retVal = (UChar32)-1;
     for (rlRange = fRangeList; rlRange!=nullptr; rlRange=rlRange->fNext) {
         if (rlRange->fNum == category) {
             retVal = rlRange->fStartChar;
@@ -683,7 +674,7 @@ void RangeDescriptor::split(UChar32 where, UErrorCode &status) {
 bool RangeDescriptor::isDictionaryRange() {
     static const char16_t *dictionary = u"dictionary";
     for (int32_t i=0; i<fIncludesSets->size(); i++) {
-        RBBINode* usetNode = static_cast<RBBINode*>(fIncludesSets->elementAt(i));
+        RBBINode *usetNode  = (RBBINode *)fIncludesSets->elementAt(i);
         RBBINode *setRef = usetNode->fParent;
         if (setRef != nullptr) {
             RBBINode *varRef = setRef->fParent;

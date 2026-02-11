@@ -28,14 +28,15 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef SAFE_LIST_H
+#define SAFE_LIST_H
 
 #include "core/os/memory.h"
 #include "core/typedefs.h"
 
 #include <atomic>
 #include <functional>
-#include <initializer_list>
+#include <type_traits>
 
 // Design goals for these classes:
 // - Accessing this list with an iterator will never result in a use-after free,
@@ -225,13 +226,6 @@ public:
 		return true;
 	}
 
-	_FORCE_INLINE_ SafeList() {}
-	_FORCE_INLINE_ SafeList(std::initializer_list<T> p_init) {
-		for (const T &E : p_init) {
-			insert(E);
-		}
-	}
-
 	~SafeList() {
 #ifdef DEBUG_ENABLED
 		if (!maybe_cleanup()) {
@@ -242,3 +236,5 @@ public:
 #endif
 	}
 };
+
+#endif // SAFE_LIST_H

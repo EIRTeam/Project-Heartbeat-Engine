@@ -28,14 +28,13 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef EDITOR_DEBUGGER_SERVER_H
+#define EDITOR_DEBUGGER_SERVER_H
 
 #include "core/debugger/remote_debugger_peer.h"
 #include "core/object/ref_counted.h"
 
 class EditorDebuggerServer : public RefCounted {
-	GDSOFTCLASS(EditorDebuggerServer, RefCounted);
-
 public:
 	typedef EditorDebuggerServer *(*CreateServerFunc)(const String &p_uri);
 
@@ -57,3 +56,5 @@ public:
 	virtual bool is_connection_available() const = 0;
 	virtual Ref<RemoteDebuggerPeer> take_connection() = 0;
 };
+
+#endif // EDITOR_DEBUGGER_SERVER_H

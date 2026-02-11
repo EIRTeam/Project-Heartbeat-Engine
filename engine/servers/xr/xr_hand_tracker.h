@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef XR_HAND_TRACKER_H
+#define XR_HAND_TRACKER_H
 
 #include "servers/xr/xr_positional_tracker.h"
 
@@ -41,7 +42,6 @@ public:
 		HAND_TRACKING_SOURCE_UNKNOWN,
 		HAND_TRACKING_SOURCE_UNOBSTRUCTED,
 		HAND_TRACKING_SOURCE_CONTROLLER,
-		HAND_TRACKING_SOURCE_NOT_TRACKED,
 		HAND_TRACKING_SOURCE_MAX
 	};
 
@@ -127,3 +127,5 @@ private:
 VARIANT_ENUM_CAST(XRHandTracker::HandTrackingSource)
 VARIANT_ENUM_CAST(XRHandTracker::HandJoint)
 VARIANT_BITFIELD_CAST(XRHandTracker::HandJointFlags)
+
+#endif // XR_HAND_TRACKER_H

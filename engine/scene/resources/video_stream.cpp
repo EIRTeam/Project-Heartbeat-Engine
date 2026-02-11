@@ -30,6 +30,9 @@
 
 #include "video_stream.h"
 
+#include "core/config/project_settings.h"
+#include "servers/audio_server.h"
+
 // VideoStreamPlayback starts here.
 
 void VideoStreamPlayback::_bind_methods() {
@@ -116,7 +119,7 @@ Ref<Texture2D> VideoStreamPlayback::get_texture() const {
 }
 
 void VideoStreamPlayback::update(double p_delta) {
-	GDVIRTUAL_CALL(_update, p_delta);
+	GDVIRTUAL_REQUIRED_CALL(_update, p_delta);
 }
 
 void VideoStreamPlayback::set_mix_callback(AudioMixCallback p_callback, void *p_userdata) {

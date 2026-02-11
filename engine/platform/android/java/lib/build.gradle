@@ -4,16 +4,13 @@ plugins {
 }
 
 ext {
-    DEBUG_PUBLISH_ARTIFACT_ID = 'godot-debug'
     PUBLISH_ARTIFACT_ID = 'godot'
-    TOOLS_PUBLISH_ARTIFACT_ID = 'godot-tools'
 }
 
 apply from: "../scripts/publish-module.gradle"
 
 dependencies {
     implementation "androidx.fragment:fragment:$versions.fragmentVersion"
-    implementation 'androidx.documentfile:documentfile:1.1.0'
 
     testImplementation "junit:junit:4.13.2"
 }
@@ -54,7 +51,7 @@ android {
         }
     }
 
-    flavorDimensions = ["products"]
+    flavorDimensions "products"
     productFlavors {
         editor {}
         template {}
@@ -69,15 +66,22 @@ android {
         exclude 'META-INF/LICENSE'
         exclude 'META-INF/NOTICE'
 
-        // Debug symbols are kept for development within Android Studio.
+        // 'doNotStrip' is enabled for development within Android Studio
         if (shouldNotStrip()) {
-            jniLibs {
-                keepDebugSymbols += '**/*.so'
-            }
+            doNotStrip '**/*.so'
         }
     }
 
     sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = ['src']
+            test.java.srcDirs = ['srcTest/java']
+            res.srcDirs = ['res']
+            aidl.srcDirs = ['aidl']
+            assets.srcDirs = ['assets']
+        }
+
         debug.jniLibs.srcDirs = ['libs/debug']
         dev.jniLibs.srcDirs = ['libs/dev']
         release.jniLibs.srcDirs = ['libs/release']
@@ -100,10 +104,10 @@ android {
         }
 
         boolean devBuild = buildType == "dev"
-        boolean debugSymbols = devBuild
+        boolean debugSymbols = devBuild || isAndroidStudio()
         boolean runTests = devBuild
+        boolean productionBuild = !devBuild
         boolean storeRelease = buildType == "release"
-        boolean productionBuild = storeRelease
 
         def sconsTarget = flavorName
         if (sconsTarget == "template") {
@@ -177,15 +181,7 @@ android {
     }
 
     publishing {
-        singleVariant("templateDebug") {
-            withSourcesJar()
-            withJavadocJar()
-        }
         singleVariant("templateRelease") {
-            withSourcesJar()
-            withJavadocJar()
-        }
-        singleVariant("editorRelease") {
             withSourcesJar()
             withJavadocJar()
         }

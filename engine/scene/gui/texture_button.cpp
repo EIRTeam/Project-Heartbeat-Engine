@@ -32,6 +32,8 @@
 
 #include "core/typedefs.h"
 
+#include <stdlib.h>
+
 Size2 TextureButton::get_minimum_size() const {
 	Size2 rscale = Control::get_minimum_size();
 
@@ -168,10 +170,10 @@ void TextureButton::_notification(int p_what) {
 
 			Point2 ofs;
 			Size2 size;
-			bool draw_focus = (has_focus(true) && focused.is_valid());
+			bool draw_focus = (has_focus() && focused.is_valid());
 
 			// If no other texture is valid, try using focused texture.
-			bool draw_focus_only = draw_focus && texdraw.is_null();
+			bool draw_focus_only = draw_focus && !texdraw.is_valid();
 			if (draw_focus_only) {
 				texdraw = focused;
 			}
@@ -338,11 +340,11 @@ Ref<BitMap> TextureButton::get_click_mask() const {
 
 Ref<Texture2D> TextureButton::get_texture_focused() const {
 	return focused;
-}
+};
 
 void TextureButton::set_texture_focused(const Ref<Texture2D> &p_focused) {
-	_set_texture(&focused, p_focused);
-}
+	focused = p_focused;
+};
 
 void TextureButton::_set_texture(Ref<Texture2D> *p_destination, const Ref<Texture2D> &p_texture) {
 	DEV_ASSERT(p_destination);
@@ -418,3 +420,5 @@ void TextureButton::set_flip_v(bool p_flip) {
 bool TextureButton::is_flipped_v() const {
 	return vflip;
 }
+
+TextureButton::TextureButton() {}

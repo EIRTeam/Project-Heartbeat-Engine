@@ -31,7 +31,6 @@
 #include "gradient_texture.h"
 
 #include "core/math/geometry_2d.h"
-#include "servers/rendering/rendering_server.h"
 
 GradientTexture1D::GradientTexture1D() {
 	_queue_update();
@@ -40,7 +39,7 @@ GradientTexture1D::GradientTexture1D() {
 GradientTexture1D::~GradientTexture1D() {
 	if (texture.is_valid()) {
 		ERR_FAIL_NULL(RenderingServer::get_singleton());
-		RS::get_singleton()->free_rid(texture);
+		RS::get_singleton()->free(texture);
 	}
 }
 
@@ -86,7 +85,7 @@ void GradientTexture1D::_queue_update() {
 	callable_mp(this, &GradientTexture1D::update_now).call_deferred();
 }
 
-void GradientTexture1D::_update() const {
+void GradientTexture1D::_update() {
 	update_pending = false;
 
 	if (gradient.is_null()) {
@@ -121,10 +120,10 @@ void GradientTexture1D::_update() const {
 				float ofs = float(i) / (width - 1);
 				Color color = g.get_color_at_offset(ofs);
 
-				wd8[i * 4 + 0] = uint8_t(color.get_r8());
-				wd8[i * 4 + 1] = uint8_t(color.get_g8());
-				wd8[i * 4 + 2] = uint8_t(color.get_b8());
-				wd8[i * 4 + 3] = uint8_t(color.get_a8());
+				wd8[i * 4 + 0] = uint8_t(CLAMP(color.r * 255.0, 0, 255));
+				wd8[i * 4 + 1] = uint8_t(CLAMP(color.g * 255.0, 0, 255));
+				wd8[i * 4 + 2] = uint8_t(CLAMP(color.b * 255.0, 0, 255));
+				wd8[i * 4 + 3] = uint8_t(CLAMP(color.a * 255.0, 0, 255));
 			}
 		}
 
@@ -173,14 +172,14 @@ RID GradientTexture1D::get_rid() const {
 }
 
 Ref<Image> GradientTexture1D::get_image() const {
-	update_now();
+	const_cast<GradientTexture1D *>(this)->update_now();
 	if (!texture.is_valid()) {
 		return Ref<Image>();
 	}
 	return RenderingServer::get_singleton()->texture_2d_get(texture);
 }
 
-void GradientTexture1D::update_now() const {
+void GradientTexture1D::update_now() {
 	if (update_pending) {
 		_update();
 	}
@@ -195,7 +194,7 @@ GradientTexture2D::GradientTexture2D() {
 GradientTexture2D::~GradientTexture2D() {
 	if (texture.is_valid()) {
 		ERR_FAIL_NULL(RenderingServer::get_singleton());
-		RS::get_singleton()->free_rid(texture);
+		RS::get_singleton()->free(texture);
 	}
 }
 
@@ -226,7 +225,7 @@ void GradientTexture2D::_queue_update() {
 	callable_mp(this, &GradientTexture2D::update_now).call_deferred();
 }
 
-void GradientTexture2D::_update() const {
+void GradientTexture2D::_update() {
 	update_pending = false;
 
 	if (gradient.is_null()) {
@@ -260,10 +259,10 @@ void GradientTexture2D::_update() const {
 						float ofs = _get_gradient_offset_at(x, y);
 						const Color &c = g.get_color_at_offset(ofs);
 
-						wd8[(x + (y * width)) * 4 + 0] = uint8_t(c.get_r8());
-						wd8[(x + (y * width)) * 4 + 1] = uint8_t(c.get_g8());
-						wd8[(x + (y * width)) * 4 + 2] = uint8_t(c.get_b8());
-						wd8[(x + (y * width)) * 4 + 3] = uint8_t(c.get_a8());
+						wd8[(x + (y * width)) * 4 + 0] = uint8_t(CLAMP(c.r * 255.0, 0, 255));
+						wd8[(x + (y * width)) * 4 + 1] = uint8_t(CLAMP(c.g * 255.0, 0, 255));
+						wd8[(x + (y * width)) * 4 + 2] = uint8_t(CLAMP(c.b * 255.0, 0, 255));
+						wd8[(x + (y * width)) * 4 + 3] = uint8_t(CLAMP(c.a * 255.0, 0, 255));
 					}
 				}
 			}
@@ -293,7 +292,10 @@ float GradientTexture2D::_get_gradient_offset_at(int x, int y) const {
 		pos.y = static_cast<float>(y) / (height - 1);
 	}
 	if (fill == Fill::FILL_LINEAR) {
-		const Vector2 closest = Geometry2D::get_closest_point_to_segment_uncapped(pos, fill_from, fill_to);
+		Vector2 segment[2];
+		segment[0] = fill_from;
+		segment[1] = fill_to;
+		Vector2 closest = Geometry2D::get_closest_point_to_segment_uncapped(pos, &segment[0]);
 		ofs = (closest - fill_from).length() / (fill_to - fill_from).length();
 		if ((closest - fill_from).dot(fill_to - fill_from) < 0) {
 			ofs *= -1;
@@ -403,14 +405,14 @@ RID GradientTexture2D::get_rid() const {
 }
 
 Ref<Image> GradientTexture2D::get_image() const {
-	update_now();
+	const_cast<GradientTexture2D *>(this)->update_now();
 	if (!texture.is_valid()) {
 		return Ref<Image>();
 	}
 	return RenderingServer::get_singleton()->texture_2d_get(texture);
 }
 
-void GradientTexture2D::update_now() const {
+void GradientTexture2D::update_now() {
 	if (update_pending) {
 		_update();
 	}

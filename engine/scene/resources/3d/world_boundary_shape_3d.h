@@ -28,11 +28,10 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef WORLD_BOUNDARY_SHAPE_3D_H
+#define WORLD_BOUNDARY_SHAPE_3D_H
 
 #include "scene/resources/3d/shape_3d.h"
-
-class ArrayMesh;
 
 class WorldBoundaryShape3D : public Shape3D {
 	GDCLASS(WorldBoundaryShape3D, Shape3D);
@@ -47,7 +46,6 @@ public:
 	const Plane &get_plane() const;
 
 	virtual Vector<Vector3> get_debug_mesh_lines() const override;
-	virtual Ref<ArrayMesh> get_debug_arraymesh_faces(const Color &p_modulate) const override;
 	virtual real_t get_enclosing_radius() const override {
 		// Should be infinite?
 		return 0;
@@ -55,3 +53,5 @@ public:
 
 	WorldBoundaryShape3D();
 };
+
+#endif // WORLD_BOUNDARY_SHAPE_3D_H

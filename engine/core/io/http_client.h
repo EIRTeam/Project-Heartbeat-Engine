@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef HTTP_CLIENT_H
+#define HTTP_CLIENT_H
 
 #include "core/crypto/crypto.h"
 #include "core/io/ip.h"
@@ -157,12 +158,12 @@ protected:
 	Error _request_raw(Method p_method, const String &p_url, const Vector<String> &p_headers, const Vector<uint8_t> &p_body);
 	Error _request(Method p_method, const String &p_url, const Vector<String> &p_headers, const String &p_body = String());
 
-	static HTTPClient *(*_create)(bool p_notify_postinitialize);
+	static HTTPClient *(*_create)();
 
 	static void _bind_methods();
 
 public:
-	static HTTPClient *create(bool p_notify_postinitialize = true);
+	static HTTPClient *create();
 
 	String query_string_from_dict(const Dictionary &p_dict);
 	Error verify_headers(const Vector<String> &p_headers);
@@ -197,9 +198,12 @@ public:
 	virtual void set_http_proxy(const String &p_host, int p_port);
 	virtual void set_https_proxy(const String &p_host, int p_port);
 
+	HTTPClient() {}
 	virtual ~HTTPClient() {}
 };
 
 VARIANT_ENUM_CAST(HTTPClient::ResponseCode)
 VARIANT_ENUM_CAST(HTTPClient::Method);
 VARIANT_ENUM_CAST(HTTPClient::Status);
+
+#endif // HTTP_CLIENT_H

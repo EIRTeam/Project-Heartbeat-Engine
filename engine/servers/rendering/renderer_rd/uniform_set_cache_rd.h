@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef UNIFORM_SET_CACHE_RD_H
+#define UNIFORM_SET_CACHE_RD_H
 
 #include "core/templates/local_vector.h"
 #include "core/templates/paged_allocator.h"
@@ -107,6 +108,16 @@ class UniformSetCacheRD : public Object {
 		return _compare_args(idx + 1, uniforms, args...);
 	}
 
+	_FORCE_INLINE_ void _create_args(Vector<RD::Uniform> &uniforms, const RD::Uniform &arg) {
+		uniforms.push_back(arg);
+	}
+
+	template <typename... Args>
+	_FORCE_INLINE_ void _create_args(Vector<RD::Uniform> &uniforms, const RD::Uniform &arg, Args... args) {
+		uniforms.push_back(arg);
+		_create_args(uniforms, args...);
+	}
+
 	static UniformSetCacheRD *singleton;
 
 	uint32_t cache_instances_used = 0;
@@ -114,8 +125,7 @@ class UniformSetCacheRD : public Object {
 	void _invalidate(Cache *p_cache);
 	static void _uniform_set_invalidation_callback(void *p_userdata);
 
-	template <typename Collection>
-	RID _allocate_from_uniforms(RID p_shader, uint32_t p_set, uint32_t p_hash, uint32_t p_table_idx, const Collection &p_uniforms) {
+	RID _allocate_from_uniforms(RID p_shader, uint32_t p_set, uint32_t p_hash, uint32_t p_table_idx, const Vector<RD::Uniform> &p_uniforms) {
 		RID rid = RD::get_singleton()->uniform_set_create(p_uniforms, p_shader, p_set);
 		ERR_FAIL_COND_V(rid.is_null(), rid);
 
@@ -166,14 +176,17 @@ public:
 
 		// Not in cache, create:
 
-		return _allocate_from_uniforms(p_shader, p_set, h, table_idx, Vector<RD::Uniform>{ args... });
+		Vector<RD::Uniform> uniforms;
+		_create_args(uniforms, args...);
+
+		return _allocate_from_uniforms(p_shader, p_set, h, table_idx, uniforms);
 	}
 
 	template <typename... Args>
-	RID get_cache_vec(RID p_shader, uint32_t p_set, const LocalVector<RD::Uniform> &p_uniforms) {
+	RID get_cache_vec(RID p_shader, uint32_t p_set, const Vector<RD::Uniform> &p_uniforms) {
 		uint32_t h = hash_murmur3_one_64(p_shader.get_id());
 		h = hash_murmur3_one_32(p_set, h);
-		for (uint32_t i = 0; i < p_uniforms.size(); i++) {
+		for (int i = 0; i < p_uniforms.size(); i++) {
 			h = _hash_uniform(p_uniforms[i], h);
 		}
 
@@ -186,7 +199,7 @@ public:
 			while (c) {
 				if (c->hash == h && c->set == p_set && c->shader == p_shader && (uint32_t)p_uniforms.size() == c->uniforms.size()) {
 					bool all_ok = true;
-					for (uint32_t i = 0; i < p_uniforms.size(); i++) {
+					for (int i = 0; i < p_uniforms.size(); i++) {
 						if (!_compare_uniform(p_uniforms[i], c->uniforms[i])) {
 							all_ok = false;
 							break;
@@ -212,3 +225,5 @@ public:
 	UniformSetCacheRD();
 	~UniformSetCacheRD();
 };
+
+#endif // UNIFORM_SET_CACHE_RD_H

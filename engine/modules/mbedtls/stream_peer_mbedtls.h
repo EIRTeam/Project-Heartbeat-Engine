@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef STREAM_PEER_MBEDTLS_H
+#define STREAM_PEER_MBEDTLS_H
 
 #include "tls_context_mbedtls.h"
 
@@ -41,7 +42,7 @@ private:
 
 	Ref<StreamPeer> base;
 
-	static StreamPeerTLS *_create_func(bool p_notify_postinitialize);
+	static StreamPeerTLS *_create_func();
 
 	static int bio_recv(void *ctx, unsigned char *buf, size_t len);
 	static int bio_send(void *ctx, const unsigned char *buf, size_t len);
@@ -75,3 +76,5 @@ public:
 	StreamPeerMbedTLS();
 	~StreamPeerMbedTLS();
 };
+
+#endif // STREAM_PEER_MBEDTLS_H

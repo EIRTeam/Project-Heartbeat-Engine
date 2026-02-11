@@ -11,8 +11,6 @@
 #define ULOCIMP_H
 
 #include <cstddef>
-#include <optional>
-#include <string_view>
 
 #include "unicode/bytestream.h"
 #include "unicode/uloc.h"
@@ -55,97 +53,85 @@ uloc_getCurrentCountryID(const char* oldID);
 U_CFUNC const char* 
 uloc_getCurrentLanguageID(const char* oldID);
 
-U_COMMON_API std::optional<std::string_view>
-ulocimp_toBcpKeyWithFallback(std::string_view keyword);
-
-U_COMMON_API std::optional<std::string_view>
-ulocimp_toBcpTypeWithFallback(std::string_view keyword, std::string_view value);
-
-U_COMMON_API std::optional<std::string_view>
-ulocimp_toLegacyKeyWithFallback(std::string_view keyword);
-
-U_COMMON_API std::optional<std::string_view>
-ulocimp_toLegacyTypeWithFallback(std::string_view keyword, std::string_view value);
-
-U_COMMON_API icu::CharString
-ulocimp_getKeywords(std::string_view localeID,
+U_EXPORT icu::CharString
+ulocimp_getKeywords(const char* localeID,
                     char prev,
                     bool valuesToo,
                     UErrorCode& status);
 
-U_COMMON_API void
-ulocimp_getKeywords(std::string_view localeID,
+U_EXPORT void
+ulocimp_getKeywords(const char* localeID,
                     char prev,
                     icu::ByteSink& sink,
                     bool valuesToo,
                     UErrorCode& status);
 
-U_COMMON_API icu::CharString
-ulocimp_getName(std::string_view localeID,
+U_EXPORT icu::CharString
+ulocimp_getName(const char* localeID,
                 UErrorCode& err);
 
-U_COMMON_API void
-ulocimp_getName(std::string_view localeID,
+U_EXPORT void
+ulocimp_getName(const char* localeID,
                 icu::ByteSink& sink,
                 UErrorCode& err);
 
-U_COMMON_API icu::CharString
-ulocimp_getBaseName(std::string_view localeID,
+U_EXPORT icu::CharString
+ulocimp_getBaseName(const char* localeID,
                     UErrorCode& err);
 
-U_COMMON_API void
-ulocimp_getBaseName(std::string_view localeID,
+U_EXPORT void
+ulocimp_getBaseName(const char* localeID,
                     icu::ByteSink& sink,
                     UErrorCode& err);
 
-U_COMMON_API icu::CharString
-ulocimp_canonicalize(std::string_view localeID,
+U_EXPORT icu::CharString
+ulocimp_canonicalize(const char* localeID,
                      UErrorCode& err);
 
-U_COMMON_API void
-ulocimp_canonicalize(std::string_view localeID,
+U_EXPORT void
+ulocimp_canonicalize(const char* localeID,
                      icu::ByteSink& sink,
                      UErrorCode& err);
 
-U_COMMON_API icu::CharString
+U_EXPORT icu::CharString
 ulocimp_getKeywordValue(const char* localeID,
-                        std::string_view keywordName,
+                        const char* keywordName,
                         UErrorCode& status);
 
-U_COMMON_API void
+U_EXPORT void
 ulocimp_getKeywordValue(const char* localeID,
-                        std::string_view keywordName,
+                        const char* keywordName,
                         icu::ByteSink& sink,
                         UErrorCode& status);
 
-U_COMMON_API icu::CharString
-ulocimp_getLanguage(std::string_view localeID, UErrorCode& status);
+U_EXPORT icu::CharString
+ulocimp_getLanguage(const char* localeID, UErrorCode& status);
 
-U_COMMON_API icu::CharString
-ulocimp_getScript(std::string_view localeID, UErrorCode& status);
+U_EXPORT icu::CharString
+ulocimp_getScript(const char* localeID, UErrorCode& status);
 
-U_COMMON_API icu::CharString
-ulocimp_getRegion(std::string_view localeID, UErrorCode& status);
+U_EXPORT icu::CharString
+ulocimp_getRegion(const char* localeID, UErrorCode& status);
 
-U_COMMON_API icu::CharString
-ulocimp_getVariant(std::string_view localeID, UErrorCode& status);
+U_EXPORT icu::CharString
+ulocimp_getVariant(const char* localeID, UErrorCode& status);
 
-U_COMMON_API void
-ulocimp_setKeywordValue(std::string_view keywordName,
-                        std::string_view keywordValue,
+U_EXPORT void
+ulocimp_setKeywordValue(const char* keywordName,
+                        const char* keywordValue,
                         icu::CharString& localeID,
                         UErrorCode& status);
 
-U_COMMON_API int32_t
-ulocimp_setKeywordValue(std::string_view keywords,
-                        std::string_view keywordName,
-                        std::string_view keywordValue,
+U_EXPORT int32_t
+ulocimp_setKeywordValue(const char* keywords,
+                        const char* keywordName,
+                        const char* keywordValue,
                         icu::ByteSink& sink,
                         UErrorCode& status);
 
-U_COMMON_API void
+U_EXPORT void
 ulocimp_getSubtags(
-        std::string_view localeID,
+        const char* localeID,
         icu::CharString* language,
         icu::CharString* script,
         icu::CharString* region,
@@ -153,9 +139,9 @@ ulocimp_getSubtags(
         const char** pEnd,
         UErrorCode& status);
 
-U_COMMON_API void
+U_EXPORT void
 ulocimp_getSubtags(
-        std::string_view localeID,
+        const char* localeID,
         icu::ByteSink* language,
         icu::ByteSink* script,
         icu::ByteSink* region,
@@ -165,7 +151,7 @@ ulocimp_getSubtags(
 
 inline void
 ulocimp_getSubtags(
-        std::string_view localeID,
+        const char* localeID,
         std::nullptr_t,
         std::nullptr_t,
         std::nullptr_t,
@@ -182,16 +168,16 @@ ulocimp_getSubtags(
             status);
 }
 
-U_COMMON_API icu::CharString
+U_EXPORT icu::CharString
 ulocimp_getParent(const char* localeID,
                   UErrorCode& err);
 
-U_COMMON_API void
+U_EXPORT void
 ulocimp_getParent(const char* localeID,
                   icu::ByteSink& sink,
                   UErrorCode& err);
 
-U_COMMON_API icu::CharString
+U_EXPORT icu::CharString
 ulocimp_toLanguageTag(const char* localeID,
                       bool strict,
                       UErrorCode& status);
@@ -215,13 +201,13 @@ ulocimp_toLanguageTag(const char* localeID,
  *
  * @internal ICU 64
  */
-U_COMMON_API void
+U_EXPORT void
 ulocimp_toLanguageTag(const char* localeID,
                       icu::ByteSink& sink,
                       bool strict,
                       UErrorCode& err);
 
-U_COMMON_API icu::CharString
+U_EXPORT icu::CharString
 ulocimp_forLanguageTag(const char* langtag,
                        int32_t tagLen,
                        int32_t* parsedLength,
@@ -253,7 +239,7 @@ ulocimp_forLanguageTag(const char* langtag,
  *                  failed.
  * @internal ICU 63
  */
-U_COMMON_API void
+U_EXPORT void
 ulocimp_forLanguageTag(const char* langtag,
                        int32_t tagLen,
                        icu::ByteSink& sink,
@@ -280,11 +266,11 @@ ulocimp_forLanguageTag(const char* langtag,
  *     The region code found, empty if none found.
  * @internal ICU 57
  */
-U_COMMON_API icu::CharString
+U_EXPORT icu::CharString
 ulocimp_getRegionForSupplementalData(const char *localeID, bool inferRegion,
                                      UErrorCode& status);
 
-U_COMMON_API icu::CharString
+U_EXPORT icu::CharString
 ulocimp_addLikelySubtags(const char* localeID,
                          UErrorCode& status);
 
@@ -317,12 +303,12 @@ ulocimp_addLikelySubtags(const char* localeID,
  * or the localeId is not well-formed, the error code is U_ILLEGAL_ARGUMENT_ERROR.
  * @internal ICU 64
  */
-U_COMMON_API void
+U_EXPORT void
 ulocimp_addLikelySubtags(const char* localeID,
                          icu::ByteSink& sink,
                          UErrorCode& err);
 
-U_COMMON_API icu::CharString
+U_EXPORT icu::CharString
 ulocimp_minimizeSubtags(const char* localeID,
                         bool favorScript,
                         UErrorCode& status);
@@ -357,14 +343,14 @@ ulocimp_minimizeSubtags(const char* localeID,
  * or the localeId is not well-formed, the error code is U_ILLEGAL_ARGUMENT_ERROR.
  * @internal ICU 64
  */
-U_COMMON_API void
+U_EXPORT void
 ulocimp_minimizeSubtags(const char* localeID,
                         icu::ByteSink& sink,
                         bool favorScript,
                         UErrorCode& err);
 
 U_CAPI const char * U_EXPORT2
-locale_getKeywordsStart(std::string_view localeID);
+locale_getKeywordsStart(const char *localeID);
 
 bool
 ultag_isExtensionSubtags(const char* s, int32_t len);
@@ -405,39 +391,24 @@ ultag_isVariantSubtags(const char* s, int32_t len);
 const char*
 ultag_getTKeyStart(const char* localeID);
 
-U_COMMON_API std::optional<std::string_view>
-ulocimp_toBcpKey(std::string_view key);
+U_EXPORT const char*
+ulocimp_toBcpKey(const char* key);
 
-U_COMMON_API std::optional<std::string_view>
-ulocimp_toLegacyKey(std::string_view key);
+U_EXPORT const char*
+ulocimp_toLegacyKey(const char* key);
 
-U_COMMON_API std::optional<std::string_view>
-ulocimp_toBcpType(std::string_view key, std::string_view type);
+U_EXPORT const char*
+ulocimp_toBcpType(const char* key, const char* type, bool* isKnownKey, bool* isSpecialType);
 
-U_COMMON_API std::optional<std::string_view>
-ulocimp_toLegacyType(std::string_view key, std::string_view type);
+U_EXPORT const char*
+ulocimp_toLegacyType(const char* key, const char* type, bool* isKnownKey, bool* isSpecialType);
 
 /* Function for testing purpose */
-U_COMMON_API const char* const*
+U_EXPORT const char* const*
 ulocimp_getKnownCanonicalizedLocaleForTest(int32_t& length);
 
 // Return true if the value is already canonicalized.
-U_COMMON_API bool
+U_EXPORT bool
 ulocimp_isCanonicalizedLocaleForTest(const char* localeName);
-
-#ifdef __cplusplus
-U_NAMESPACE_BEGIN
-class U_COMMON_API RegionValidateMap : public UObject {
- public:
-  RegionValidateMap();
-  virtual ~RegionValidateMap();
-  bool isSet(const char* region) const;
-  bool equals(const RegionValidateMap& that) const;
- protected:
-  int32_t value(const char* region) const;
-  uint32_t map[22]; // 26x26/32 = 22;
-};
-U_NAMESPACE_END
-#endif /* __cplusplus */
 
 #endif

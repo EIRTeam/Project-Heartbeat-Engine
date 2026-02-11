@@ -87,8 +87,8 @@ namespace Godot
 
             public void Resize(int size)
             {
-                ArgumentOutOfRangeException.ThrowIfNegative(size);
-
+                if (size < 0)
+                    throw new ArgumentOutOfRangeException(nameof(size));
                 var err = NativeFuncs.godotsharp_stack_info_vector_resize(ref this, size);
                 if (err != Error.Ok)
                     throw new InvalidOperationException("Failed to resize vector. Error code is: " + err.ToString());

@@ -30,8 +30,6 @@
 
 #include "path_3d.h"
 
-#include "scene/resources/mesh.h"
-
 Path3D::Path3D() {
 	SceneTree *st = SceneTree::get_singleton();
 	if (st && st->is_debugging_paths_hint()) {
@@ -44,11 +42,11 @@ Path3D::Path3D() {
 Path3D::~Path3D() {
 	if (debug_instance.is_valid()) {
 		ERR_FAIL_NULL(RenderingServer::get_singleton());
-		RS::get_singleton()->free_rid(debug_instance);
+		RS::get_singleton()->free(debug_instance);
 	}
 	if (debug_mesh.is_valid()) {
 		ERR_FAIL_NULL(RenderingServer::get_singleton());
-		RS::get_singleton()->free_rid(debug_mesh->get_rid());
+		RS::get_singleton()->free(debug_mesh->get_rid());
 	}
 }
 
@@ -90,11 +88,11 @@ void Path3D::_update_debug_mesh() {
 		return;
 	}
 
-	if (debug_mesh.is_null()) {
-		debug_mesh.instantiate();
+	if (!debug_mesh.is_valid()) {
+		debug_mesh = Ref<ArrayMesh>(memnew(ArrayMesh));
 	}
 
-	if (curve.is_null()) {
+	if (!(curve.is_valid())) {
 		RS::get_singleton()->instance_set_visible(debug_instance, false);
 		return;
 	}
@@ -133,19 +131,16 @@ void Path3D::_update_debug_mesh() {
 		// Path3D as a ribbon.
 		ribbon_ptr[i] = p1;
 
-		if (i % 4 == 0) {
-			// Draw fish bone every 4 points to reduce visual noise and performance impact
-			// (compared to drawing it for every point).
-			const Vector3 p_left = p1 + (side + forward - up * 0.3) * 0.06;
-			const Vector3 p_right = p1 + (-side + forward - up * 0.3) * 0.06;
+		// Fish Bone.
+		const Vector3 p_left = p1 + (side + forward - up * 0.3) * 0.06;
+		const Vector3 p_right = p1 + (-side + forward - up * 0.3) * 0.06;
 
-			const int bone_idx = i * 4;
+		const int bone_idx = i * 4;
 
-			bones_ptr[bone_idx] = p1;
-			bones_ptr[bone_idx + 1] = p_left;
-			bones_ptr[bone_idx + 2] = p1;
-			bones_ptr[bone_idx + 3] = p_right;
-		}
+		bones_ptr[bone_idx] = p1;
+		bones_ptr[bone_idx + 1] = p_left;
+		bones_ptr[bone_idx + 2] = p1;
+		bones_ptr[bone_idx + 3] = p_right;
 	}
 
 	Array ribbon_array;
@@ -156,56 +151,18 @@ void Path3D::_update_debug_mesh() {
 	bone_array.resize(Mesh::ARRAY_MAX);
 	bone_array[Mesh::ARRAY_VERTEX] = bones;
 
-	_update_debug_path_material();
-
 	debug_mesh->clear_surfaces();
 	debug_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_LINE_STRIP, ribbon_array);
 	debug_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_LINES, bone_array);
-	debug_mesh->surface_set_material(0, debug_material);
-	debug_mesh->surface_set_material(1, debug_material);
 
 	RS::get_singleton()->instance_set_base(debug_instance, debug_mesh->get_rid());
+	RS::get_singleton()->mesh_surface_set_material(debug_mesh->get_rid(), 0, st->get_debug_paths_material()->get_rid());
+	RS::get_singleton()->mesh_surface_set_material(debug_mesh->get_rid(), 1, st->get_debug_paths_material()->get_rid());
 	if (is_inside_tree()) {
 		RS::get_singleton()->instance_set_scenario(debug_instance, get_world_3d()->get_scenario());
 		RS::get_singleton()->instance_set_transform(debug_instance, get_global_transform());
 		RS::get_singleton()->instance_set_visible(debug_instance, is_visible_in_tree());
 	}
-}
-
-void Path3D::set_debug_custom_color(const Color &p_color) {
-	debug_custom_color = p_color;
-	_update_debug_path_material();
-}
-
-Ref<StandardMaterial3D> Path3D::get_debug_material() {
-	return debug_material;
-}
-
-const Color &Path3D::get_debug_custom_color() const {
-	return debug_custom_color;
-}
-
-void Path3D::_update_debug_path_material() {
-	SceneTree *st = SceneTree::get_singleton();
-	if (!debug_material.is_valid()) {
-		Ref<StandardMaterial3D> material = memnew(StandardMaterial3D);
-		debug_material = material;
-
-		material->set_shading_mode(StandardMaterial3D::SHADING_MODE_UNSHADED);
-		material->set_transparency(StandardMaterial3D::TRANSPARENCY_ALPHA);
-		material->set_flag(StandardMaterial3D::FLAG_SRGB_VERTEX_COLOR, true);
-		material->set_flag(StandardMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
-		material->set_flag(StandardMaterial3D::FLAG_DISABLE_FOG, true);
-	}
-
-	Color color = debug_custom_color;
-	if (color == Color(0.0, 0.0, 0.0)) {
-		// Use the default debug path color defined in the Project Settings.
-		color = st->get_debug_paths_color();
-	}
-
-	get_debug_material()->set_albedo(color);
-	emit_signal(SNAME("debug_color_changed"));
 }
 
 void Path3D::_curve_changed() {
@@ -254,25 +211,35 @@ void Path3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_curve", "curve"), &Path3D::set_curve);
 	ClassDB::bind_method(D_METHOD("get_curve"), &Path3D::get_curve);
 
-	ClassDB::bind_method(D_METHOD("set_debug_custom_color", "debug_custom_color"), &Path3D::set_debug_custom_color);
-	ClassDB::bind_method(D_METHOD("get_debug_custom_color"), &Path3D::get_debug_custom_color);
-
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "curve", PROPERTY_HINT_RESOURCE_TYPE, "Curve3D", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_EDITOR_INSTANTIATE_OBJECT), "set_curve", "get_curve");
 
-	ADD_GROUP("Debug Shape", "debug_");
-	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "debug_custom_color"), "set_debug_custom_color", "get_debug_custom_color");
-
 	ADD_SIGNAL(MethodInfo("curve_changed"));
-	ADD_SIGNAL(MethodInfo("debug_color_changed"));
 }
 
-void PathFollow3D::update_transform() {
+// Update transform, in deferred mode by default to avoid superfluity.
+void PathFollow3D::update_transform(bool p_immediate) {
+	transform_dirty = true;
+
+	if (p_immediate) {
+		_update_transform();
+	} else {
+		callable_mp(this, &PathFollow3D::_update_transform).call_deferred();
+	}
+}
+
+// Update transform immediately .
+void PathFollow3D::_update_transform() {
+	if (!transform_dirty) {
+		return;
+	}
+	transform_dirty = false;
+
 	if (!path) {
 		return;
 	}
 
 	Ref<Curve3D> c = path->get_curve();
-	if (c.is_null()) {
+	if (!c.is_valid()) {
 		return;
 	}
 
@@ -319,7 +286,9 @@ void PathFollow3D::_notification(int p_what) {
 			Node *parent = get_parent();
 			if (parent) {
 				path = Object::cast_to<Path3D>(parent);
-				update_transform();
+				if (path) {
+					update_transform();
+				}
 			}
 		} break;
 
@@ -338,9 +307,6 @@ bool PathFollow3D::is_cubic_interpolation_enabled() const {
 }
 
 void PathFollow3D::_validate_property(PropertyInfo &p_property) const {
-	if (!Engine::get_singleton()->is_editor_hint()) {
-		return;
-	}
 	if (p_property.name == "offset") {
 		real_t max = 10000;
 		if (path && path->get_curve().is_valid()) {
@@ -352,7 +318,7 @@ void PathFollow3D::_validate_property(PropertyInfo &p_property) const {
 }
 
 PackedStringArray PathFollow3D::get_configuration_warnings() const {
-	PackedStringArray warnings = Node3D::get_configuration_warnings();
+	PackedStringArray warnings = Node::get_configuration_warnings();
 
 	if (is_visible_in_tree() && is_inside_tree()) {
 		if (!Object::cast_to<Path3D>(get_parent())) {
@@ -447,10 +413,7 @@ void PathFollow3D::_bind_methods() {
 }
 
 void PathFollow3D::set_progress(real_t p_progress) {
-	ERR_FAIL_COND(!std::isfinite(p_progress));
-	if (progress == p_progress) {
-		return;
-	}
+	ERR_FAIL_COND(!isfinite(p_progress));
 	progress = p_progress;
 
 	if (path) {
@@ -472,11 +435,10 @@ void PathFollow3D::set_progress(real_t p_progress) {
 }
 
 void PathFollow3D::set_h_offset(real_t p_h_offset) {
-	if (h_offset == p_h_offset) {
-		return;
-	}
 	h_offset = p_h_offset;
-	update_transform();
+	if (path) {
+		update_transform();
+	}
 }
 
 real_t PathFollow3D::get_h_offset() const {
@@ -484,11 +446,10 @@ real_t PathFollow3D::get_h_offset() const {
 }
 
 void PathFollow3D::set_v_offset(real_t p_v_offset) {
-	if (v_offset == p_v_offset) {
-		return;
-	}
 	v_offset = p_v_offset;
-	update_transform();
+	if (path) {
+		update_transform();
+	}
 }
 
 real_t PathFollow3D::get_v_offset() const {
@@ -500,10 +461,9 @@ real_t PathFollow3D::get_progress() const {
 }
 
 void PathFollow3D::set_progress_ratio(real_t p_ratio) {
-	ERR_FAIL_NULL_MSG(path, "Can only set progress ratio on a PathFollow3D that is the child of a Path3D which is itself part of the scene tree.");
-	ERR_FAIL_COND_MSG(path->get_curve().is_null(), "Can't set progress ratio on a PathFollow3D that does not have a Curve.");
-	ERR_FAIL_COND_MSG(!path->get_curve()->get_baked_length(), "Can't set progress ratio on a PathFollow3D that has a 0 length curve.");
-	set_progress(p_ratio * path->get_curve()->get_baked_length());
+	if (path && path->get_curve().is_valid() && path->get_curve()->get_baked_length()) {
+		set_progress(p_ratio * path->get_curve()->get_baked_length());
+	}
 }
 
 real_t PathFollow3D::get_progress_ratio() const {
@@ -515,9 +475,6 @@ real_t PathFollow3D::get_progress_ratio() const {
 }
 
 void PathFollow3D::set_rotation_mode(RotationMode p_rotation_mode) {
-	if (rotation_mode == p_rotation_mode) {
-		return;
-	}
 	rotation_mode = p_rotation_mode;
 
 	update_configuration_warnings();
@@ -529,9 +486,6 @@ PathFollow3D::RotationMode PathFollow3D::get_rotation_mode() const {
 }
 
 void PathFollow3D::set_use_model_front(bool p_use_model_front) {
-	if (use_model_front == p_use_model_front) {
-		return;
-	}
 	use_model_front = p_use_model_front;
 	update_transform();
 }
@@ -541,9 +495,6 @@ bool PathFollow3D::is_using_model_front() const {
 }
 
 void PathFollow3D::set_loop(bool p_loop) {
-	if (loop == p_loop) {
-		return;
-	}
 	loop = p_loop;
 	update_transform();
 }
@@ -553,9 +504,6 @@ bool PathFollow3D::has_loop() const {
 }
 
 void PathFollow3D::set_tilt_enabled(bool p_enabled) {
-	if (tilt_enabled == p_enabled) {
-		return;
-	}
 	tilt_enabled = p_enabled;
 	update_transform();
 }

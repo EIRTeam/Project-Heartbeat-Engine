@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef SHORTCUT_H
+#define SHORTCUT_H
 
 #include "core/input/input_event.h"
 #include "core/io/resource.h"
@@ -52,7 +53,7 @@ public:
 
 	String get_as_text() const;
 
-	static Ref<Shortcut> make_from_action(const StringName &p_action);
-
 	static bool is_event_array_equal(const Array &p_event_array1, const Array &p_event_array2);
 };
+
+#endif // SHORTCUT_H

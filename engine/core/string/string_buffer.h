@@ -28,9 +28,9 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef STRING_BUFFER_H
+#define STRING_BUFFER_H
 
-#include "core/string/print_string.h"
 #include "core/string/ustring.h"
 
 template <int SHORT_BUFFER_SIZE = 64>
@@ -118,15 +118,12 @@ StringBuffer<SHORT_BUFFER_SIZE> &StringBuffer<SHORT_BUFFER_SIZE>::append(const c
 
 template <int SHORT_BUFFER_SIZE>
 StringBuffer<SHORT_BUFFER_SIZE> &StringBuffer<SHORT_BUFFER_SIZE>::reserve(int p_size) {
-	if (p_size <= SHORT_BUFFER_SIZE || p_size <= buffer.size()) {
-		if (p_size < length()) {
-			WARN_VERBOSE("reserve() called with a capacity smaller than the current size. This is likely a mistake.");
-		}
+	if (p_size < SHORT_BUFFER_SIZE || p_size < buffer.size()) {
 		return *this;
 	}
 
 	bool need_copy = string_length > 0 && buffer.is_empty();
-	buffer.resize_uninitialized(next_power_of_2((uint32_t)p_size));
+	buffer.resize(next_power_of_2(p_size));
 	if (need_copy) {
 		memcpy(buffer.ptrw(), short_buffer, string_length * sizeof(char32_t));
 	}
@@ -145,7 +142,7 @@ String StringBuffer<SHORT_BUFFER_SIZE>::as_string() {
 	if (buffer.is_empty()) {
 		return String(short_buffer);
 	} else {
-		buffer.resize_uninitialized(string_length + 1);
+		buffer.resize(string_length + 1);
 		return buffer;
 	}
 }
@@ -161,3 +158,5 @@ int64_t StringBuffer<SHORT_BUFFER_SIZE>::as_int() {
 	current_buffer_ptr()[string_length] = '\0';
 	return String::to_int(current_buffer_ptr());
 }
+
+#endif // STRING_BUFFER_H

@@ -28,9 +28,11 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef MULTIPLAYER_DEBUGGER_H
+#define MULTIPLAYER_DEBUGGER_H
 
 #include "core/debugger/engine_profiler.h"
+#include "core/os/os.h"
 
 class MultiplayerSynchronizer;
 
@@ -77,8 +79,6 @@ public:
 
 private:
 	class BandwidthProfiler : public EngineProfiler {
-		GDSOFTCLASS(BandwidthProfiler, EngineProfiler);
-
 	protected:
 		struct BandwidthFrame {
 			uint32_t timestamp;
@@ -94,14 +94,12 @@ private:
 		int bandwidth_usage(const Vector<BandwidthFrame> &p_buffer, int p_pointer);
 
 	public:
-		void toggle(bool p_enable, const Array &p_opts) override;
-		void add(const Array &p_data) override;
-		void tick(double p_frame_time, double p_process_time, double p_physics_time, double p_physics_frame_time) override;
+		void toggle(bool p_enable, const Array &p_opts);
+		void add(const Array &p_data);
+		void tick(double p_frame_time, double p_process_time, double p_physics_time, double p_physics_frame_time);
 	};
 
 	class RPCProfiler : public EngineProfiler {
-		GDSOFTCLASS(RPCProfiler, EngineProfiler);
-
 	private:
 		HashMap<ObjectID, RPCNodeInfo> rpc_node_data;
 		uint64_t last_profile_time = 0;
@@ -109,22 +107,20 @@ private:
 		void init_node(const ObjectID p_node);
 
 	public:
-		void toggle(bool p_enable, const Array &p_opts) override;
-		void add(const Array &p_data) override;
-		void tick(double p_frame_time, double p_process_time, double p_physics_time, double p_physics_frame_time) override;
+		void toggle(bool p_enable, const Array &p_opts);
+		void add(const Array &p_data);
+		void tick(double p_frame_time, double p_process_time, double p_physics_time, double p_physics_frame_time);
 	};
 
 	class ReplicationProfiler : public EngineProfiler {
-		GDSOFTCLASS(ReplicationProfiler, EngineProfiler);
-
 	private:
 		HashMap<ObjectID, SyncInfo> sync_data;
 		uint64_t last_profile_time = 0;
 
 	public:
-		void toggle(bool p_enable, const Array &p_opts) override;
-		void add(const Array &p_data) override;
-		void tick(double p_frame_time, double p_process_time, double p_physics_time, double p_physics_frame_time) override;
+		void toggle(bool p_enable, const Array &p_opts);
+		void add(const Array &p_data);
+		void tick(double p_frame_time, double p_process_time, double p_physics_time, double p_physics_frame_time);
 	};
 
 	static Error _capture(void *p_user, const String &p_msg, const Array &p_args, bool &r_captured);
@@ -133,3 +129,5 @@ public:
 	static void initialize();
 	static void deinitialize();
 };
+
+#endif // MULTIPLAYER_DEBUGGER_H

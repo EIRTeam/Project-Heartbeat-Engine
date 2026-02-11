@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef COLLISION_SHAPE_2D_H
+#define COLLISION_SHAPE_2D_H
 
 #include "scene/2d/node_2d.h"
 #include "scene/resources/2d/shape_2d.h"
@@ -44,32 +45,25 @@ class CollisionShape2D : public Node2D {
 	bool disabled = false;
 	bool one_way_collision = false;
 	real_t one_way_collision_margin = 1.0;
+	Color debug_color;
 
 	void _shape_changed();
 	void _update_in_shape_owner(bool p_xform_only = false);
-
-	// Not wrapped in `#ifdef DEBUG_ENABLED` as it is used for rendering.
-	Color debug_color = Color(0.0, 0.0, 0.0, 0.0);
-
 	Color _get_default_debug_color() const;
 
 protected:
 	void _notification(int p_what);
-
-#ifdef DEBUG_ENABLED
 	bool _property_can_revert(const StringName &p_name) const;
 	bool _property_get_revert(const StringName &p_name, Variant &r_property) const;
 	void _validate_property(PropertyInfo &p_property) const;
-#endif // DEBUG_ENABLED
-
 	static void _bind_methods();
 
 public:
-#ifdef DEBUG_ENABLED
+#ifdef TOOLS_ENABLED
 	virtual bool _edit_is_selected_on_click(const Point2 &p_point, double p_tolerance) const override;
 #else
 	virtual bool _edit_is_selected_on_click(const Point2 &p_point, double p_tolerance) const;
-#endif // DEBUG_ENABLED
+#endif // TOOLS_ENABLED
 
 	void set_shape(const Ref<Shape2D> &p_shape);
 	Ref<Shape2D> get_shape() const;
@@ -90,3 +84,5 @@ public:
 
 	CollisionShape2D();
 };
+
+#endif // COLLISION_SHAPE_2D_H

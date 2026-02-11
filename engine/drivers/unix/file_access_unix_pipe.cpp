@@ -35,19 +35,13 @@
 #include "core/os/os.h"
 #include "core/string/print_string.h"
 
+#include <errno.h>
 #include <fcntl.h>
-#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <cerrno>
-#include <csignal>
 
-#ifndef sighandler_t
-typedef typeof(void(int)) *sighandler_t;
-#endif
-
-Error FileAccessUnixPipe::open_existing(int p_rfd, int p_wfd, bool p_blocking) {
+Error FileAccessUnixPipe::open_existing(int p_rfd, int p_wfd) {
 	// Open pipe using handles created by pipe(fd) call in the OS.execute_with_pipe.
 	_close();
 
@@ -56,11 +50,6 @@ Error FileAccessUnixPipe::open_existing(int p_rfd, int p_wfd, bool p_blocking) {
 	ERR_FAIL_COND_V_MSG(fd[0] >= 0 || fd[1] >= 0, ERR_ALREADY_IN_USE, "Pipe is already in use.");
 	fd[0] = p_rfd;
 	fd[1] = p_wfd;
-
-	if (!p_blocking) {
-		fcntl(fd[0], F_SETFL, fcntl(fd[0], F_GETFL) | O_NONBLOCK);
-		fcntl(fd[1], F_SETFL, fcntl(fd[1], F_GETFL) | O_NONBLOCK);
-	}
 
 	last_error = OK;
 	return OK;
@@ -72,13 +61,11 @@ Error FileAccessUnixPipe::open_internal(const String &p_path, int p_mode_flags) 
 	path_src = p_path;
 	ERR_FAIL_COND_V_MSG(fd[0] >= 0 || fd[1] >= 0, ERR_ALREADY_IN_USE, "Pipe is already in use.");
 
-	path = String("/tmp/") + p_path.replace("pipe://", "").replace_char('/', '_');
-	const CharString path_utf8 = path.utf8();
-
+	path = String("/tmp/") + p_path.replace("pipe://", "").replace("/", "_");
 	struct stat st = {};
-	int err = stat(path_utf8.get_data(), &st);
+	int err = stat(path.utf8().get_data(), &st);
 	if (err) {
-		if (mkfifo(path_utf8.get_data(), 0600) != 0) {
+		if (mkfifo(path.utf8().get_data(), 0666) != 0) {
 			last_error = ERR_FILE_CANT_OPEN;
 			return last_error;
 		}
@@ -87,7 +74,7 @@ Error FileAccessUnixPipe::open_internal(const String &p_path, int p_mode_flags) 
 		ERR_FAIL_COND_V_MSG(!S_ISFIFO(st.st_mode), ERR_ALREADY_IN_USE, "Pipe name is already used by file.");
 	}
 
-	int f = ::open(path_utf8.get_data(), O_RDWR | O_CLOEXEC | O_NONBLOCK);
+	int f = ::open(path.utf8().get_data(), O_RDWR | O_CLOEXEC);
 	if (f < 0) {
 		switch (errno) {
 			case ENOENT: {
@@ -138,23 +125,25 @@ String FileAccessUnixPipe::get_path_absolute() const {
 	return path_src;
 }
 
-uint64_t FileAccessUnixPipe::get_length() const {
+uint8_t FileAccessUnixPipe::get_8() const {
 	ERR_FAIL_COND_V_MSG(fd[0] < 0, 0, "Pipe must be opened before use.");
 
-	int buf_rem = 0;
-	ERR_FAIL_COND_V(ioctl(fd[0], FIONREAD, &buf_rem) != 0, 0);
-	return buf_rem;
+	uint8_t b;
+	if (::read(fd[0], &b, 1) == 0) {
+		last_error = ERR_FILE_CANT_READ;
+		b = '\0';
+	} else {
+		last_error = OK;
+	}
+	return b;
 }
 
 uint64_t FileAccessUnixPipe::get_buffer(uint8_t *p_dst, uint64_t p_length) const {
-	ERR_FAIL_COND_V_MSG(fd[0] < 0, -1, "Pipe must be opened before use.");
 	ERR_FAIL_COND_V(!p_dst && p_length > 0, -1);
+	ERR_FAIL_COND_V_MSG(fd[0] < 0, -1, "Pipe must be opened before use.");
 
-	ssize_t read = ::read(fd[0], p_dst, p_length);
-	if (read == -1) {
-		last_error = ERR_FILE_CANT_READ;
-		read = 0;
-	} else if (read != (ssize_t)p_length) {
+	uint64_t read = ::read(fd[0], p_dst, p_length);
+	if (read == p_length) {
 		last_error = ERR_FILE_CANT_READ;
 	} else {
 		last_error = OK;
@@ -166,20 +155,22 @@ Error FileAccessUnixPipe::get_error() const {
 	return last_error;
 }
 
-bool FileAccessUnixPipe::store_buffer(const uint8_t *p_src, uint64_t p_length) {
-	ERR_FAIL_COND_V_MSG(fd[1] < 0, false, "Pipe must be opened before use.");
-	ERR_FAIL_COND_V(!p_src && p_length > 0, false);
-
-	sighandler_t sig_pipe = signal(SIGPIPE, SIG_IGN);
-	ssize_t ret = ::write(fd[1], p_src, p_length);
-	signal(SIGPIPE, sig_pipe);
-
-	if (ret != (ssize_t)p_length) {
+void FileAccessUnixPipe::store_8(uint8_t p_src) {
+	ERR_FAIL_COND_MSG(fd[1] < 0, "Pipe must be opened before use.");
+	if (::write(fd[1], &p_src, 1) != 1) {
 		last_error = ERR_FILE_CANT_WRITE;
-		return false;
 	} else {
 		last_error = OK;
-		return true;
+	}
+}
+
+void FileAccessUnixPipe::store_buffer(const uint8_t *p_src, uint64_t p_length) {
+	ERR_FAIL_COND_MSG(fd[1] < 0, "Pipe must be opened before use.");
+	ERR_FAIL_COND(!p_src && p_length > 0);
+	if (::write(fd[1], p_src, p_length) != (ssize_t)p_length) {
+		last_error = ERR_FILE_CANT_WRITE;
+	} else {
+		last_error = OK;
 	}
 }
 

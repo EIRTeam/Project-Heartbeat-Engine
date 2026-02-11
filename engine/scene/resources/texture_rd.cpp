@@ -30,8 +30,6 @@
 
 #include "texture_rd.h"
 
-#include "servers/rendering/rendering_server.h"
-
 ////////////////////////////////////////////////////////////////////////////
 // Texture2DRD
 
@@ -78,7 +76,7 @@ void Texture2DRD::set_texture_rd_rid(RID p_texture_rd_rid) {
 	if (p_texture_rd_rid.is_valid()) {
 		RS::get_singleton()->call_on_render_thread(callable_mp(this, &Texture2DRD::_set_texture_rd_rid).bind(p_texture_rd_rid));
 	} else if (texture_rid.is_valid()) {
-		RS::get_singleton()->free_rid(texture_rid);
+		RS::get_singleton()->free(texture_rid);
 		texture_rid = RID();
 		size = Size2i();
 
@@ -122,7 +120,7 @@ Texture2DRD::Texture2DRD() {
 Texture2DRD::~Texture2DRD() {
 	if (texture_rid.is_valid()) {
 		ERR_FAIL_NULL(RS::get_singleton());
-		RS::get_singleton()->free_rid(texture_rid);
+		RS::get_singleton()->free(texture_rid);
 		texture_rid = RID();
 	}
 }
@@ -181,7 +179,7 @@ void TextureLayeredRD::set_texture_rd_rid(RID p_texture_rd_rid) {
 	if (p_texture_rd_rid.is_valid()) {
 		RS::get_singleton()->call_on_render_thread(callable_mp(this, &TextureLayeredRD::_set_texture_rd_rid).bind(p_texture_rd_rid));
 	} else if (texture_rid.is_valid()) {
-		RS::get_singleton()->free_rid(texture_rid);
+		RS::get_singleton()->free(texture_rid);
 		texture_rid = RID();
 		image_format = Image::FORMAT_MAX;
 		size = Size2i();
@@ -199,7 +197,7 @@ void TextureLayeredRD::_set_texture_rd_rid(RID p_texture_rd_rid) {
 
 	RS::TextureLayeredType rs_layer_type;
 	RD::TextureFormat tf = RD::get_singleton()->texture_get_format(p_texture_rd_rid);
-	ERR_FAIL_COND(tf.texture_type != RD::TEXTURE_TYPE_2D_ARRAY && tf.texture_type != RD::TEXTURE_TYPE_CUBE && tf.texture_type != RD::TEXTURE_TYPE_CUBE_ARRAY);
+	ERR_FAIL_COND(tf.texture_type != RD::TEXTURE_TYPE_2D_ARRAY);
 	ERR_FAIL_COND(tf.depth > 1);
 	switch (layer_type) {
 		case LAYERED_TYPE_2D_ARRAY: {
@@ -253,7 +251,7 @@ TextureLayeredRD::TextureLayeredRD(LayeredType p_layer_type) {
 TextureLayeredRD::~TextureLayeredRD() {
 	if (texture_rid.is_valid()) {
 		ERR_FAIL_NULL(RS::get_singleton());
-		RS::get_singleton()->free_rid(texture_rid);
+		RS::get_singleton()->free(texture_rid);
 		texture_rid = RID();
 	}
 }
@@ -303,7 +301,7 @@ void Texture3DRD::set_texture_rd_rid(RID p_texture_rd_rid) {
 	if (p_texture_rd_rid.is_valid()) {
 		RS::get_singleton()->call_on_render_thread(callable_mp(this, &Texture3DRD::_set_texture_rd_rid).bind(p_texture_rd_rid));
 	} else if (texture_rid.is_valid()) {
-		RS::get_singleton()->free_rid(texture_rid);
+		RS::get_singleton()->free(texture_rid);
 		texture_rid = RID();
 		image_format = Image::FORMAT_MAX;
 		size = Vector3i();
@@ -354,7 +352,7 @@ Texture3DRD::Texture3DRD() {
 Texture3DRD::~Texture3DRD() {
 	if (texture_rid.is_valid()) {
 		ERR_FAIL_NULL(RS::get_singleton());
-		RS::get_singleton()->free_rid(texture_rid);
+		RS::get_singleton()->free(texture_rid);
 		texture_rid = RID();
 	}
 }

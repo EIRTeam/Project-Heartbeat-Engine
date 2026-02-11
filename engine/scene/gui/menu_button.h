@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef MENU_BUTTON_H
+#define MENU_BUTTON_H
 
 #include "scene/gui/button.h"
 #include "scene/gui/popup_menu.h"
@@ -37,6 +38,7 @@
 class MenuButton : public Button {
 	GDCLASS(MenuButton, Button);
 
+	bool clicked = false;
 	bool switch_on_hover = false;
 	bool disable_shortcuts = false;
 	PopupMenu *popup = nullptr;
@@ -69,10 +71,8 @@ public:
 	void set_item_count(int p_count);
 	int get_item_count() const;
 
-#ifdef TOOLS_ENABLED
-	PackedStringArray get_configuration_warnings() const override;
-#endif
-
 	MenuButton(const String &p_text = String());
 	~MenuButton();
 };
+
+#endif // MENU_BUTTON_H

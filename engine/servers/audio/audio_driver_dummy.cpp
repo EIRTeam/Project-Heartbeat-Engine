@@ -30,6 +30,7 @@
 
 #include "audio_driver_dummy.h"
 
+#include "core/config/project_settings.h"
 #include "core/os/os.h"
 
 AudioDriverDummy *AudioDriverDummy::singleton = nullptr;
@@ -44,7 +45,7 @@ Error AudioDriverDummy::init() {
 	}
 
 	channels = get_channels();
-	samples_in = memnew_arr(int32_t, size_t(buffer_frames) * channels);
+	samples_in = memnew_arr(int32_t, (size_t)buffer_frames * channels);
 
 	if (use_threads) {
 		thread.start(AudioDriverDummy::thread_func, this);

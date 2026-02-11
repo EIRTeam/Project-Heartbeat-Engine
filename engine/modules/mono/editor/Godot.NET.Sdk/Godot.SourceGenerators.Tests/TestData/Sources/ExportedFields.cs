@@ -1,7 +1,6 @@
 using Godot;
 using System;
 using System.Collections.Generic;
-using static Godot.Mathf;
 
 public partial class ExportedFields : GodotObject
 {
@@ -10,7 +9,7 @@ public partial class ExportedFields : GodotObject
     [Export] private SByte _fieldSByte = 10;
     [Export] private Int16 _fieldInt16 = 10;
     [Export] private Int32 _fieldInt32 = 10;
-    [Export] private Int64 _fieldInt64 = -10_000;
+    [Export] private Int64 _fieldInt64 = 10;
     [Export] private Byte _fieldByte = 10;
     [Export] private UInt16 _fieldUInt16 = 10;
     [Export] private UInt32 _fieldUInt32 = 10;
@@ -18,9 +17,6 @@ public partial class ExportedFields : GodotObject
     [Export] private Single _fieldSingle = 10;
     [Export] private Double _fieldDouble = 10;
     [Export] private String _fieldString = "foo";
-
-    // Static import
-    [Export] private Single _fieldStaticImport = RadToDeg(2 * Pi);
 
     // Godot structs
     [Export] private Vector2 _fieldVector2 = new(10f, 10f);
@@ -88,7 +84,6 @@ public partial class ExportedFields : GodotObject
     // Classes
     [Export] private GodotObject _fieldGodotObjectOrDerived;
     [Export] private Godot.Texture _fieldGodotResourceTexture;
-    [Export] private Godot.Texture _fieldGodotResourceTextureWithInitializer = new() { ResourceName = "" };
     [Export] private StringName _fieldStringName = new StringName("foo");
     [Export] private NodePath _fieldNodePath = new NodePath("foo");
     [Export] private Rid _fieldRid;

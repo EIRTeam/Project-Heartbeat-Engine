@@ -28,8 +28,10 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef MAIN_H
+#define MAIN_H
 
+#include "core/error/error_list.h"
 #include "core/os/thread.h"
 #include "core/typedefs.h"
 
@@ -41,7 +43,6 @@ class Main {
 		CLI_OPTION_AVAILABILITY_EDITOR,
 		CLI_OPTION_AVAILABILITY_TEMPLATE_DEBUG,
 		CLI_OPTION_AVAILABILITY_TEMPLATE_RELEASE,
-		CLI_OPTION_AVAILABILITY_TEMPLATE_UNSAFE,
 		CLI_OPTION_AVAILABILITY_HIDDEN,
 	};
 
@@ -72,7 +73,6 @@ public:
 	static Error setup(const char *execpath, int argc, char *argv[], bool p_second_phase = true);
 	static Error setup2(bool p_show_boot_logo = true); // The thread calling setup2() will effectively become the main thread.
 	static String get_rendering_driver_name();
-	static String get_locale_override();
 	static void setup_boot_logo();
 #ifdef TESTS_ENABLED
 	static Error test_setup();
@@ -93,7 +93,6 @@ public:
 	bool run_test = false;                                         \
 	int return_code = Main::test_entrypoint(argc, argv, run_test); \
 	if (run_test) {                                                \
-		godot_cleanup_profiler();                                  \
 		return return_code;                                        \
 	}
 
@@ -101,6 +100,7 @@ public:
 	bool run_test = false;                                         \
 	int return_code = Main::test_entrypoint(argc, argv, run_test); \
 	if (run_test) {                                                \
-		godot_cleanup_profiler();                                  \
 		return return_code;                                        \
 	}
+
+#endif // MAIN_H

@@ -451,10 +451,10 @@ UTS46::processUTF8(StringPiece src,
                 return;
             }
             char c=srcArray[i];
-            if (static_cast<int8_t>(c) < 0) { // (uint8_t)c>0x7f
+            if((int8_t)c<0) {  // (uint8_t)c>0x7f
                 break;
             }
-            int cData = asciiData[static_cast<int>(c)]; // Cast: gcc warns about indexing with a char.
+            int cData=asciiData[(int)c];  // Cast: gcc warns about indexing with a char.
             if(cData>0) {
                 destArray[i]=c+0x20;  // Lowercase an uppercase ASCII letter.
             } else if(cData<0 && disallowNonLDHDot) {
@@ -756,12 +756,7 @@ UTS46::processLabel(UnicodeString &dest,
         if(U_FAILURE(errorCode)) {
             return labelLength;
         }
-        // Unicode 15.1 UTS #46:
-        // Added an additional condition in 4.1 Validity Criteria to
-        // disallow labels such as xn--xn---epa., which do not round-trip.
-        // --> Validity Criteria new criterion 4:
-        // If not CheckHyphens, the label must not begin with “xn--”.
-        if(!isValid || fromPunycode.startsWith(UnicodeString::readOnlyAlias(u"xn--"))) {
+        if(!isValid) {
             info.labelErrors|=UIDNA_ERROR_INVALID_ACE_LABEL;
             return markBadACELabel(dest, labelStart, labelLength, toASCII, info, errorCode);
         }
@@ -801,7 +796,7 @@ UTS46::processLabel(UnicodeString &dest,
     // in a non-Punycode label or U+FFFD itself in a Punycode label.
     // We also check for dots which can come from the input to a single-label function.
     // Ok to cast away const because we own the UnicodeString.
-    char16_t* s = const_cast<char16_t*>(label);
+    char16_t *s=(char16_t *)label;
     const char16_t *limit=label+labelLength;
     char16_t oredChars=0;
     // If we enforce STD3 rules, then ASCII characters other than LDH and dot are disallowed.
@@ -832,7 +827,7 @@ UTS46::processLabel(UnicodeString &dest,
     U16_NEXT_UNSAFE(label, cpLength, c);
     if((U_GET_GC_MASK(c)&U_GC_M_MASK)!=0) {
         info.labelErrors|=UIDNA_ERROR_LEADING_COMBINING_MARK;
-        labelString->replace(labelStart, cpLength, static_cast<char16_t>(0xfffd));
+        labelString->replace(labelStart, cpLength, (char16_t)0xfffd);
         label=labelString->getBuffer()+labelStart;
         labelLength+=1-cpLength;
         if(labelString==&dest) {
@@ -872,12 +867,11 @@ UTS46::processLabel(UnicodeString &dest,
                 buffer[1]=0x6e;
                 buffer[2]=0x2d;
                 buffer[3]=0x2d;
-                UErrorCode punycodeErrorCode=U_ZERO_ERROR;
                 int32_t punycodeLength=u_strToPunycode(label, labelLength,
                                                       buffer+4, punycode.getCapacity()-4,
-                                                      nullptr, &punycodeErrorCode);
-                if(punycodeErrorCode==U_BUFFER_OVERFLOW_ERROR) {
-                    punycodeErrorCode=U_ZERO_ERROR;
+                                                      nullptr, &errorCode);
+                if(errorCode==U_BUFFER_OVERFLOW_ERROR) {
+                    errorCode=U_ZERO_ERROR;
                     punycode.releaseBuffer(4);
                     buffer=punycode.getBuffer(4+punycodeLength);
                     if(buffer==nullptr) {
@@ -886,12 +880,11 @@ UTS46::processLabel(UnicodeString &dest,
                     }
                     punycodeLength=u_strToPunycode(label, labelLength,
                                                   buffer+4, punycode.getCapacity()-4,
-                                                  nullptr, &punycodeErrorCode);
+                                                  nullptr, &errorCode);
                 }
                 punycodeLength+=4;
                 punycode.releaseBuffer(punycodeLength);
-                if(U_FAILURE(punycodeErrorCode)) {
-                    errorCode = punycodeErrorCode;
+                if(U_FAILURE(errorCode)) {
                     return destLabelLength;
                 }
                 if(punycodeLength>63) {
@@ -954,7 +947,7 @@ UTS46::markBadACELabel(UnicodeString &dest,
         }
     }
     if(onlyLDH) {
-        dest.insert(labelStart + labelLength, static_cast<char16_t>(0xfffd));
+        dest.insert(labelStart+labelLength, (char16_t)0xfffd);
         if(dest.isBogus()) {
             errorCode=U_MEMORY_ALLOCATION_ERROR;
             return 0;
@@ -1368,7 +1361,7 @@ uidna_labelToASCII(const UIDNA *idna,
     if(!checkArgs(label, length, dest, capacity, pInfo, pErrorCode)) {
         return 0;
     }
-    UnicodeString src(length < 0, label, length);
+    UnicodeString src((UBool)(length<0), label, length);
     UnicodeString destString(dest, 0, capacity);
     IDNAInfo info;
     reinterpret_cast<const IDNA *>(idna)->labelToASCII(src, destString, info, *pErrorCode);
@@ -1384,7 +1377,7 @@ uidna_labelToUnicode(const UIDNA *idna,
     if(!checkArgs(label, length, dest, capacity, pInfo, pErrorCode)) {
         return 0;
     }
-    UnicodeString src(length < 0, label, length);
+    UnicodeString src((UBool)(length<0), label, length);
     UnicodeString destString(dest, 0, capacity);
     IDNAInfo info;
     reinterpret_cast<const IDNA *>(idna)->labelToUnicode(src, destString, info, *pErrorCode);
@@ -1400,7 +1393,7 @@ uidna_nameToASCII(const UIDNA *idna,
     if(!checkArgs(name, length, dest, capacity, pInfo, pErrorCode)) {
         return 0;
     }
-    UnicodeString src(length < 0, name, length);
+    UnicodeString src((UBool)(length<0), name, length);
     UnicodeString destString(dest, 0, capacity);
     IDNAInfo info;
     reinterpret_cast<const IDNA *>(idna)->nameToASCII(src, destString, info, *pErrorCode);
@@ -1416,7 +1409,7 @@ uidna_nameToUnicode(const UIDNA *idna,
     if(!checkArgs(name, length, dest, capacity, pInfo, pErrorCode)) {
         return 0;
     }
-    UnicodeString src(length < 0, name, length);
+    UnicodeString src((UBool)(length<0), name, length);
     UnicodeString destString(dest, 0, capacity);
     IDNAInfo info;
     reinterpret_cast<const IDNA *>(idna)->nameToUnicode(src, destString, info, *pErrorCode);

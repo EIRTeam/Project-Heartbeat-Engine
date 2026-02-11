@@ -28,9 +28,10 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AUDIO_STREAM_INTERACTIVE_EDITOR_PLUGIN_H
+#define AUDIO_STREAM_INTERACTIVE_EDITOR_PLUGIN_H
 
-#include "editor/inspector/editor_inspector.h"
+#include "editor/editor_inspector.h"
 #include "editor/plugins/editor_plugin.h"
 #include "scene/gui/dialogs.h"
 
@@ -101,7 +102,9 @@ class AudioStreamInteractiveEditorPlugin : public EditorPlugin {
 	GDCLASS(AudioStreamInteractiveEditorPlugin, EditorPlugin);
 
 public:
-	virtual String get_plugin_name() const override { return "AudioStreamInteractive"; }
+	virtual String get_name() const override { return "AudioStreamInteractive"; }
 
 	AudioStreamInteractiveEditorPlugin();
 };
+
+#endif // AUDIO_STREAM_INTERACTIVE_EDITOR_PLUGIN_H

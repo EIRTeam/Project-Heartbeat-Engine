@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef HASHING_CONTEXT_H
+#define HASHING_CONTEXT_H
 
 #include "core/object/ref_counted.h"
 
@@ -36,7 +37,7 @@ class HashingContext : public RefCounted {
 	GDCLASS(HashingContext, RefCounted);
 
 public:
-	enum HashType : int32_t {
+	enum HashType {
 		HASH_MD5,
 		HASH_SHA1,
 		HASH_SHA256
@@ -56,7 +57,10 @@ public:
 	Error update(const PackedByteArray &p_chunk);
 	PackedByteArray finish();
 
+	HashingContext() {}
 	~HashingContext();
 };
 
 VARIANT_ENUM_CAST(HashingContext::HashType);
+
+#endif // HASHING_CONTEXT_H

@@ -41,7 +41,7 @@ void ResourcePreloader::_set_resources(const Array &p_data) {
 
 	for (int i = 0; i < resdata.size(); i++) {
 		Ref<Resource> resource = resdata[i];
-		ERR_CONTINUE(resource.is_null());
+		ERR_CONTINUE(!resource.is_valid());
 		resources[names[i]] = resource;
 
 		//add_resource(names[i],resource);
@@ -67,7 +67,10 @@ Array ResourcePreloader::_get_resources() const {
 		i++;
 	}
 
-	return Array{ names, arr };
+	Array res;
+	res.push_back(names);
+	res.push_back(arr);
+	return res;
 }
 
 void ResourcePreloader::add_resource(const StringName &p_name, const Ref<Resource> &p_resource) {

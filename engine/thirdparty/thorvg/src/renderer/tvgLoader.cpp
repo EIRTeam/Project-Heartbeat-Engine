@@ -22,7 +22,6 @@
 
 #include <string.h>
 
-#include <atomic>
 #include "tvgInlist.h"
 #include "tvgLoader.h"
 #include "tvgLock.h"
@@ -67,10 +66,9 @@ uintptr_t HASH_KEY(const char* data)
 /* Internal Class Implementation                                        */
 /************************************************************************/
 
-//TODO: remove it.
-atomic<ColorSpace> ImageLoader::cs{ColorSpace::ARGB8888};
+ColorSpace ImageLoader::cs = ColorSpace::ARGB8888;
 
-static Key _key;
+static Key key;
 static Inlist<LoadModule> _activeLoaders;
 
 
@@ -174,7 +172,6 @@ static LoadModule* _find(FileType type)
 }
 
 
-#ifdef THORVG_FILE_IO_SUPPORT
 static LoadModule* _findByPath(const string& path)
 {
     auto ext = path.substr(path.find_last_of(".") + 1);
@@ -188,7 +185,6 @@ static LoadModule* _findByPath(const string& path)
     if (!ext.compare("otf") || !ext.compare("otc")) return _find(FileType::Ttf);
     return nullptr;
 }
-#endif
 
 
 static FileType _convert(const string& mimeType)
@@ -217,7 +213,7 @@ static LoadModule* _findByType(const string& mimeType)
 
 static LoadModule* _findFromCache(const string& path)
 {
-    ScopedLock lock(_key);
+    ScopedLock lock(key);
 
     auto loader = _activeLoaders.head;
 
@@ -237,10 +233,11 @@ static LoadModule* _findFromCache(const char* data, uint32_t size, const string&
     auto type = _convert(mimeType);
     if (type == FileType::Unknown) return nullptr;
 
-    auto key = HASH_KEY(data);
-    ScopedLock lock(_key);
-
+    ScopedLock lock(key);
     auto loader = _activeLoaders.head;
+
+    auto key = HASH_KEY(data);
+
     while (loader) {
         if (loader->type == type && loader->hashkey == key) {
             ++loader->sharing;
@@ -268,11 +265,7 @@ bool LoaderMgr::term()
     auto loader = _activeLoaders.head;
 
     //clean up the remained font loaders which is globally used.
-    while (loader) {
-        if (loader->type != FileType::Ttf) {
-            loader = loader->next;
-            continue;
-        }
+    while (loader && loader->type == FileType::Ttf) {
         auto ret = loader->close();
         auto tmp = loader;
         loader = loader->next;
@@ -286,9 +279,9 @@ bool LoaderMgr::term()
 bool LoaderMgr::retrieve(LoadModule* loader)
 {
     if (!loader) return false;
-
     if (loader->close()) {
         if (loader->cached()) {
+            ScopedLock lock(key);
             _activeLoaders.remove(loader);
         }
         delete(loader);
@@ -299,13 +292,12 @@ bool LoaderMgr::retrieve(LoadModule* loader)
 
 LoadModule* LoaderMgr::loader(const string& path, bool* invalid)
 {
-#ifdef THORVG_FILE_IO_SUPPORT
     *invalid = false;
 
-    //TODO: svg & lottie is not sharable.
+    //TODO: lottie is not sharable.
     auto allowCache = true;
     auto ext = path.substr(path.find_last_of(".") + 1);
-    if (!ext.compare("svg") || !ext.compare("json")) allowCache = false;
+    if (!ext.compare("json")) allowCache = false;
 
     if (allowCache) {
         if (auto loader = _findFromCache(path)) return loader;
@@ -317,7 +309,7 @@ LoadModule* LoaderMgr::loader(const string& path, bool* invalid)
                 loader->hashpath = strdup(path.c_str());
                 loader->pathcache = true;
                 {
-                    ScopedLock lock(_key);
+                    ScopedLock lock(key);
                     _activeLoaders.back(loader);
                 }
             }
@@ -325,7 +317,7 @@ LoadModule* LoaderMgr::loader(const string& path, bool* invalid)
         }
         delete(loader);
     }
-    //Unknown MimeType. Try with the candidates in the order
+    //Unkown MimeType. Try with the candidates in the order
     for (int i = 0; i < static_cast<int>(FileType::Raw); i++) {
         if (auto loader = _find(static_cast<FileType>(i))) {
             if (loader->open(path)) {
@@ -333,7 +325,7 @@ LoadModule* LoaderMgr::loader(const string& path, bool* invalid)
                     loader->hashpath = strdup(path.c_str());
                     loader->pathcache = true;
                     {
-                        ScopedLock lock(_key);
+                        ScopedLock lock(key);
                         _activeLoaders.back(loader);
                     }
                 }
@@ -343,7 +335,6 @@ LoadModule* LoaderMgr::loader(const string& path, bool* invalid)
         }
     }
     *invalid = true;
-#endif
     return nullptr;
 }
 
@@ -391,7 +382,7 @@ LoadModule* LoaderMgr::loader(const char* data, uint32_t size, const string& mim
             if (loader->open(data, size, copy)) {
                 if (allowCache) {
                     loader->hashkey = HASH_KEY(data);
-                    ScopedLock lock(_key);
+                    ScopedLock lock(key);
                     _activeLoaders.back(loader);
                 }
                 return loader;
@@ -401,14 +392,14 @@ LoadModule* LoaderMgr::loader(const char* data, uint32_t size, const string& mim
             }
         }
     }
-    //Unknown MimeType. Try with the candidates in the order
+    //Unkown MimeType. Try with the candidates in the order
     for (int i = 0; i < static_cast<int>(FileType::Raw); i++) {
         auto loader = _find(static_cast<FileType>(i));
         if (loader) {
             if (loader->open(data, size, copy)) {
                 if (allowCache) {
                     loader->hashkey = HASH_KEY(data);
-                    ScopedLock lock(_key);
+                    ScopedLock lock(key);
                     _activeLoaders.back(loader);
                 }
                 return loader;
@@ -434,7 +425,7 @@ LoadModule* LoaderMgr::loader(const uint32_t *data, uint32_t w, uint32_t h, bool
     if (loader->open(data, w, h, copy)) {
         if (!copy) {
             loader->hashkey = HASH_KEY((const char*)data);
-            ScopedLock lock(_key);
+            ScopedLock lock(key);
             _activeLoaders.back(loader);
         }
         return loader;
@@ -456,7 +447,7 @@ LoadModule* LoaderMgr::loader(const char* name, const char* data, uint32_t size,
     if (loader->open(data, size, copy)) {
         loader->hashpath = strdup(name);
         loader->pathcache = true;
-        ScopedLock lock(_key);
+        ScopedLock lock(key);
         _activeLoaders.back(loader);
         return loader;
     }

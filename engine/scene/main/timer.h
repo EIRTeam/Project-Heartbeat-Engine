@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef TIMER_H
+#define TIMER_H
 
 #include "scene/main/node.h"
 
@@ -40,7 +41,6 @@ class Timer : public Node {
 	bool autostart = false;
 	bool processing = false;
 	bool paused = false;
-	bool ignore_time_scale = false;
 
 	double time_left = -1.0;
 
@@ -69,9 +69,6 @@ public:
 	void set_paused(bool p_paused);
 	bool is_paused() const;
 
-	void set_ignore_time_scale(bool p_ignore);
-	bool is_ignoring_time_scale();
-
 	bool is_stopped() const;
 
 	double get_time_left() const;
@@ -80,6 +77,7 @@ public:
 
 	void set_timer_process_callback(TimerProcessCallback p_callback);
 	TimerProcessCallback get_timer_process_callback() const;
+	Timer();
 
 private:
 	TimerProcessCallback timer_process_callback = TIMER_PROCESS_IDLE;
@@ -87,3 +85,5 @@ private:
 };
 
 VARIANT_ENUM_CAST(Timer::TimerProcessCallback);
+
+#endif // TIMER_H

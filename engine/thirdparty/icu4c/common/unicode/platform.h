@@ -132,8 +132,6 @@
 #define U_PF_BROWSER_NATIVE_CLIENT 4020
 /** Android is based on Linux. @internal */
 #define U_PF_ANDROID 4050
-/** Haiku is a POSIX-ish platform. @internal */
-#define U_PF_HAIKU 4080
 /** Fuchsia is a POSIX-ish platform. @internal */
 #define U_PF_FUCHSIA 4100
 /* Maximum value for Linux-based platform is 4499 */
@@ -156,8 +154,6 @@
 #   define U_PLATFORM U_PF_MINGW
 #elif defined(__CYGWIN__)
 #   define U_PLATFORM U_PF_CYGWIN
-    /* Cygwin uchar.h doesn't exist until Cygwin 3.5. */
-#   include <cygwin/version.h>
 #elif defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
 #   define U_PLATFORM U_PF_WINDOWS
 #elif defined(__ANDROID__)
@@ -204,8 +200,6 @@
 #   define U_PLATFORM U_PF_OS390
 #elif defined(__OS400__) || defined(__TOS_OS400__)
 #   define U_PLATFORM U_PF_OS400
-#elif defined(__HAIKU__)
-#   define U_PLATFORM U_PF_HAIKU
 #elif defined(__EMSCRIPTEN__)
 #   define U_PLATFORM U_PF_EMSCRIPTEN
 #else
@@ -241,7 +235,7 @@
 /**
  * \def U_PLATFORM_USES_ONLY_WIN32_API
  * Defines whether the platform uses only the Win32 API.
- * Set to 1 for Windows/MSVC, ClangCL and MinGW but not Cygwin.
+ * Set to 1 for Windows/MSVC and MinGW but not Cygwin.
  * @internal
  */
 #ifdef U_PLATFORM_USES_ONLY_WIN32_API
@@ -256,7 +250,7 @@
 /**
  * \def U_PLATFORM_HAS_WIN32_API
  * Defines whether the Win32 API is available on the platform.
- * Set to 1 for Windows/MSVC, ClangCL, MinGW and Cygwin.
+ * Set to 1 for Windows/MSVC, MinGW and Cygwin.
  * @internal
  */
 #ifdef U_PLATFORM_HAS_WIN32_API
@@ -369,6 +363,19 @@
 #endif
 
 /**
+ * \def U_HAVE_PLACEMENT_NEW
+ * Determines whether to override placement new and delete for STL.
+ * @stable ICU 2.6
+ */
+#ifdef U_HAVE_PLACEMENT_NEW
+    /* Use the predefined value. */
+#elif defined(__BORLANDC__)
+#   define U_HAVE_PLACEMENT_NEW 0
+#else
+#   define U_HAVE_PLACEMENT_NEW 1
+#endif
+
+/**
  * \def U_HAVE_DEBUG_LOCATION_NEW 
  * Define this to define the MFC debug version of the operator new.
  *
@@ -466,12 +473,6 @@
     /* Otherwise use the predefined value. */
 #elif !defined(__cplusplus)
 #   define U_CPLUSPLUS_VERSION 0
-// The value of _MSVC_LANG for C++23 preview is undocumented, except that it is larger than 202002.
-// As of this writing, it is 202004.
-#elif __cplusplus >= 202302L || (defined(_MSVC_LANG) && _MSVC_LANG > 202002L)
-#   define U_CPLUSPLUS_VERSION 23
-#elif __cplusplus >= 202002L || (defined(_MSVC_LANG) && _MSVC_LANG >= 202002L)
-#   define U_CPLUSPLUS_VERSION 20
 #elif __cplusplus >= 201703L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L)
 #   define U_CPLUSPLUS_VERSION 17
 #elif __cplusplus >= 201402L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201402L)
@@ -486,10 +487,12 @@
 /**
  * \def U_FALLTHROUGH
  * Annotate intentional fall-through between switch labels.
- * https://clang.llvm.org/docs/AttributeReference.html#fallthrough
+ * http://clang.llvm.org/docs/AttributeReference.html#fallthrough-clang-fallthrough
  * @internal
  */
-#if defined(U_FALLTHROUGH)
+#ifndef __cplusplus
+    // Not for C.
+#elif defined(U_FALLTHROUGH)
     // Use the predefined value.
 #elif defined(__clang__)
     // Test for compiler vs. feature separately.
@@ -719,16 +722,12 @@
     /*
      * Notes:
      * C++11 and C11 require support for UTF-16 literals
-     * Doesn't work on Mac C11 (see workaround in ptypes.h)
-     * or Cygwin less than 3.5.
+     * Doesn't work on Mac C11 (see workaround in ptypes.h).
      */
-#   if defined(__cplusplus)
+#   if defined(__cplusplus) || !U_PLATFORM_IS_DARWIN_BASED
 #       define U_HAVE_CHAR16_T 1
-#   elif U_PLATFORM_IS_DARWIN_BASED || (U_PLATFORM == U_PF_CYGWIN && CYGWIN_VERSION_DLL_MAJOR < 3005)
-#       define U_HAVE_CHAR16_T 0
 #   else
-        // conformant C11
-#       define U_HAVE_CHAR16_T 1
+#       define U_HAVE_CHAR16_T 0
 #   endif
 #endif
 
@@ -736,9 +735,7 @@
  * @{
  * \def U_DECLARE_UTF16
  * Do not use this macro because it is not defined on all platforms.
- * In C++, use std::u16string_view literals, see the UNICODE_STRING docs.
- * In C, use u"UTF-16 literals".
- * See also the public U_STRING_DECL macro.
+ * Use the UNICODE_STRING or U_STRING_DECL macros instead.
  * @internal
  */
 #ifdef U_DECLARE_UTF16
@@ -769,7 +766,7 @@
 #elif defined(_MSC_VER) || (UPRV_HAS_DECLSPEC_ATTRIBUTE(__dllexport__) && \
                             UPRV_HAS_DECLSPEC_ATTRIBUTE(__dllimport__))
 #   define U_EXPORT __declspec(dllexport)
-#elif defined(__GNUC__) || defined(__open_xl__)
+#elif defined(__GNUC__)
 #   define U_EXPORT __attribute__((visibility("default")))
 #elif (defined(__SUNPRO_CC) && __SUNPRO_CC >= 0x550) \
    || (defined(__SUNPRO_C) && __SUNPRO_C >= 0x550) 
@@ -808,7 +805,7 @@
  */
 #ifdef U_HIDDEN
     /* Use the predefined value. */
-#elif defined(__GNUC__) || defined(__open_xl__)
+#elif defined(__GNUC__)
 #   define U_HIDDEN __attribute__((visibility("hidden")))
 #else
 #   define U_HIDDEN 

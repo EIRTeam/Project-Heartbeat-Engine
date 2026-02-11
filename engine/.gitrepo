@@ -5,8 +5,8 @@
 ;
 [subrepo]
 	remote = https://github.com/EIRTeam/shinobu.git
-	branch = shinobu_gd4
-	commit = b82444cdf22e15076df58bad4b90370f81ef23eb
-	parent = 6d66e68a69861d6fab47c14139a67e198ac3a172
+	branch = ph
+	commit = 7b865264df0ca2bde2d77551f1f0b5c4a468b539
+	parent = 9a3fa1fe71adcf0c06e173f3dda2ae5facba51ea
 	method = merge
 	cmdver = 0.4.9

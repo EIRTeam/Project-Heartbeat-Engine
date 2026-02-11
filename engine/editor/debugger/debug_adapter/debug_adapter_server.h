@@ -28,9 +28,10 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef DEBUG_ADAPTER_SERVER_H
+#define DEBUG_ADAPTER_SERVER_H
 
-#include "editor/debugger/debug_adapter/debug_adapter_protocol.h"
+#include "debug_adapter_protocol.h"
 #include "editor/plugins/editor_plugin.h"
 
 class DebugAdapterServer : public EditorPlugin {
@@ -39,6 +40,7 @@ class DebugAdapterServer : public EditorPlugin {
 	DebugAdapterProtocol protocol;
 
 	int remote_port = 6006;
+	bool thread_running = false;
 	bool started = false;
 	bool polling = false;
 	static void thread_func(void *p_userdata);
@@ -52,3 +54,5 @@ public:
 	void start();
 	void stop();
 };
+
+#endif // DEBUG_ADAPTER_SERVER_H

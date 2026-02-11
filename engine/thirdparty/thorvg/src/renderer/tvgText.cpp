@@ -35,8 +35,9 @@
 /************************************************************************/
 
 
-Text::Text() : pImpl(new Impl(this))
+Text::Text() : pImpl(new Impl)
 {
+    Paint::pImpl->id = TVG_CLASS_ID_TEXT;
 }
 
 
@@ -60,21 +61,13 @@ Result Text::font(const char* name, float size, const char* style) noexcept
 
 Result Text::load(const std::string& path) noexcept
 {
-#ifdef THORVG_FILE_IO_SUPPORT
     bool invalid; //invalid path
-    auto loader = LoaderMgr::loader(path, &invalid);
-    if (loader) {
-        if (loader->sharing > 0) --loader->sharing;   //font loading doesn't mean sharing.
-        return Result::Success;
-    } else {
+    if (!LoaderMgr::loader(path, &invalid)) {
         if (invalid) return Result::InvalidArguments;
         else return Result::NonSupport;
     }
+
     return Result::Success;
-#else
-    TVGLOG("RENDERER", "FILE IO is disabled!");
-    return Result::NonSupport;
-#endif
 }
 
 
@@ -95,25 +88,27 @@ Result Text::load(const char* name, const char* data, uint32_t size, const strin
 
 Result Text::unload(const std::string& path) noexcept
 {
-#ifdef THORVG_FILE_IO_SUPPORT
     if (LoaderMgr::retrieve(path)) return Result::Success;
     return Result::InsufficientCondition;
-#else
-    TVGLOG("RENDERER", "FILE IO is disabled!");
-    return Result::NonSupport;
-#endif
 }
 
 
 Result Text::fill(uint8_t r, uint8_t g, uint8_t b) noexcept
 {
-    return pImpl->shape->fill(r, g, b);
+    if (!pImpl->paint) return Result::InsufficientCondition;
+
+    return pImpl->fill(r, g, b);
 }
 
 
 Result Text::fill(unique_ptr<Fill> f) noexcept
 {
-    return pImpl->shape->fill(std::move(f));
+    if (!pImpl->paint) return Result::InsufficientCondition;
+
+    auto p = f.release();
+    if (!p) return Result::MemoryCorruption;
+
+    return pImpl->fill(p);
 }
 
 
@@ -123,7 +118,7 @@ unique_ptr<Text> Text::gen() noexcept
 }
 
 
-Type Text::type() const noexcept
+uint32_t Text::identifier() noexcept
 {
-    return Type::Text;
+    return TVG_CLASS_ID_TEXT;
 }

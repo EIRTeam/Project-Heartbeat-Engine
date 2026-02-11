@@ -112,21 +112,12 @@ void AudioStreamPlayerInternal::notification(int p_what) {
 			stream_playbacks.clear();
 		} break;
 
-		case Node::NOTIFICATION_SUSPENDED:
 		case Node::NOTIFICATION_PAUSED: {
-			bool can_process = node->is_inside_tree() && node->can_process();
-			if (!can_process) {
+			if (!node->can_process()) {
 				// Node can't process so we start fading out to silence
 				set_stream_paused(true);
 			}
 		} break;
-
-		case Node::NOTIFICATION_UNSUSPENDED: {
-			if (node->get_tree()->is_paused()) {
-				break;
-			}
-			[[fallthrough]];
-		}
 
 		case Node::NOTIFICATION_UNPAUSED: {
 			set_stream_paused(false);
@@ -141,7 +132,7 @@ Ref<AudioStreamPlayback> AudioStreamPlayerInternal::play_basic() {
 	}
 	ERR_FAIL_COND_V_MSG(!node->is_inside_tree(), stream_playback, "Playback can only happen when a node is inside the scene tree");
 	if (stream->is_monophonic() && is_playing()) {
-		stop_callable.call();
+		stop();
 	}
 	stream_playback = stream->instantiate_playback();
 	ERR_FAIL_COND_V_MSG(stream_playback.is_null(), stream_playback, "Failed to instantiate playback.");
@@ -161,7 +152,6 @@ Ref<AudioStreamPlayback> AudioStreamPlayerInternal::play_basic() {
 				Ref<AudioSamplePlayback> sample_playback;
 				sample_playback.instantiate();
 				sample_playback->stream = stream;
-				sample_playback->pitch_scale = pitch_scale;
 				stream_playback->set_sample_playback(sample_playback);
 			}
 		} else if (!stream->is_meta_stream()) {
@@ -194,9 +184,6 @@ bool AudioStreamPlayerInternal::get_stream_paused() const {
 }
 
 void AudioStreamPlayerInternal::validate_property(PropertyInfo &p_property) const {
-	if (!Engine::get_singleton()->is_editor_hint()) {
-		return;
-	}
 	if (p_property.name == "bus") {
 		String options;
 		for (int i = 0; i < AudioServer::get_singleton()->get_bus_count(); i++) {
@@ -255,7 +242,7 @@ void AudioStreamPlayerInternal::set_stream(Ref<AudioStream> p_stream) {
 	if (stream.is_valid()) {
 		stream->disconnect(SNAME("parameter_list_changed"), callable_mp(this, &AudioStreamPlayerInternal::_update_stream_parameters));
 	}
-	stop_callable.call();
+	stop();
 	stream = p_stream;
 	_update_stream_parameters();
 	if (stream.is_valid()) {
@@ -266,12 +253,12 @@ void AudioStreamPlayerInternal::set_stream(Ref<AudioStream> p_stream) {
 
 void AudioStreamPlayerInternal::seek(float p_seconds) {
 	if (is_playing()) {
-		stop_callable.call();
+		stop();
 		play_callable.call(p_seconds);
 	}
 }
 
-void AudioStreamPlayerInternal::stop_basic() {
+void AudioStreamPlayerInternal::stop() {
 	for (Ref<AudioStreamPlayback> &playback : stream_playbacks) {
 		AudioServer::get_singleton()->stop_playback_stream(playback);
 	}
@@ -302,7 +289,7 @@ void AudioStreamPlayerInternal::set_playing(bool p_enable) {
 	if (p_enable) {
 		play_callable.call(0.0);
 	} else {
-		stop_callable.call();
+		stop();
 	}
 }
 
@@ -352,10 +339,9 @@ StringName AudioStreamPlayerInternal::get_bus() const {
 	return SceneStringName(Master);
 }
 
-AudioStreamPlayerInternal::AudioStreamPlayerInternal(Node *p_node, const Callable &p_play_callable, const Callable &p_stop_callable, bool p_physical) {
+AudioStreamPlayerInternal::AudioStreamPlayerInternal(Node *p_node, const Callable &p_play_callable, bool p_physical) {
 	node = p_node;
 	play_callable = p_play_callable;
-	stop_callable = p_stop_callable;
 	physical = p_physical;
 	bus = SceneStringName(Master);
 

@@ -36,7 +36,7 @@
 using namespace RendererRD;
 
 #ifndef _MSC_VER
-#include <cwchar>
+#include <wchar.h>
 #define wcscpy_s wcscpy
 #endif
 
@@ -196,7 +196,7 @@ static FfxErrorCode destroy_backend_context_rd(FfxFsr2Interface *p_backend_inter
 	FSR2Context::Scratch &scratch = *reinterpret_cast<FSR2Context::Scratch *>(p_backend_interface->scratchBuffer);
 
 	for (uint32_t i = 0; i < FSR2_UBO_RING_BUFFER_SIZE; i++) {
-		RD::get_singleton()->free_rid(scratch.ubo_ring_buffer[i]);
+		RD::get_singleton()->free(scratch.ubo_ring_buffer[i]);
 	}
 
 	return FFX_OK;
@@ -216,7 +216,7 @@ static FfxErrorCode create_resource_rd(FfxFsr2Interface *p_backend_interface, co
 
 	if (res_desc.mipCount == 0) {
 		// Mipmap count must be derived from the resource's dimensions.
-		res_desc.mipCount = uint32_t(1 + std::floor(std::log2(MAX(MAX(res_desc.width, res_desc.height), res_desc.depth))));
+		res_desc.mipCount = uint32_t(1 + floor(log2(MAX(MAX(res_desc.width, res_desc.height), res_desc.depth))));
 	}
 
 	Vector<PackedByteArray> initial_data;
@@ -235,7 +235,6 @@ static FfxErrorCode create_resource_rd(FfxFsr2Interface *p_backend_interface, co
 	texture_format.height = res_desc.height;
 	texture_format.depth = res_desc.depth;
 	texture_format.mipmaps = res_desc.mipCount;
-	texture_format.is_discardable = true;
 
 	RID texture = rd->texture_create(texture_format, RD::TextureView(), initial_data);
 	ERR_FAIL_COND_V(texture.is_null(), FFX_ERROR_BACKEND_API_ERROR);
@@ -288,7 +287,7 @@ static FfxErrorCode destroy_resource_rd(FfxFsr2Interface *p_backend_interface, F
 	if (p_resource.internalIndex != -1) {
 		FSR2Context::Scratch &scratch = *reinterpret_cast<FSR2Context::Scratch *>(p_backend_interface->scratchBuffer);
 		if (scratch.resources.rids[p_resource.internalIndex].is_valid()) {
-			RD::get_singleton()->free_rid(scratch.resources.rids[p_resource.internalIndex]);
+			RD::get_singleton()->free(scratch.resources.rids[p_resource.internalIndex]);
 			scratch.resources.remove(p_resource.internalIndex);
 		}
 	}
@@ -394,9 +393,7 @@ static FfxErrorCode execute_gpu_job_compute_rd(FSR2Context::Scratch &p_scratch, 
 	FSR2Effect::Pipeline &backend_pipeline = *reinterpret_cast<FSR2Effect::Pipeline *>(p_job.pipeline.pipeline);
 	ERR_FAIL_COND_V(backend_pipeline.pipeline_rid.is_null(), FFX_ERROR_INVALID_ARGUMENT);
 
-	thread_local LocalVector<RD::Uniform> compute_uniforms;
-	compute_uniforms.clear();
-
+	Vector<RD::Uniform> compute_uniforms;
 	for (uint32_t i = 0; i < p_job.pipeline.srvCount; i++) {
 		RID texture_rid = p_scratch.resources.rids[p_job.srvs[i].internalIndex];
 		RD::Uniform texture_uniform(RD::UNIFORM_TYPE_TEXTURE, p_job.pipeline.srvResourceBindings[i].slotIndex, texture_rid);
@@ -515,13 +512,17 @@ FSR2Context::~FSR2Context() {
 
 FSR2Effect::FSR2Effect() {
 	FfxDeviceCapabilities &capabilities = device.capabilities;
+	uint64_t default_subgroup_size = RD::get_singleton()->limit_get(RD::LIMIT_SUBGROUP_SIZE);
 	capabilities.minimumSupportedShaderModel = FFX_SHADER_MODEL_5_1;
-	capabilities.waveLaneCountMin = 32;
-	capabilities.waveLaneCountMax = 32;
-	capabilities.fp16Supported = RD::get_singleton()->has_feature(RD::Features::SUPPORTS_HALF_FLOAT);
+	capabilities.waveLaneCountMin = RD::get_singleton()->limit_get(RD::LIMIT_SUBGROUP_MIN_SIZE);
+	capabilities.waveLaneCountMax = RD::get_singleton()->limit_get(RD::LIMIT_SUBGROUP_MAX_SIZE);
+	capabilities.fp16Supported = RD::get_singleton()->has_feature(RD::Features::SUPPORTS_FSR_HALF_FLOAT);
 	capabilities.raytracingSupported = false;
 
-	String general_defines =
+	bool force_wave_64 = default_subgroup_size == 32 && capabilities.waveLaneCountMax == 64;
+	bool use_lut = force_wave_64 || default_subgroup_size == 64;
+
+	String general_defines_base =
 			"\n#define FFX_GPU\n"
 			"\n#define FFX_GLSL 1\n"
 			"\n#define FFX_FSR2_OPTION_LOW_RESOLUTION_MOTION_VECTORS 1\n"
@@ -530,12 +531,17 @@ FSR2Effect::FSR2Effect() {
 			"\n#define FFX_FSR2_OPTION_GODOT_REACTIVE_MASK_CLAMP 1\n"
 			"\n#define FFX_FSR2_OPTION_GODOT_DERIVE_INVALID_MOTION_VECTORS 1\n";
 
-	Vector<String> modes_single;
-	modes_single.push_back("");
+	if (use_lut) {
+		general_defines_base += "\n#define FFX_FSR2_OPTION_REPROJECT_USE_LANCZOS_TYPE 1\n";
+	}
 
-	Vector<String> modes_with_fp16;
-	modes_with_fp16.push_back("");
-	modes_with_fp16.push_back("\n#define FFX_HALF 1\n");
+	String general_defines = general_defines_base;
+	if (capabilities.fp16Supported) {
+		general_defines += "\n#define FFX_HALF 1\n";
+	}
+
+	Vector<String> modes;
+	modes.push_back("");
 
 	// Since Godot currently lacks a shader reflection mechanism to persist the name of the bindings in the shader cache and
 	// there's also no mechanism to compile the shaders offline, the bindings are created manually by looking at the GLSL
@@ -548,9 +554,8 @@ FSR2Effect::FSR2Effect() {
 	{
 		Pass &pass = device.passes[FFX_FSR2_PASS_DEPTH_CLIP];
 		pass.shader = &shaders.depth_clip;
-		pass.shader->initialize(modes_with_fp16, general_defines);
+		pass.shader->initialize(modes, general_defines);
 		pass.shader_version = pass.shader->version_create();
-		pass.shader_variant = capabilities.fp16Supported ? 1 : 0;
 
 		pass.sampled_bindings = {
 			FfxResourceBinding{ 0, 0, L"r_reconstructed_previous_nearest_depth" },
@@ -579,9 +584,8 @@ FSR2Effect::FSR2Effect() {
 	{
 		Pass &pass = device.passes[FFX_FSR2_PASS_RECONSTRUCT_PREVIOUS_DEPTH];
 		pass.shader = &shaders.reconstruct_previous_depth;
-		pass.shader->initialize(modes_with_fp16, general_defines);
+		pass.shader->initialize(modes, general_defines);
 		pass.shader_version = pass.shader->version_create();
-		pass.shader_variant = capabilities.fp16Supported ? 1 : 0;
 
 		pass.sampled_bindings = {
 			FfxResourceBinding{ 0, 0, L"r_input_motion_vectors" },
@@ -609,9 +613,8 @@ FSR2Effect::FSR2Effect() {
 	{
 		Pass &pass = device.passes[FFX_FSR2_PASS_LOCK];
 		pass.shader = &shaders.lock;
-		pass.shader->initialize(modes_with_fp16, general_defines);
+		pass.shader->initialize(modes, general_defines);
 		pass.shader_version = pass.shader->version_create();
-		pass.shader_variant = capabilities.fp16Supported ? 1 : 0;
 
 		pass.sampled_bindings = {
 			FfxResourceBinding{ 0, 0, L"r_lock_input_luma" }
@@ -628,19 +631,22 @@ FSR2Effect::FSR2Effect() {
 	}
 
 	{
-		Vector<String> accumulate_modes_with_fp16;
-		accumulate_modes_with_fp16.push_back("\n");
-		accumulate_modes_with_fp16.push_back("\n#define FFX_FSR2_OPTION_APPLY_SHARPENING 1\n");
-		accumulate_modes_with_fp16.push_back("\n#define FFX_HALF 1\n");
-		accumulate_modes_with_fp16.push_back("\n#define FFX_HALF 1\n#define FFX_FSR2_OPTION_APPLY_SHARPENING 1\n");
+		Vector<String> accumulate_modes;
+		accumulate_modes.push_back("\n");
+		accumulate_modes.push_back("\n#define FFX_FSR2_OPTION_APPLY_SHARPENING 1\n");
 
-		// Workaround: Disable FP16 path for the accumulate pass on NVIDIA due to reduced occupancy and high VRAM throughput.
-		const bool fp16_path_supported = RD::get_singleton()->get_device_vendor_name() != "NVIDIA";
+		String general_defines_accumulate;
+		if (RD::get_singleton()->get_device_vendor_name() == "NVIDIA") {
+			// Workaround: Disable FP16 path for the accumulate pass on NVIDIA due to reduced occupancy and high VRAM throughput.
+			general_defines_accumulate = general_defines_base;
+		} else {
+			general_defines_accumulate = general_defines;
+		}
+
 		Pass &pass = device.passes[FFX_FSR2_PASS_ACCUMULATE];
 		pass.shader = &shaders.accumulate;
-		pass.shader->initialize(accumulate_modes_with_fp16, general_defines);
+		pass.shader->initialize(accumulate_modes, general_defines_accumulate);
 		pass.shader_version = pass.shader->version_create();
-		pass.shader_variant = capabilities.fp16Supported && fp16_path_supported ? 2 : 0;
 
 		pass.sampled_bindings = {
 			FfxResourceBinding{ 0, 0, L"r_input_exposure" },
@@ -670,16 +676,16 @@ FSR2Effect::FSR2Effect() {
 			FfxResourceBinding{ 18, 0, L"cbFSR2" }
 		};
 
-		// Sharpen pass is a clone of the accumulate pass with the sharpening variant.
+		// Sharpen pass is a clone of the accumulate pass.
 		Pass &sharpen_pass = device.passes[FFX_FSR2_PASS_ACCUMULATE_SHARPEN];
 		sharpen_pass = pass;
-		sharpen_pass.shader_variant = pass.shader_variant + 1;
+		sharpen_pass.shader_variant = 1;
 	}
 
 	{
 		Pass &pass = device.passes[FFX_FSR2_PASS_RCAS];
 		pass.shader = &shaders.rcas;
-		pass.shader->initialize(modes_single, general_defines);
+		pass.shader->initialize(modes, general_defines_base);
 		pass.shader_version = pass.shader->version_create();
 
 		pass.sampled_bindings = {
@@ -700,7 +706,7 @@ FSR2Effect::FSR2Effect() {
 	{
 		Pass &pass = device.passes[FFX_FSR2_PASS_COMPUTE_LUMINANCE_PYRAMID];
 		pass.shader = &shaders.compute_luminance_pyramid;
-		pass.shader->initialize(modes_single, general_defines);
+		pass.shader->initialize(modes, general_defines_base);
 		pass.shader_version = pass.shader->version_create();
 
 		pass.sampled_bindings = {
@@ -723,9 +729,8 @@ FSR2Effect::FSR2Effect() {
 	{
 		Pass &pass = device.passes[FFX_FSR2_PASS_GENERATE_REACTIVE];
 		pass.shader = &shaders.autogen_reactive;
-		pass.shader->initialize(modes_with_fp16, general_defines);
+		pass.shader->initialize(modes, general_defines);
 		pass.shader_version = pass.shader->version_create();
-		pass.shader_variant = capabilities.fp16Supported ? 1 : 0;
 
 		pass.sampled_bindings = {
 			FfxResourceBinding{ 0, 0, L"r_input_opaque_only" },
@@ -745,9 +750,8 @@ FSR2Effect::FSR2Effect() {
 	{
 		Pass &pass = device.passes[FFX_FSR2_PASS_TCR_AUTOGENERATE];
 		pass.shader = &shaders.tcr_autogen;
-		pass.shader->initialize(modes_with_fp16, general_defines);
+		pass.shader->initialize(modes, general_defines);
 		pass.shader_version = pass.shader->version_create();
-		pass.shader_variant = capabilities.fp16Supported ? 1 : 0;
 
 		pass.sampled_bindings = {
 			FfxResourceBinding{ 0, 0, L"r_input_opaque_only" },
@@ -792,10 +796,13 @@ FSR2Effect::FSR2Effect() {
 }
 
 FSR2Effect::~FSR2Effect() {
-	RD::get_singleton()->free_rid(device.point_clamp_sampler);
-	RD::get_singleton()->free_rid(device.linear_clamp_sampler);
+	RD::get_singleton()->free(device.point_clamp_sampler);
+	RD::get_singleton()->free(device.linear_clamp_sampler);
 
 	for (uint32_t i = 0; i < FFX_FSR2_PASS_COUNT; i++) {
+		if (device.passes[i].pipeline.pipeline_rid.is_valid()) {
+			RD::get_singleton()->free(device.passes[i].pipeline.pipeline_rid);
+		}
 		device.passes[i].shader->version_free(device.passes[i].shader_version);
 	}
 }

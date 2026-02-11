@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef PAGED_ALLOCATOR_H
+#define PAGED_ALLOCATOR_H
 
 #include "core/core_globals.h"
 #include "core/os/memory.h"
@@ -37,7 +38,7 @@
 #include "core/typedefs.h"
 
 #include <type_traits>
-#include <typeinfo> // IWYU pragma: keep // Used in macro.
+#include <typeinfo>
 
 template <typename T, bool thread_safe = false, uint32_t DEFAULT_PAGE_SIZE = 4096>
 class PagedAllocator {
@@ -54,7 +55,7 @@ class PagedAllocator {
 public:
 	template <typename... Args>
 	T *alloc(Args &&...p_args) {
-		if constexpr (thread_safe) {
+		if (thread_safe) {
 			spin_lock.lock();
 		}
 		if (unlikely(allocs_available == 0)) {
@@ -75,7 +76,7 @@ public:
 
 		allocs_available--;
 		T *alloc = available_pool[allocs_available >> page_shift][allocs_available & page_mask];
-		if constexpr (thread_safe) {
+		if (thread_safe) {
 			spin_lock.unlock();
 		}
 		memnew_placement(alloc, T(p_args...));
@@ -83,13 +84,13 @@ public:
 	}
 
 	void free(T *p_mem) {
-		if constexpr (thread_safe) {
+		if (thread_safe) {
 			spin_lock.lock();
 		}
 		p_mem->~T();
 		available_pool[allocs_available >> page_shift][allocs_available & page_mask] = p_mem;
 		allocs_available++;
-		if constexpr (thread_safe) {
+		if (thread_safe) {
 			spin_lock.unlock();
 		}
 	}
@@ -119,28 +120,28 @@ private:
 
 public:
 	void reset(bool p_allow_unfreed = false) {
-		if constexpr (thread_safe) {
+		if (thread_safe) {
 			spin_lock.lock();
 		}
 		_reset(p_allow_unfreed);
-		if constexpr (thread_safe) {
+		if (thread_safe) {
 			spin_lock.unlock();
 		}
 	}
 
 	bool is_configured() const {
-		if constexpr (thread_safe) {
+		if (thread_safe) {
 			spin_lock.lock();
 		}
 		bool result = page_size > 0;
-		if constexpr (thread_safe) {
+		if (thread_safe) {
 			spin_lock.unlock();
 		}
 		return result;
 	}
 
 	void configure(uint32_t p_page_size) {
-		if constexpr (thread_safe) {
+		if (thread_safe) {
 			spin_lock.lock();
 		}
 		ERR_FAIL_COND(page_pool != nullptr); // Safety check.
@@ -148,7 +149,7 @@ public:
 		page_size = nearest_power_of_2_templated(p_page_size);
 		page_mask = page_size - 1;
 		page_shift = get_shift_from_power_of_2(page_size);
-		if constexpr (thread_safe) {
+		if (thread_safe) {
 			spin_lock.unlock();
 		}
 	}
@@ -160,7 +161,7 @@ public:
 	}
 
 	~PagedAllocator() {
-		if constexpr (thread_safe) {
+		if (thread_safe) {
 			spin_lock.lock();
 		}
 		bool leaked = allocs_available < pages_allocated * page_size;
@@ -171,8 +172,10 @@ public:
 		} else {
 			_reset(false);
 		}
-		if constexpr (thread_safe) {
+		if (thread_safe) {
 			spin_lock.unlock();
 		}
 	}
 };
+
+#endif // PAGED_ALLOCATOR_H

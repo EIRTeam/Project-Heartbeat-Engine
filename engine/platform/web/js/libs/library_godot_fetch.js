@@ -59,12 +59,7 @@ const GodotFetch = {
 			});
 			obj.status = response.status;
 			obj.response = response;
-			// `body` can be null per spec (for example, in cases where the request method is HEAD).
-			// As of the time of writing, Chromium (127.0.6533.72) does not follow the spec but Firefox (131.0.3) does.
-			// See godotengine/godot#76825 for more information.
-			// See Chromium revert (of the change to follow the spec):
-			// https://chromium.googlesource.com/chromium/src/+/135354b7bdb554cd03c913af7c90aceead03c4d4
-			obj.reader = response.body?.getReader();
+			obj.reader = response.body.getReader();
 			obj.chunked = chunked;
 		},
 
@@ -126,10 +121,6 @@ const GodotFetch = {
 				}
 				obj.reading = true;
 				obj.reader.read().then(GodotFetch.onread.bind(null, id)).catch(GodotFetch.onerror.bind(null, id));
-			} else if (obj.reader == null && obj.response.body == null) {
-				// Emulate a stream closure to maintain the request lifecycle.
-				obj.reading = true;
-				GodotFetch.onread(id, { value: undefined, done: true });
 			}
 		},
 	},
@@ -168,10 +159,7 @@ const GodotFetch = {
 		if (!obj.response) {
 			return 0;
 		}
-		// If the reader is nullish, but there is no body, and the request is not marked as done,
-		// the same status should be returned as though the request is currently being read
-		// so that the proper lifecycle closure can be handled in `read()`.
-		if (obj.reader || (obj.response.body == null && !obj.done)) {
+		if (obj.reader) {
 			return 1;
 		}
 		if (obj.done) {

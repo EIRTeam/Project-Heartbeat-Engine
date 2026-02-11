@@ -38,14 +38,13 @@
 #include "drivers/unix/dir_access_unix.h"
 #include "drivers/unix/file_access_unix.h"
 #include "drivers/unix/file_access_unix_pipe.h"
-#include "drivers/unix/net_socket_unix.h"
+#include "drivers/unix/net_socket_posix.h"
 #include "drivers/unix/thread_posix.h"
-#include "servers/rendering/rendering_server.h"
+#include "servers/rendering_server.h"
 
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
 #include <mach/host_info.h>
-#include <mach/mach.h>
 #include <mach/mach_host.h>
 #include <mach/mach_time.h>
 #include <sys/sysctl.h>
@@ -70,18 +69,18 @@
 #endif
 
 #include <dlfcn.h>
+#include <errno.h>
 #include <poll.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/resource.h>
-#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
-#include <cerrno>
-#include <csignal>
-#include <cstdarg>
-#include <cstdio>
-#include <cstdlib>
-#include <ctime>
 
 #ifndef RTLD_DEEPBIND
 #define RTLD_DEEPBIND 0
@@ -132,8 +131,6 @@ static void _setup_clock() {
 }
 #endif
 
-struct sigaction old_action;
-
 static void handle_interrupt(int sig) {
 	if (!EngineDebugger::is_active()) {
 		return;
@@ -141,11 +138,6 @@ static void handle_interrupt(int sig) {
 
 	EngineDebugger::get_script_debugger()->set_depth(-1);
 	EngineDebugger::get_script_debugger()->set_lines_left(1);
-
-	// Ensure we call the old action if it was configured.
-	if (old_action.sa_handler && old_action.sa_handler != SIG_IGN && old_action.sa_handler != SIG_DFL) {
-		old_action.sa_handler(sig);
-	}
 }
 
 void OS_Unix::initialize_debugging() {
@@ -153,7 +145,7 @@ void OS_Unix::initialize_debugging() {
 		struct sigaction action;
 		memset(&action, 0, sizeof(action));
 		action.sa_handler = handle_interrupt;
-		sigaction(SIGINT, &action, &old_action);
+		sigaction(SIGINT, &action, nullptr);
 	}
 }
 
@@ -174,10 +166,8 @@ void OS_Unix::initialize_core() {
 	DirAccess::make_default<DirAccessUnix>(DirAccess::ACCESS_USERDATA);
 	DirAccess::make_default<DirAccessUnix>(DirAccess::ACCESS_FILESYSTEM);
 
-#ifndef UNIX_SOCKET_UNAVAILABLE
-	NetSocketUnix::make_default();
+	NetSocketPosix::make_default();
 	IPUnix::make_default();
-#endif
 	process_map = memnew((HashMap<ProcessID, ProcessInfo>));
 
 	_setup_clock();
@@ -185,96 +175,16 @@ void OS_Unix::initialize_core() {
 
 void OS_Unix::finalize_core() {
 	memdelete(process_map);
-#ifndef UNIX_SOCKET_UNAVAILABLE
-	NetSocketUnix::cleanup();
-#endif
+	NetSocketPosix::cleanup();
 }
 
 Vector<String> OS_Unix::get_video_adapter_driver_info() const {
 	return Vector<String>();
 }
 
-String OS_Unix::get_stdin_string(int64_t p_buffer_size) {
-	Vector<uint8_t> data;
-	data.resize(p_buffer_size);
-	if (fgets((char *)data.ptrw(), data.size(), stdin)) {
-		return String::utf8((char *)data.ptr()).replace("\r\n", "\n").rstrip("\n");
-	}
-	return String();
-}
-
-PackedByteArray OS_Unix::get_stdin_buffer(int64_t p_buffer_size) {
-	Vector<uint8_t> data;
-	data.resize(p_buffer_size);
-	size_t sz = fread((void *)data.ptrw(), 1, data.size(), stdin);
-	if (sz > 0) {
-		data.resize(sz);
-		return data;
-	}
-	return PackedByteArray();
-}
-
-OS_Unix::StdHandleType OS_Unix::get_stdin_type() const {
-	int h = fileno(stdin);
-	if (h == -1) {
-		return STD_HANDLE_INVALID;
-	}
-
-	if (isatty(h)) {
-		return STD_HANDLE_CONSOLE;
-	}
-	struct stat statbuf;
-	if (fstat(h, &statbuf) < 0) {
-		return STD_HANDLE_UNKNOWN;
-	}
-	if (S_ISFIFO(statbuf.st_mode)) {
-		return STD_HANDLE_PIPE;
-	} else if (S_ISREG(statbuf.st_mode) || S_ISLNK(statbuf.st_mode)) {
-		return STD_HANDLE_FILE;
-	}
-	return STD_HANDLE_UNKNOWN;
-}
-
-OS_Unix::StdHandleType OS_Unix::get_stdout_type() const {
-	int h = fileno(stdout);
-	if (h == -1) {
-		return STD_HANDLE_INVALID;
-	}
-
-	if (isatty(h)) {
-		return STD_HANDLE_CONSOLE;
-	}
-	struct stat statbuf;
-	if (fstat(h, &statbuf) < 0) {
-		return STD_HANDLE_UNKNOWN;
-	}
-	if (S_ISFIFO(statbuf.st_mode)) {
-		return STD_HANDLE_PIPE;
-	} else if (S_ISREG(statbuf.st_mode) || S_ISLNK(statbuf.st_mode)) {
-		return STD_HANDLE_FILE;
-	}
-	return STD_HANDLE_UNKNOWN;
-}
-
-OS_Unix::StdHandleType OS_Unix::get_stderr_type() const {
-	int h = fileno(stderr);
-	if (h == -1) {
-		return STD_HANDLE_INVALID;
-	}
-
-	if (isatty(h)) {
-		return STD_HANDLE_CONSOLE;
-	}
-	struct stat statbuf;
-	if (fstat(h, &statbuf) < 0) {
-		return STD_HANDLE_UNKNOWN;
-	}
-	if (S_ISFIFO(statbuf.st_mode)) {
-		return STD_HANDLE_PIPE;
-	} else if (S_ISREG(statbuf.st_mode) || S_ISLNK(statbuf.st_mode)) {
-		return STD_HANDLE_FILE;
-	}
-	return STD_HANDLE_UNKNOWN;
+String OS_Unix::get_stdin_string() {
+	char buff[1024];
+	return String::utf8(fgets(buff, 1024, stdin));
 }
 
 Error OS_Unix::get_entropy(uint8_t *r_buffer, int p_bytes) {
@@ -313,10 +223,6 @@ String OS_Unix::get_distribution_name() const {
 
 String OS_Unix::get_version() const {
 	return "";
-}
-
-String OS_Unix::get_temp_path() const {
-	return "/tmp";
 }
 
 double OS_Unix::get_unix_time() const {
@@ -410,8 +316,14 @@ Dictionary OS_Unix::get_memory_info() const {
 	meminfo["stack"] = -1;
 
 #if defined(__APPLE__)
+	int pagesize = 0;
+	size_t len = sizeof(pagesize);
+	if (sysctlbyname("vm.pagesize", &pagesize, &len, nullptr, 0) < 0) {
+		ERR_PRINT(vformat("Could not get vm.pagesize, error code: %d - %s", errno, strerror(errno)));
+	}
+
 	int64_t phy_mem = 0;
-	size_t len = sizeof(phy_mem);
+	len = sizeof(phy_mem);
 	if (sysctlbyname("hw.memsize", &phy_mem, &len, nullptr, 0) < 0) {
 		ERR_PRINT(vformat("Could not get hw.memsize, error code: %d - %s", errno, strerror(errno)));
 	}
@@ -421,30 +333,21 @@ Dictionary OS_Unix::get_memory_info() const {
 	if (host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t)&vmstat, &count) != KERN_SUCCESS) {
 		ERR_PRINT("Could not get host vm statistics.");
 	}
-	int64_t used = (vmstat.active_count + vmstat.inactive_count + vmstat.speculative_count + vmstat.wire_count + vmstat.compressor_page_count - vmstat.purgeable_count - vmstat.external_page_count) * (int64_t)vm_page_size;
-
-#if !defined(APPLE_EMBEDDED_ENABLED)
-	struct xsw_usage swap_used = {};
+	struct xsw_usage swap_used;
 	len = sizeof(swap_used);
 	if (sysctlbyname("vm.swapusage", &swap_used, &len, nullptr, 0) < 0) {
 		ERR_PRINT(vformat("Could not get vm.swapusage, error code: %d - %s", errno, strerror(errno)));
 	}
-#endif
 
 	if (phy_mem != 0) {
 		meminfo["physical"] = phy_mem;
 	}
-	if (used != 0) {
-		meminfo["free"] = phy_mem - used;
+	if (vmstat.free_count * (int64_t)pagesize != 0) {
+		meminfo["free"] = vmstat.free_count * (int64_t)pagesize;
 	}
-#if defined(APPLE_EMBEDDED_ENABLED)
-	meminfo["available"] = meminfo["free"];
-#else
-	if (swap_used.xsu_avail + (phy_mem - used) != 0) {
-		meminfo["available"] = swap_used.xsu_avail + (phy_mem - used);
+	if (swap_used.xsu_avail + vmstat.free_count * (int64_t)pagesize != 0) {
+		meminfo["available"] = swap_used.xsu_avail + vmstat.free_count * (int64_t)pagesize;
 	}
-#endif
-
 #elif defined(__FreeBSD__)
 	int pagesize = 0;
 	size_t len = sizeof(pagesize);
@@ -590,127 +493,7 @@ Dictionary OS_Unix::get_memory_info() const {
 	return meminfo;
 }
 
-#if !defined(__GLIBC__) && !defined(WEB_ENABLED)
-void OS_Unix::_load_iconv() {
-#if defined(MACOS_ENABLED) || defined(IOS_ENABLED)
-	String iconv_lib_aliases[] = { "/usr/lib/libiconv.2.dylib" };
-	String iconv_func_aliases[] = { "iconv" };
-	String charset_lib_aliases[] = { "/usr/lib/libcharset.1.dylib" };
-#else
-	String iconv_lib_aliases[] = { "", "libiconv.2.so", "libiconv.so" };
-	String iconv_func_aliases[] = { "libiconv", "iconv", "bsd_iconv", "rpl_iconv" };
-	String charset_lib_aliases[] = { "", "libcharset.1.so", "libcharset.so" };
-#endif
-
-	for (size_t i = 0; i < sizeof(iconv_lib_aliases) / sizeof(iconv_lib_aliases[0]); i++) {
-		void *iconv_lib = iconv_lib_aliases[i].is_empty() ? RTLD_NEXT : dlopen(iconv_lib_aliases[i].utf8().get_data(), RTLD_NOW);
-		if (iconv_lib) {
-			for (size_t j = 0; j < sizeof(iconv_func_aliases) / sizeof(iconv_func_aliases[0]); j++) {
-				gd_iconv_open = (PIConvOpen)dlsym(iconv_lib, (iconv_func_aliases[j] + "_open").utf8().get_data());
-				gd_iconv = (PIConv)dlsym(iconv_lib, (iconv_func_aliases[j]).utf8().get_data());
-				gd_iconv_close = (PIConvClose)dlsym(iconv_lib, (iconv_func_aliases[j] + "_close").utf8().get_data());
-				if (gd_iconv_open && gd_iconv && gd_iconv_close) {
-					break;
-				}
-			}
-			if (gd_iconv_open && gd_iconv && gd_iconv_close) {
-				break;
-			}
-			if (!iconv_lib_aliases[i].is_empty()) {
-				dlclose(iconv_lib);
-			}
-		}
-	}
-
-	for (size_t i = 0; i < sizeof(charset_lib_aliases) / sizeof(charset_lib_aliases[0]); i++) {
-		void *cs_lib = charset_lib_aliases[i].is_empty() ? RTLD_NEXT : dlopen(charset_lib_aliases[i].utf8().get_data(), RTLD_NOW);
-		if (cs_lib) {
-			gd_locale_charset = (PIConvLocaleCharset)dlsym(cs_lib, "locale_charset");
-			if (gd_locale_charset) {
-				break;
-			}
-			if (!charset_lib_aliases[i].is_empty()) {
-				dlclose(cs_lib);
-			}
-		}
-	}
-	_iconv_ok = gd_iconv_open && gd_iconv && gd_iconv_close && gd_locale_charset;
-}
-#endif
-
-String OS_Unix::multibyte_to_string(const String &p_encoding, const PackedByteArray &p_array) const {
-	ERR_FAIL_COND_V_MSG(!_iconv_ok, String(), "Conversion failed: Unable to load libiconv");
-
-	LocalVector<char> chars;
-#if defined(__GLIBC__) || defined(WEB_ENABLED)
-	gd_iconv_t ctx = gd_iconv_open("UTF-8", p_encoding.is_empty() ? nl_langinfo(CODESET) : p_encoding.utf8().get_data());
-#else
-	gd_iconv_t ctx = gd_iconv_open("UTF-8", p_encoding.is_empty() ? gd_locale_charset() : p_encoding.utf8().get_data());
-#endif
-	ERR_FAIL_COND_V_MSG(ctx == (gd_iconv_t)(-1), String(), "Conversion failed: Unknown encoding");
-
-	char *in_ptr = (char *)p_array.ptr();
-	size_t in_size = p_array.size();
-
-	chars.resize(in_size);
-	char *out_ptr = (char *)chars.ptr();
-	size_t out_size = chars.size();
-
-	while (gd_iconv(ctx, &in_ptr, &in_size, &out_ptr, &out_size) == (size_t)-1) {
-		if (errno != E2BIG) {
-			gd_iconv_close(ctx);
-			ERR_FAIL_V_MSG(String(), vformat("Conversion failed: %d - %s", errno, strerror(errno)));
-		}
-		int64_t rate = (chars.size()) / (p_array.size() - in_size);
-		size_t oldpos = chars.size() - out_size;
-		chars.resize(chars.size() + in_size * rate);
-		out_ptr = (char *)chars.ptr() + oldpos;
-		out_size = chars.size() - oldpos;
-	}
-	chars.resize(chars.size() - out_size);
-	gd_iconv_close(ctx);
-
-	return String::utf8((const char *)chars.ptr(), chars.size());
-}
-
-PackedByteArray OS_Unix::string_to_multibyte(const String &p_encoding, const String &p_string) const {
-	ERR_FAIL_COND_V_MSG(!_iconv_ok, PackedByteArray(), "Conversion failed: Unable to load libiconv");
-
-	CharString charstr = p_string.utf8();
-
-	PackedByteArray ret;
-#if defined(__GLIBC__) || defined(WEB_ENABLED)
-	gd_iconv_t ctx = gd_iconv_open(p_encoding.is_empty() ? nl_langinfo(CODESET) : p_encoding.utf8().get_data(), "UTF-8");
-#else
-	gd_iconv_t ctx = gd_iconv_open(p_encoding.is_empty() ? gd_locale_charset() : p_encoding.utf8().get_data(), "UTF-8");
-#endif
-	ERR_FAIL_COND_V_MSG(ctx == (gd_iconv_t)(-1), PackedByteArray(), "Conversion failed: Unknown encoding");
-
-	char *in_ptr = (char *)charstr.ptr();
-	size_t in_size = charstr.size();
-
-	ret.resize(in_size);
-	char *out_ptr = (char *)ret.ptrw();
-	size_t out_size = ret.size();
-
-	while (gd_iconv(ctx, &in_ptr, &in_size, &out_ptr, &out_size) == (size_t)-1) {
-		if (errno != E2BIG) {
-			gd_iconv_close(ctx);
-			ERR_FAIL_V_MSG(PackedByteArray(), vformat("Conversion failed: %d - %s", errno, strerror(errno)));
-		}
-		int64_t rate = (ret.size()) / (charstr.size() - in_size);
-		size_t oldpos = ret.size() - out_size;
-		ret.resize(ret.size() + in_size * rate);
-		out_ptr = (char *)ret.ptrw() + oldpos;
-		out_size = ret.size() - oldpos;
-	}
-	ret.resize(ret.size() - out_size);
-	gd_iconv_close(ctx);
-
-	return ret;
-}
-
-Dictionary OS_Unix::execute_with_pipe(const String &p_path, const List<String> &p_arguments, bool p_blocking) {
+Dictionary OS_Unix::execute_with_pipe(const String &p_path, const List<String> &p_arguments) {
 #define CLEAN_PIPES           \
 	if (pipe_in[0] >= 0) {    \
 		::close(pipe_in[0]);  \
@@ -760,11 +543,6 @@ Dictionary OS_Unix::execute_with_pipe(const String &p_path, const List<String> &
 	}
 
 	if (pid == 0) {
-		// The new process
-		// Create a new session-ID so parent won't wait for it.
-		// This ensures the process won't go zombie at the end.
-		setsid();
-
 		// The child process.
 		Vector<CharString> cs;
 		cs.push_back(p_path.utf8());
@@ -800,11 +578,11 @@ Dictionary OS_Unix::execute_with_pipe(const String &p_path, const List<String> &
 
 	Ref<FileAccessUnixPipe> main_pipe;
 	main_pipe.instantiate();
-	main_pipe->open_existing(pipe_out[0], pipe_in[1], p_blocking);
+	main_pipe->open_existing(pipe_out[0], pipe_in[1]);
 
 	Ref<FileAccessUnixPipe> err_pipe;
 	err_pipe.instantiate();
-	err_pipe->open_existing(pipe_err[0], -1, p_blocking);
+	err_pipe->open_existing(pipe_err[0], 0);
 
 	ProcessInfo pi;
 	process_map_mutex.lock();
@@ -818,62 +596,6 @@ Dictionary OS_Unix::execute_with_pipe(const String &p_path, const List<String> &
 #undef CLEAN_PIPES
 	return ret;
 #endif
-}
-
-int OS_Unix::_wait_for_pid_completion(const pid_t p_pid, int *r_status, int p_options, pid_t *r_pid) {
-	while (true) {
-		pid_t pid = waitpid(p_pid, r_status, p_options);
-		if (pid != -1) {
-			// When `p_options` has `WNOHANG`, 0 can be returned if the process is still running.
-			if (r_pid) {
-				*r_pid = pid;
-			}
-			return 0;
-		}
-		const int error = errno;
-		if (error == EINTR) {
-			// We're in a debugger, should call waitpid again.
-			// See https://stackoverflow.com/a/45472920/730797.
-			continue;
-		}
-		return error;
-	}
-}
-
-bool OS_Unix::_check_pid_is_running(const pid_t p_pid, int *r_status) const {
-	const ProcessInfo *pi = process_map->getptr(p_pid);
-
-	if (pi && !pi->is_running) {
-		// Can return cached value.
-		if (r_status) {
-			*r_status = pi->exit_code;
-		}
-		return false;
-	}
-
-	pid_t pid = -1;
-	int status = 0;
-	const int result = _wait_for_pid_completion(p_pid, &status, WNOHANG, &pid);
-	if (result == 0 && pid == 0) {
-		// Thread is still running.
-		return true;
-	}
-
-	ERR_FAIL_COND_V_MSG(result != 0, false, vformat("Thread %d exited with errno: %d", (int)p_pid, errno));
-
-	// Thread exited normally.
-	status = WIFEXITED(status) ? WEXITSTATUS(status) : status;
-
-	if (pi) {
-		pi->is_running = false;
-		pi->exit_code = status;
-	}
-
-	if (r_status) {
-		*r_status = status;
-	}
-
-	return false;
 }
 
 Error OS_Unix::execute(const String &p_path, const List<String> &p_arguments, String *r_pipe, int *r_exitcode, bool read_stderr, Mutex *p_pipe_mutex, bool p_open_console) {
@@ -901,7 +623,7 @@ Error OS_Unix::execute(const String &p_path, const List<String> &p_arguments, St
 				p_pipe_mutex->lock();
 			}
 			String pipe_out;
-			if (pipe_out.append_utf8(buf) == OK) {
+			if (pipe_out.parse_utf8(buf) == OK) {
 				(*r_pipe) += pipe_out;
 			} else {
 				(*r_pipe) += String(buf); // If not valid UTF-8 try decode as Latin-1
@@ -941,12 +663,12 @@ Error OS_Unix::execute(const String &p_path, const List<String> &p_arguments, St
 		raise(SIGKILL);
 	}
 
-	int status = 0;
-	const int result = _wait_for_pid_completion(pid, &status, 0);
+	int status;
+	waitpid(pid, &status, 0);
 	if (r_exitcode) {
 		*r_exitcode = WIFEXITED(status) ? WEXITSTATUS(status) : status;
 	}
-	return result ? FAILED : OK;
+	return OK;
 #endif
 }
 
@@ -1000,7 +722,7 @@ Error OS_Unix::kill(const ProcessID &p_pid) {
 	if (!ret) {
 		//avoid zombie process
 		int st;
-		_wait_for_pid_completion(p_pid, &st, 0);
+		::waitpid(p_pid, &st, 0);
 	}
 	return ret ? ERR_INVALID_PARAMETER : OK;
 }
@@ -1011,19 +733,42 @@ int OS_Unix::get_process_id() const {
 
 bool OS_Unix::is_process_running(const ProcessID &p_pid) const {
 	MutexLock lock(process_map_mutex);
-	return _check_pid_is_running(p_pid, nullptr);
+	const ProcessInfo *pi = process_map->getptr(p_pid);
+
+	if (pi && !pi->is_running) {
+		return false;
+	}
+
+	int status = 0;
+	if (waitpid(p_pid, &status, WNOHANG) != 0) {
+		if (pi) {
+			pi->is_running = false;
+			pi->exit_code = status;
+		}
+		return false;
+	}
+
+	return true;
 }
 
 int OS_Unix::get_process_exit_code(const ProcessID &p_pid) const {
 	MutexLock lock(process_map_mutex);
+	const ProcessInfo *pi = process_map->getptr(p_pid);
 
-	int exit_code = 0;
-	if (_check_pid_is_running(p_pid, &exit_code)) {
-		// Thread is still running
-		return -1;
+	if (pi && !pi->is_running) {
+		return pi->exit_code;
 	}
 
-	return exit_code;
+	int status = 0;
+	if (waitpid(p_pid, &status, WNOHANG) != 0) {
+		status = WIFEXITED(status) ? WEXITSTATUS(status) : status;
+		if (pi) {
+			pi->is_running = false;
+			pi->exit_code = status;
+		}
+		return status;
+	}
+	return -1;
 }
 
 String OS_Unix::get_locale() const {
@@ -1032,7 +777,7 @@ String OS_Unix::get_locale() const {
 	}
 
 	String locale = get_environment("LANG");
-	int tp = locale.find_char('.');
+	int tp = locale.find(".");
 	if (tp != -1) {
 		locale = locale.substr(0, tp);
 	}
@@ -1100,16 +845,6 @@ Error OS_Unix::set_cwd(const String &p_cwd) {
 	return OK;
 }
 
-String OS_Unix::get_cwd() const {
-	String dir;
-	char real_current_dir_name[2048];
-	ERR_FAIL_NULL_V(getcwd(real_current_dir_name, 2048), ".");
-	if (dir.append_utf8(real_current_dir_name) != OK) {
-		dir = real_current_dir_name;
-	}
-	return dir;
-}
-
 bool OS_Unix::has_environment(const String &p_var) const {
 	return getenv(p_var.utf8().get_data()) != nullptr;
 }
@@ -1120,36 +855,50 @@ String OS_Unix::get_environment(const String &p_var) const {
 		return "";
 	}
 	String s;
-	if (s.append_utf8(val) == OK) {
+	if (s.parse_utf8(val) == OK) {
 		return s;
 	}
 	return String(val); // Not valid UTF-8, so return as-is
 }
 
 void OS_Unix::set_environment(const String &p_var, const String &p_value) const {
-	ERR_FAIL_COND_MSG(p_var.is_empty() || p_var.contains_char('='), vformat("Invalid environment variable name '%s', cannot be empty or include '='.", p_var));
+	ERR_FAIL_COND_MSG(p_var.is_empty() || p_var.contains("="), vformat("Invalid environment variable name '%s', cannot be empty or include '='.", p_var));
 	int err = setenv(p_var.utf8().get_data(), p_value.utf8().get_data(), /* overwrite: */ 1);
 	ERR_FAIL_COND_MSG(err != 0, vformat("Failed setting environment variable '%s', the system is out of memory.", p_var));
 }
 
 void OS_Unix::unset_environment(const String &p_var) const {
-	ERR_FAIL_COND_MSG(p_var.is_empty() || p_var.contains_char('='), vformat("Invalid environment variable name '%s', cannot be empty or include '='.", p_var));
+	ERR_FAIL_COND_MSG(p_var.is_empty() || p_var.contains("="), vformat("Invalid environment variable name '%s', cannot be empty or include '='.", p_var));
 	unsetenv(p_var.utf8().get_data());
 }
 
-String OS_Unix::get_user_data_dir(const String &p_user_dir) const {
-	return get_data_path().path_join(p_user_dir);
+String OS_Unix::get_user_data_dir() const {
+	String appname = get_safe_dir_name(GLOBAL_GET("application/config/name"));
+	if (!appname.is_empty()) {
+		bool use_custom_dir = GLOBAL_GET("application/config/use_custom_user_dir");
+		if (use_custom_dir) {
+			String custom_dir = get_safe_dir_name(GLOBAL_GET("application/config/custom_user_dir_name"), true);
+			if (custom_dir.is_empty()) {
+				custom_dir = appname;
+			}
+			return get_data_path().path_join(custom_dir);
+		} else {
+			return get_data_path().path_join(get_godot_dir_name()).path_join("app_userdata").path_join(appname);
+		}
+	}
+
+	return get_data_path().path_join(get_godot_dir_name()).path_join("app_userdata").path_join("[unnamed project]");
 }
 
 String OS_Unix::get_executable_path() const {
 #ifdef __linux__
 	//fix for running from a symlink
-	char buf[PATH_MAX];
-	memset(buf, 0, PATH_MAX);
+	char buf[256];
+	memset(buf, 0, 256);
 	ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf));
 	String b;
 	if (len > 0) {
-		b.append_utf8(buf, len);
+		b.parse_utf8(buf, len);
 	}
 	if (b.is_empty()) {
 		WARN_PRINT("Couldn't get executable path from /proc/self/exe, using argv[0]");
@@ -1185,8 +934,9 @@ String OS_Unix::get_executable_path() const {
 		WARN_PRINT("Couldn't get executable path from sysctl");
 		return OS::get_executable_path();
 	}
-
-	return String::utf8(buf);
+	String b;
+	b.parse_utf8(buf);
+	return b;
 #elif defined(__APPLE__)
 	char temp_path[1];
 	uint32_t buff_size = 1;
@@ -1208,7 +958,7 @@ String OS_Unix::get_executable_path() const {
 #endif
 }
 
-void UnixTerminalLogger::log_error(const char *p_function, const char *p_file, int p_line, const char *p_code, const char *p_rationale, bool p_editor_notify, ErrorType p_type, const Vector<Ref<ScriptBacktrace>> &p_script_backtraces) {
+void UnixTerminalLogger::log_error(const char *p_function, const char *p_file, int p_line, const char *p_code, const char *p_rationale, bool p_editor_notify, ErrorType p_type) {
 	if (!should_log(true)) {
 		return;
 	}
@@ -1235,45 +985,30 @@ void UnixTerminalLogger::log_error(const char *p_function, const char *p_file, i
 	const char *cyan_bold = tty ? "\E[1;36m" : "";
 	const char *reset = tty ? "\E[0m" : "";
 
-	const char *bold_color;
-	const char *normal_color;
 	switch (p_type) {
 		case ERR_WARNING:
-			bold_color = yellow_bold;
-			normal_color = yellow;
+			logf_error("%sWARNING:%s %s\n", yellow_bold, yellow, err_details);
+			logf_error("%s     at: %s (%s:%i)%s\n", gray, p_function, p_file, p_line, reset);
 			break;
 		case ERR_SCRIPT:
-			bold_color = magenta_bold;
-			normal_color = magenta;
+			logf_error("%sSCRIPT ERROR:%s %s\n", magenta_bold, magenta, err_details);
+			logf_error("%s          at: %s (%s:%i)%s\n", gray, p_function, p_file, p_line, reset);
 			break;
 		case ERR_SHADER:
-			bold_color = cyan_bold;
-			normal_color = cyan;
+			logf_error("%sSHADER ERROR:%s %s\n", cyan_bold, cyan, err_details);
+			logf_error("%s          at: %s (%s:%i)%s\n", gray, p_function, p_file, p_line, reset);
 			break;
 		case ERR_ERROR:
 		default:
-			bold_color = red_bold;
-			normal_color = red;
+			logf_error("%sERROR:%s %s\n", red_bold, red, err_details);
+			logf_error("%s   at: %s (%s:%i)%s\n", gray, p_function, p_file, p_line, reset);
 			break;
-	}
-
-	logf_error("%s%s:%s %s\n", bold_color, error_type_string(p_type), normal_color, err_details);
-	logf_error("%s%sat: %s (%s:%i)%s\n", gray, error_type_indent(p_type), p_function, p_file, p_line, reset);
-
-	for (const Ref<ScriptBacktrace> &backtrace : p_script_backtraces) {
-		if (!backtrace->is_empty()) {
-			logf_error("%s%s%s\n", gray, backtrace->format(strlen(error_type_indent(p_type))).utf8().get_data(), reset);
-		}
 	}
 }
 
 UnixTerminalLogger::~UnixTerminalLogger() {}
 
 OS_Unix::OS_Unix() {
-#if !defined(__GLIBC__) && !defined(WEB_ENABLED)
-	_load_iconv();
-#endif
-
 	Vector<Logger *> loggers;
 	loggers.push_back(memnew(UnixTerminalLogger));
 	_set_logger(memnew(CompositeLogger(loggers)));

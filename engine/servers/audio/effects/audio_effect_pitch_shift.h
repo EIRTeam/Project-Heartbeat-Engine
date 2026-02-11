@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AUDIO_EFFECT_PITCH_SHIFT_H
+#define AUDIO_EFFECT_PITCH_SHIFT_H
 
 #include "servers/audio/audio_effect.h"
 
@@ -76,7 +77,7 @@ class AudioEffectPitchShift : public AudioEffect {
 public:
 	friend class AudioEffectPitchShiftInstance;
 
-	enum FFTSize : unsigned int {
+	enum FFTSize {
 		FFT_SIZE_256,
 		FFT_SIZE_512,
 		FFT_SIZE_1024,
@@ -109,3 +110,5 @@ public:
 };
 
 VARIANT_ENUM_CAST(AudioEffectPitchShift::FFTSize);
+
+#endif // AUDIO_EFFECT_PITCH_SHIFT_H

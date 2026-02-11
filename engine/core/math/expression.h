@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef EXPRESSION_H
+#define EXPRESSION_H
 
 #include "core/object/ref_counted.h"
 
@@ -36,8 +37,19 @@ class Expression : public RefCounted {
 	GDCLASS(Expression, RefCounted);
 
 private:
+	struct Input {
+		Variant::Type type = Variant::NIL;
+		String name;
+
+		Input() {}
+	};
+
+	Vector<Input> inputs;
+	Variant::Type output_type = Variant::NIL;
+
 	String expression;
 
+	bool sequenced = false;
 	int str_ofs = 0;
 	bool expression_dirty = false;
 
@@ -124,6 +136,7 @@ private:
 
 		Type type = TYPE_INPUT;
 
+		ENode() {}
 		virtual ~ENode() {
 			if (next) {
 				memdelete(next);
@@ -255,5 +268,8 @@ public:
 	bool has_execute_failed() const;
 	String get_error_text() const;
 
+	Expression() {}
 	~Expression();
 };
+
+#endif // EXPRESSION_H

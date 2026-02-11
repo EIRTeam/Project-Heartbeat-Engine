@@ -28,13 +28,11 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#import "godot_content_view.h"
+#include "godot_content_view.h"
 
-#import "display_server_macos.h"
-#import "godot_window.h"
-#import "key_mapping_macos.h"
+#include "display_server_macos.h"
+#include "key_mapping_macos.h"
 
-#include "core/profiling/profiling.h"
 #include "main/main.h"
 
 @implementation GodotContentLayerDelegate
@@ -57,9 +55,6 @@
 - (void)displayLayer:(CALayer *)layer {
 	DisplayServerMacOS *ds = (DisplayServerMacOS *)DisplayServer::get_singleton();
 	if (OS::get_singleton()->get_main_loop() && ds->get_is_resizing() && need_redraw) {
-		GodotProfileFrameMark;
-		GodotProfileZone("[GodotContentLayerDelegate displayLayer]");
-
 		Main::force_redraw();
 		if (!Main::is_iterating()) { // Avoid cyclic loop.
 			Main::iteration();
@@ -71,10 +66,6 @@
 @end
 
 @implementation GodotContentView
-
-- (BOOL)acceptsFirstMouse:(NSEvent *)event {
-	return YES;
-}
 
 - (void)setFrameSize:(NSSize)newSize {
 	DisplayServerMacOS *ds = (DisplayServerMacOS *)DisplayServer::get_singleton();
@@ -118,22 +109,6 @@
 	self.layer.needsDisplayOnBoundsChange = YES;
 }
 
-- (void)addObserver:(NSObject *)targetObserver forKeyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options context:(void *)context {
-	[registered_observers addObject:[[targetObserver description] stringByAppendingString:keyPath]];
-	[super addObserver:targetObserver forKeyPath:keyPath options:options context:context];
-}
-
-- (void)removeObserver:(NSObject *)targetObserver forKeyPath:(NSString *)keyPath {
-	if ([registered_observers containsObject:[[targetObserver description] stringByAppendingString:keyPath]]) {
-		@try {
-			[super removeObserver:targetObserver forKeyPath:keyPath];
-			[registered_observers removeObject:[[targetObserver description] stringByAppendingString:keyPath]];
-		} @catch (NSException *exception) {
-			ERR_PRINT("NSException: " + String::utf8([exception reason].UTF8String));
-		}
-	}
-}
-
 - (id)init {
 	self = [super init];
 	layer_delegate = [[GodotContentLayerDelegate alloc] init];
@@ -143,7 +118,6 @@
 	mouse_down_control = false;
 	ignore_momentum_scroll = false;
 	last_pen_inverted = false;
-	registered_observers = [[NSMutableSet alloc] init];
 	[self updateTrackingAreas];
 
 	self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
@@ -162,12 +136,7 @@
 // MARK: Backing Layer
 
 - (CALayer *)makeBackingLayer {
-	CAMetalLayer *layer = [CAMetalLayer new];
-	layer.edgeAntialiasingMask = 0;
-	layer.masksToBounds = NO;
-	layer.presentsWithTransaction = NO;
-	[layer removeAllAnimations];
-	return layer;
+	return [[CAMetalLayer class] layer];
 }
 
 - (BOOL)wantsUpdateLayer {
@@ -298,10 +267,11 @@
 	}
 
 	Char16String text;
-	text.resize_uninitialized([characters length] + 1);
+	text.resize([characters length] + 1);
 	[characters getCharacters:(unichar *)text.ptrw() range:NSMakeRange(0, [characters length])];
 
-	String u32text = String::utf16(text.ptr(), text.length());
+	String u32text;
+	u32text.parse_utf16(text.ptr(), text.length());
 
 	for (int i = 0; i < u32text.length(); i++) {
 		const char32_t codepoint = u32text[i];
@@ -424,11 +394,6 @@
 }
 
 - (void)mouseDown:(NSEvent *)event {
-	DisplayServerMacOS *ds = (DisplayServerMacOS *)DisplayServer::get_singleton();
-	if (ds && ds->has_window(window_id)) {
-		DisplayServerMacOS::WindowData &wd = ds->get_window(window_id);
-		wd.edge = DisplayServer::WINDOW_EDGE_MAX;
-	}
 	if (([event modifierFlags] & NSEventModifierFlagControl)) {
 		mouse_down_control = true;
 		[self processMouseEvent:event index:MouseButton::RIGHT pressed:true outofstream:false];
@@ -439,65 +404,10 @@
 }
 
 - (void)mouseDragged:(NSEvent *)event {
-	DisplayServerMacOS *ds = (DisplayServerMacOS *)DisplayServer::get_singleton();
-	if (ds && ds->has_window(window_id)) {
-		DisplayServerMacOS::WindowData &wd = ds->get_window(window_id);
-		if (wd.edge != DisplayServer::WINDOW_EDGE_MAX) {
-			Size2i max_size = wd.max_size / ds->screen_get_max_scale();
-			Size2i min_size = wd.min_size / ds->screen_get_max_scale();
-			NSRect frame = [wd.window_object frame];
-			switch (wd.edge) {
-				case DisplayServer::WINDOW_EDGE_TOP_LEFT: {
-					int clamped_dx = CLAMP(frame.size.width - event.deltaX, min_size.x, max_size.x) - frame.size.width;
-					int clamped_dy = CLAMP(frame.size.height - event.deltaY, min_size.y, max_size.y) - frame.size.height;
-					[wd.window_object setFrame:NSMakeRect(frame.origin.x - clamped_dx, frame.origin.y, frame.size.width + clamped_dx, frame.size.height + clamped_dy) display:YES];
-				} break;
-				case DisplayServer::WINDOW_EDGE_TOP: {
-					int clamped_dy = CLAMP(frame.size.height - event.deltaY, min_size.y, max_size.y) - frame.size.height;
-					[wd.window_object setFrame:NSMakeRect(frame.origin.x, frame.origin.y, frame.size.width, frame.size.height + clamped_dy) display:YES];
-				} break;
-				case DisplayServer::WINDOW_EDGE_TOP_RIGHT: {
-					int clamped_dx = CLAMP(frame.size.width + event.deltaX, min_size.x, max_size.x) - frame.size.width;
-					int clamped_dy = CLAMP(frame.size.height - event.deltaY, min_size.y, max_size.y) - frame.size.height;
-					[wd.window_object setFrame:NSMakeRect(frame.origin.x, frame.origin.y, frame.size.width + clamped_dx, frame.size.height + clamped_dy) display:YES];
-				} break;
-				case DisplayServer::WINDOW_EDGE_LEFT: {
-					int clamped_dx = CLAMP(frame.size.width - event.deltaX, min_size.x, max_size.x) - frame.size.width;
-					[wd.window_object setFrame:NSMakeRect(frame.origin.x - clamped_dx, frame.origin.y, frame.size.width + clamped_dx, frame.size.height) display:YES];
-				} break;
-				case DisplayServer::WINDOW_EDGE_RIGHT: {
-					int clamped_dx = CLAMP(frame.size.width + event.deltaX, min_size.x, max_size.x) - frame.size.width;
-					[wd.window_object setFrame:NSMakeRect(frame.origin.x, frame.origin.y, frame.size.width + clamped_dx, frame.size.height) display:YES];
-				} break;
-				case DisplayServer::WINDOW_EDGE_BOTTOM_LEFT: {
-					int clamped_dx = CLAMP(frame.size.width - event.deltaX, min_size.x, max_size.x) - frame.size.width;
-					int clamped_dy = CLAMP(frame.size.height + event.deltaY, min_size.y, max_size.y) - frame.size.height;
-					[wd.window_object setFrame:NSMakeRect(frame.origin.x - clamped_dx, frame.origin.y - clamped_dy, frame.size.width + clamped_dx, frame.size.height + clamped_dy) display:YES];
-				} break;
-				case DisplayServer::WINDOW_EDGE_BOTTOM: {
-					int clamped_dy = CLAMP(frame.size.height + event.deltaY, min_size.y, max_size.y) - frame.size.height;
-					[wd.window_object setFrame:NSMakeRect(frame.origin.x, frame.origin.y - clamped_dy, frame.size.width, frame.size.height + clamped_dy) display:YES];
-				} break;
-				case DisplayServer::WINDOW_EDGE_BOTTOM_RIGHT: {
-					int clamped_dx = CLAMP(frame.size.width + event.deltaX, min_size.x, max_size.x) - frame.size.width;
-					int clamped_dy = CLAMP(frame.size.height + event.deltaY, min_size.y, max_size.y) - frame.size.height;
-					[wd.window_object setFrame:NSMakeRect(frame.origin.x, frame.origin.y - clamped_dy, frame.size.width + clamped_dx, frame.size.height + clamped_dy) display:YES];
-				} break;
-				default:
-					break;
-			}
-			return;
-		}
-	}
 	[self mouseMoved:event];
 }
 
 - (void)mouseUp:(NSEvent *)event {
-	DisplayServerMacOS *ds = (DisplayServerMacOS *)DisplayServer::get_singleton();
-	if (ds && ds->has_window(window_id)) {
-		DisplayServerMacOS::WindowData &wd = ds->get_window(window_id);
-		wd.edge = DisplayServer::WINDOW_EDGE_MAX;
-	}
 	if (mouse_down_control) {
 		[self processMouseEvent:event index:MouseButton::RIGHT pressed:false outofstream:false];
 	} else {
@@ -545,11 +455,6 @@
 	mm->set_relative(relativeMotion);
 	mm->set_relative_screen_position(relativeMotion);
 	ds->get_key_modifier_state([event modifierFlags], mm);
-
-	const NSRect contentRect = [wd.window_view frame];
-	if (NSPointInRect([event locationInWindow], contentRect) && [NSWindow windowNumberAtPoint:[NSEvent mouseLocation] belowWindowWithWindowNumber:0 /*topmost*/] == [wd.window_object windowNumber]) {
-		ds->mouse_enter_window(window_id);
-	}
 
 	Input::get_singleton()->parse_input_event(mm);
 }
@@ -657,7 +562,7 @@
 		[self removeTrackingArea:tracking_area];
 	}
 
-	NSTrackingAreaOptions options = NSTrackingMouseEnteredAndExited | NSTrackingActiveWhenFirstResponder | NSTrackingCursorUpdate | NSTrackingInVisibleRect;
+	NSTrackingAreaOptions options = NSTrackingMouseEnteredAndExited | NSTrackingActiveInKeyWindow | NSTrackingCursorUpdate | NSTrackingInVisibleRect;
 	tracking_area = [[NSTrackingArea alloc] initWithRect:[self bounds] options:options owner:self userInfo:nil];
 
 	[self addTrackingArea:tracking_area];
@@ -684,10 +589,11 @@
 		if (!wd.im_active && length > 0 && keycode_has_unicode(KeyMappingMacOS::remap_key([event keyCode], [event modifierFlags], true))) {
 			// Fallback unicode character handler used if IME is not active.
 			Char16String text;
-			text.resize_uninitialized([characters length] + 1);
+			text.resize([characters length] + 1);
 			[characters getCharacters:(unichar *)text.ptrw() range:NSMakeRange(0, [characters length])];
 
-			String u32text = String::utf16(text.ptr(), text.length());
+			String u32text;
+			u32text.parse_utf16(text.ptr(), text.length());
 
 			DisplayServerMacOS::KeyEvent ke;
 			ke.window_id = window_id;
@@ -907,11 +813,11 @@
 	if ([event phase] != NSEventPhaseNone || [event momentumPhase] != NSEventPhaseNone) {
 		[self processPanEvent:event dx:delta_x dy:delta_y];
 	} else {
-		if (std::abs(delta_x)) {
-			[self processScrollEvent:event button:(0 > delta_x ? MouseButton::WHEEL_RIGHT : MouseButton::WHEEL_LEFT) factor:std::abs(delta_x * 0.3)];
+		if (fabs(delta_x)) {
+			[self processScrollEvent:event button:(0 > delta_x ? MouseButton::WHEEL_RIGHT : MouseButton::WHEEL_LEFT) factor:fabs(delta_x * 0.3)];
 		}
-		if (std::abs(delta_y)) {
-			[self processScrollEvent:event button:(0 < delta_y ? MouseButton::WHEEL_UP : MouseButton::WHEEL_DOWN) factor:std::abs(delta_y * 0.3)];
+		if (fabs(delta_y)) {
+			[self processScrollEvent:event button:(0 < delta_y ? MouseButton::WHEEL_UP : MouseButton::WHEEL_DOWN) factor:fabs(delta_y * 0.3)];
 		}
 	}
 }

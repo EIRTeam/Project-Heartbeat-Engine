@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef SCROLL_BAR_H
+#define SCROLL_BAR_H
 
 #include "scene/gui/range.h"
 
@@ -74,20 +75,16 @@ class ScrollBar : public Range {
 	Vector2 drag_node_accum;
 	Vector2 drag_node_from;
 	Vector2 last_drag_node_accum;
+	float last_drag_node_time = 0.0;
 	float time_since_motion = 0.0;
 	bool drag_node_touching = false;
 	bool drag_node_touching_deaccel = false;
+	bool click_handled = false;
 
 	bool scrolling = false;
 	double target_scroll = 0.0;
 	bool smooth_scroll_enabled = false;
 
-	void _drag_node_exit();
-	void _drag_node_input(const Ref<InputEvent> &p_input);
-
-	virtual void gui_input(const Ref<InputEvent> &p_event) override;
-
-protected:
 	struct ThemeCache {
 		Ref<StyleBox> scroll_style;
 		Ref<StyleBox> scroll_focus_style;
@@ -102,19 +99,18 @@ protected:
 		Ref<Texture2D> decrement_icon;
 		Ref<Texture2D> decrement_hl_icon;
 		Ref<Texture2D> decrement_pressed_icon;
-
-		int padding_left = 0;
-		int padding_top = 0;
-		int padding_right = 0;
-		int padding_bottom = 0;
 	} theme_cache;
 
+	void _drag_node_exit();
+	void _drag_node_input(const Ref<InputEvent> &p_input);
+
+	virtual void gui_input(const Ref<InputEvent> &p_event) override;
+
+protected:
 	void _notification(int p_what);
 	static void _bind_methods();
 
 public:
-	static inline const int PAGE_DIVISOR = 8;
-
 	void scroll(double p_amount);
 	void scroll_to(double p_position);
 
@@ -136,9 +132,6 @@ public:
 class HScrollBar : public ScrollBar {
 	GDCLASS(HScrollBar, ScrollBar);
 
-protected:
-	static void _bind_methods();
-
 public:
 	HScrollBar() :
 			ScrollBar(HORIZONTAL) { set_v_size_flags(0); }
@@ -147,10 +140,9 @@ public:
 class VScrollBar : public ScrollBar {
 	GDCLASS(VScrollBar, ScrollBar);
 
-protected:
-	static void _bind_methods();
-
 public:
 	VScrollBar() :
 			ScrollBar(VERTICAL) { set_h_size_flags(0); }
 };
+
+#endif // SCROLL_BAR_H

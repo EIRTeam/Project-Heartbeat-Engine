@@ -28,12 +28,14 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef XR_POSITIONAL_TRACKER_H
+#define XR_POSITIONAL_TRACKER_H
 
 #include "core/os/thread_safe.h"
+#include "scene/resources/mesh.h"
 #include "servers/xr/xr_pose.h"
-#include "servers/xr/xr_server.h"
 #include "servers/xr/xr_tracker.h"
+#include "servers/xr_server.h"
 
 /**
 	The positional tracker object as an object that represents the position and orientation of a tracked object like a controller or headset.
@@ -79,3 +81,5 @@ public:
 };
 
 VARIANT_ENUM_CAST(XRPositionalTracker::TrackerHand);
+
+#endif // XR_POSITIONAL_TRACKER_H

@@ -28,10 +28,11 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef STATUS_INDICATOR_H
+#define STATUS_INDICATOR_H
 
 #include "scene/main/node.h"
-#include "servers/display/display_server.h"
+#include "servers/display_server.h"
 
 class StatusIndicator : public Node {
 	GDCLASS(StatusIndicator, Node);
@@ -63,3 +64,5 @@ public:
 
 	Rect2 get_rect() const;
 };
+
+#endif // STATUS_INDICATOR_H

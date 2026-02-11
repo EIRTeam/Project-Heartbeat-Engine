@@ -1,0 +1,10 @@
+[submodule "modules/steamworks"]
+	path = modules/steamworks
+	url = https://github.com/EIRTeam/EIRTeam.Steamworks.git
+	branch = master
+[submodule "modules/input_glyphs"]
+	path = modules/input_glyphs
+	url = https://github.com/EIRTeam/EIRTeam.InputGlyphs.git
+[submodule "modules/ffmpeg"]
+	path = modules/ffmpeg
+	url = https://github.com/EIRTeam/EIRTeam.FFmpeg.git

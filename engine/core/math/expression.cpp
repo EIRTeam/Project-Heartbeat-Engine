@@ -30,7 +30,12 @@
 
 #include "expression.h"
 
+#include "core/io/marshalls.h"
+#include "core/math/math_funcs.h"
 #include "core/object/class_db.h"
+#include "core/object/ref_counted.h"
+#include "core/os/os.h"
+#include "core/variant/variant_parser.h"
 
 Error Expression::_get_token(Token &r_token) {
 	while (true) {
@@ -350,16 +355,16 @@ Error Expression::_get_token(Token &r_token) {
 							case READING_INT: {
 								if (is_digit(c)) {
 									if (is_first_char && c == '0') {
-										if (next_char == 'b' || next_char == 'B') {
+										if (next_char == 'b') {
 											reading = READING_BIN;
-										} else if (next_char == 'x' || next_char == 'X') {
+										} else if (next_char == 'x') {
 											reading = READING_HEX;
 										}
 									}
 								} else if (c == '.') {
 									reading = READING_DEC;
 									is_float = true;
-								} else if (c == 'e' || c == 'E') {
+								} else if (c == 'e') {
 									reading = READING_EXP;
 									is_float = true;
 								} else {
@@ -370,7 +375,7 @@ Error Expression::_get_token(Token &r_token) {
 							case READING_BIN: {
 								if (bin_beg && !is_binary_digit(c)) {
 									reading = READING_DONE;
-								} else if (c == 'b' || c == 'B') {
+								} else if (c == 'b') {
 									bin_beg = true;
 								}
 
@@ -378,15 +383,16 @@ Error Expression::_get_token(Token &r_token) {
 							case READING_HEX: {
 								if (hex_beg && !is_hex_digit(c)) {
 									reading = READING_DONE;
-								} else if (c == 'x' || c == 'X') {
+								} else if (c == 'x') {
 									hex_beg = true;
 								}
 
 							} break;
 							case READING_DEC: {
 								if (is_digit(c)) {
-								} else if (c == 'e' || c == 'E') {
+								} else if (c == 'e') {
 									reading = READING_EXP;
+
 								} else {
 									reading = READING_DONE;
 								}
@@ -408,14 +414,12 @@ Error Expression::_get_token(Token &r_token) {
 						if (reading == READING_DONE) {
 							break;
 						}
-						num += c;
+						num += String::chr(c);
 						c = GET_CHAR();
 						is_first_char = false;
 					}
 
-					if (c != 0) {
-						str_ofs--;
-					}
+					str_ofs--;
 
 					r_token.type = TK_CONSTANT;
 
@@ -435,7 +439,7 @@ Error Expression::_get_token(Token &r_token) {
 					cchar = GET_CHAR();
 
 					while (is_unicode_identifier_continue(cchar)) {
-						id += cchar;
+						id += String::chr(cchar);
 						cchar = GET_CHAR();
 					}
 
@@ -454,16 +458,16 @@ Error Expression::_get_token(Token &r_token) {
 						r_token.value = false;
 					} else if (id == "PI") {
 						r_token.type = TK_CONSTANT;
-						r_token.value = Math::PI;
+						r_token.value = Math_PI;
 					} else if (id == "TAU") {
 						r_token.type = TK_CONSTANT;
-						r_token.value = Math::TAU;
+						r_token.value = Math_TAU;
 					} else if (id == "INF") {
 						r_token.type = TK_CONSTANT;
-						r_token.value = Math::INF;
+						r_token.value = INFINITY;
 					} else if (id == "NAN") {
 						r_token.type = TK_CONSTANT;
-						r_token.value = Math::NaN;
+						r_token.value = NAN;
 					} else if (id == "not") {
 						r_token.type = TK_OP_NOT;
 					} else if (id == "or") {
@@ -473,11 +477,10 @@ Error Expression::_get_token(Token &r_token) {
 					} else if (id == "self") {
 						r_token.type = TK_SELF;
 					} else {
-						{
-							const Variant::Type type = Variant::get_type_by_name(id);
-							if (type < Variant::VARIANT_MAX) {
+						for (int i = 0; i < Variant::VARIANT_MAX; i++) {
+							if (id == Variant::get_type_name(Variant::Type(i))) {
 								r_token.type = TK_BASIC_TYPE;
-								r_token.value = type;
+								r_token.value = i;
 								return OK;
 							}
 						}
@@ -823,7 +826,7 @@ Expression::ENode *Expression::_parse_expression() {
 				if (!Variant::is_utility_function_vararg(bifunc->func)) {
 					int expected_args = Variant::get_utility_function_argument_count(bifunc->func);
 					if (expected_args != bifunc->arguments.size()) {
-						_set_error("Builtin func '" + String(bifunc->func) + "' expects " + itos(expected_args) + " argument(s).");
+						_set_error("Builtin func '" + String(bifunc->func) + "' expects " + itos(expected_args) + " arguments.");
 					}
 				}
 
@@ -1492,7 +1495,7 @@ Error Expression::parse(const String &p_expression, const Vector<String> &p_inpu
 }
 
 Variant Expression::execute(const Array &p_inputs, Object *p_base, bool p_show_error, bool p_const_calls_only) {
-	ERR_FAIL_COND_V_MSG(error_set, Variant(), vformat("There was previously a parse error: %s.", error_str));
+	ERR_FAIL_COND_V_MSG(error_set, Variant(), "There was previously a parse error: " + error_str + ".");
 
 	execution_error = false;
 	Variant output;

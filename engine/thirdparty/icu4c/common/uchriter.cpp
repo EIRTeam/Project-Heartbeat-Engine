@@ -172,7 +172,7 @@ UCharCharacterIterator::nextPostInc() {
 
 UBool
 UCharCharacterIterator::hasNext() {
-    return pos < end;
+    return (UBool)(pos < end ? true : false);
 }
 
 char16_t
@@ -186,7 +186,7 @@ UCharCharacterIterator::previous() {
 
 UBool
 UCharCharacterIterator::hasPrevious() {
-    return pos > begin;
+    return (UBool)(pos > begin ? true : false);
 }
 
 UChar32

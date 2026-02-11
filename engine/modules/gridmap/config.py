@@ -7,7 +7,9 @@ def configure(env):
 
 
 def get_doc_classes():
-    return ["GridMap", "GridMapEditorPlugin"]
+    return [
+        "GridMap",
+    ]
 
 
 def get_doc_path():

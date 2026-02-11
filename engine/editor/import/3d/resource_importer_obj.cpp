@@ -33,10 +33,15 @@
 #include "core/io/file_access.h"
 #include "core/io/resource_saver.h"
 #include "scene/3d/importer_mesh_instance_3d.h"
+#include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/node_3d.h"
 #include "scene/resources/3d/importer_mesh.h"
 #include "scene/resources/mesh.h"
 #include "scene/resources/surface_tool.h"
+
+uint32_t EditorOBJImporter::get_import_flags() const {
+	return IMPORT_SCENE;
+}
 
 static Error _parse_material_library(const String &p_path, HashMap<String, Ref<StandardMaterial3D>> &material_map, List<String> *r_missing_deps) {
 	Ref<FileAccess> f = FileAccess::open(p_path, FileAccess::READ);
@@ -49,17 +54,18 @@ static Error _parse_material_library(const String &p_path, HashMap<String, Ref<S
 		String l = f->get_line().strip_edges();
 
 		if (l.begins_with("newmtl ")) {
-			// Start of a new material.
+			//vertex
+
 			current_name = l.replace("newmtl", "").strip_edges();
 			current.instantiate();
 			current->set_name(current_name);
 			material_map[current_name] = current;
 		} else if (l.begins_with("Ka ")) {
-			// Ambient color.
+			//uv
 			WARN_PRINT("OBJ: Ambient light for material '" + current_name + "' is ignored in PBR");
 
 		} else if (l.begins_with("Kd ")) {
-			// Diffuse color.
+			//normal
 			ERR_FAIL_COND_V(current.is_null(), ERR_FILE_CORRUPT);
 			Vector<String> v = l.split(" ", false);
 			ERR_FAIL_COND_V(v.size() < 4, ERR_INVALID_DATA);
@@ -69,7 +75,7 @@ static Error _parse_material_library(const String &p_path, HashMap<String, Ref<S
 			c.b = v[3].to_float();
 			current->set_albedo(c);
 		} else if (l.begins_with("Ks ")) {
-			// Specular color.
+			//normal
 			ERR_FAIL_COND_V(current.is_null(), ERR_FILE_CORRUPT);
 			Vector<String> v = l.split(" ", false);
 			ERR_FAIL_COND_V(v.size() < 4, ERR_INVALID_DATA);
@@ -79,14 +85,14 @@ static Error _parse_material_library(const String &p_path, HashMap<String, Ref<S
 			float metalness = MAX(r, MAX(g, b));
 			current->set_metallic(metalness);
 		} else if (l.begins_with("Ns ")) {
-			// Specular exponent.
+			//normal
 			ERR_FAIL_COND_V(current.is_null(), ERR_FILE_CORRUPT);
 			Vector<String> v = l.split(" ", false);
 			ERR_FAIL_COND_V(v.size() != 2, ERR_INVALID_DATA);
 			float s = v[1].to_float();
 			current->set_metallic((1000.0 - s) / 1000.0);
 		} else if (l.begins_with("d ")) {
-			// Dissolve (1.0 is fully opaque, 0.0 is completely transparent).
+			//normal
 			ERR_FAIL_COND_V(current.is_null(), ERR_FILE_CORRUPT);
 			Vector<String> v = l.split(" ", false);
 			ERR_FAIL_COND_V(v.size() != 2, ERR_INVALID_DATA);
@@ -98,7 +104,7 @@ static Error _parse_material_library(const String &p_path, HashMap<String, Ref<S
 				current->set_transparency(StandardMaterial3D::TRANSPARENCY_ALPHA);
 			}
 		} else if (l.begins_with("Tr ")) {
-			// Transparency (1.0 is completely transparent, 0.0 is fully opaque).
+			//normal
 			ERR_FAIL_COND_V(current.is_null(), ERR_FILE_CORRUPT);
 			Vector<String> v = l.split(" ", false);
 			ERR_FAIL_COND_V(v.size() != 2, ERR_INVALID_DATA);
@@ -111,14 +117,14 @@ static Error _parse_material_library(const String &p_path, HashMap<String, Ref<S
 			}
 
 		} else if (l.begins_with("map_Ka ")) {
-			// Ambient texture map.
+			//uv
 			WARN_PRINT("OBJ: Ambient light texture for material '" + current_name + "' is ignored in PBR");
 
 		} else if (l.begins_with("map_Kd ")) {
-			// Diffuse texture map.
+			//normal
 			ERR_FAIL_COND_V(current.is_null(), ERR_FILE_CORRUPT);
 
-			String p = l.replace("map_Kd", "").replace_char('\\', '/').strip_edges();
+			String p = l.replace("map_Kd", "").replace("\\", "/").strip_edges();
 			String path;
 			if (p.is_absolute_path()) {
 				path = p;
@@ -135,10 +141,10 @@ static Error _parse_material_library(const String &p_path, HashMap<String, Ref<S
 			}
 
 		} else if (l.begins_with("map_Ks ")) {
-			// Specular color texture map.
+			//normal
 			ERR_FAIL_COND_V(current.is_null(), ERR_FILE_CORRUPT);
 
-			String p = l.replace("map_Ks", "").replace_char('\\', '/').strip_edges();
+			String p = l.replace("map_Ks", "").replace("\\", "/").strip_edges();
 			String path;
 			if (p.is_absolute_path()) {
 				path = p;
@@ -155,10 +161,10 @@ static Error _parse_material_library(const String &p_path, HashMap<String, Ref<S
 			}
 
 		} else if (l.begins_with("map_Ns ")) {
-			// Specular exponent texture map.
+			//normal
 			ERR_FAIL_COND_V(current.is_null(), ERR_FILE_CORRUPT);
 
-			String p = l.replace("map_Ns", "").replace_char('\\', '/').strip_edges();
+			String p = l.replace("map_Ns", "").replace("\\", "/").strip_edges();
 			String path;
 			if (p.is_absolute_path()) {
 				path = p;
@@ -173,39 +179,18 @@ static Error _parse_material_library(const String &p_path, HashMap<String, Ref<S
 			} else if (r_missing_deps) {
 				r_missing_deps->push_back(path);
 			}
-		} else if (l.begins_with("map_bump ") || l.begins_with("map_Bump ")) {
-			// Bump texture map.
+		} else if (l.begins_with("map_bump ")) {
+			//normal
 			ERR_FAIL_COND_V(current.is_null(), ERR_FILE_CORRUPT);
 
-			l = l.begins_with("map_bump ") ? l.trim_prefix("map_bump ") : l.trim_prefix("map_Bump ");
-			l = l.strip_edges();
-
-			// Read path and optional bump multiplier.
-			String p;
-			float bm = 1.0;
-			int bm_pos = l.find("-bm ");
-			if (bm_pos >= 0) {
-				int bm_start = bm_pos + 4;
-				int bm_end = l.find_char(' ', bm_start);
-				if (bm_end >= 0) {
-					bm = l.substr(bm_start, bm_end - bm_start).to_float();
-					p = l.substr(bm_end + 1);
-				} else { // Bump multiplier ends at end of line.
-					bm = l.substr(bm_start).to_float();
-					p = l.substr(0, bm_pos);
-				}
-			} else {
-				p = l;
-			}
-
-			String path = base_path.path_join(p.replace_char('\\', '/').strip_edges());
+			String p = l.replace("map_bump", "").replace("\\", "/").strip_edges();
+			String path = base_path.path_join(p);
 
 			Ref<Texture2D> texture = ResourceLoader::load(path);
 
 			if (texture.is_valid()) {
 				current->set_feature(StandardMaterial3D::FEATURE_NORMAL_MAPPING, true);
 				current->set_texture(StandardMaterial3D::TEXTURE_NORMAL, texture);
-				current->set_normal_scale(bm);
 			} else if (r_missing_deps) {
 				r_missing_deps->push_back(path);
 			}
@@ -217,12 +202,12 @@ static Error _parse_material_library(const String &p_path, HashMap<String, Ref<S
 	return OK;
 }
 
-static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes, bool p_single_mesh, bool p_generate_tangents, bool p_generate_lods, bool p_generate_shadow_mesh, bool p_generate_lightmap_uv2, float p_generate_lightmap_uv2_texel_size, const PackedByteArray &p_src_lightmap_cache, Vector3 p_scale_mesh, Vector3 p_offset_mesh, bool p_disable_compression, Vector<Vector<uint8_t>> &r_lightmap_caches, List<String> *r_missing_deps) {
+static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes, bool p_single_mesh, bool p_generate_tangents, bool p_optimize, Vector3 p_scale_mesh, Vector3 p_offset_mesh, bool p_disable_compression, List<String> *r_missing_deps) {
 	Ref<FileAccess> f = FileAccess::open(p_path, FileAccess::READ);
 	ERR_FAIL_COND_V_MSG(f.is_null(), ERR_CANT_OPEN, vformat("Couldn't open OBJ file '%s', it may not exist or not be readable.", p_path));
 
-	// Avoid trying to load/interpret potential build artifacts from Visual Studio (e.g. when compiling native plugins inside the project tree).
-	// This should only match if it's indeed a COFF file header.
+	// Avoid trying to load/interpret potential build artifacts from Visual Studio (e.g. when compiling native plugins inside the project tree)
+	// This should only match, if it's indeed a COFF file header
 	// https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#machine-types
 	const int first_bytes = f->get_16();
 	static const Vector<int> coff_header_machines{
@@ -260,8 +245,6 @@ static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes,
 	uint32_t smooth_group = 0;
 	bool smoothing = true;
 	const uint32_t no_smoothing_smooth_group = (uint32_t)-1;
-
-	bool uses_uvs = false;
 
 	while (true) {
 		String l = f->get_line().strip_edges();
@@ -337,17 +320,6 @@ static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes,
 						idx = 1 ^ idx;
 					}
 
-					// Check UVs before faces as we may need to generate dummy tangents if there are no UVs.
-					if (face[idx].size() >= 2 && !face[idx][1].is_empty()) {
-						int uv = face[idx][1].to_int() - 1;
-						if (uv < 0) {
-							uv += uvs.size() + 1;
-						}
-						ERR_FAIL_INDEX_V(uv, uvs.size(), ERR_FILE_CORRUPT);
-						surf_tool->set_uv(uvs[uv]);
-						uses_uvs = true;
-					}
-
 					if (face[idx].size() == 3) {
 						int norm = face[idx][2].to_int() - 1;
 						if (norm < 0) {
@@ -355,17 +327,26 @@ static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes,
 						}
 						ERR_FAIL_INDEX_V(norm, normals.size(), ERR_FILE_CORRUPT);
 						surf_tool->set_normal(normals[norm]);
-						if (generate_tangents && !uses_uvs) {
+						if (generate_tangents && uvs.is_empty()) {
 							// We can't generate tangents without UVs, so create dummy tangents.
 							Vector3 tan = Vector3(normals[norm].z, -normals[norm].x, normals[norm].y).cross(normals[norm].normalized()).normalized();
 							surf_tool->set_tangent(Plane(tan.x, tan.y, tan.z, 1.0));
 						}
 					} else {
 						// No normals, use a dummy tangent since normals and tangents will be generated.
-						if (generate_tangents && !uses_uvs) {
+						if (generate_tangents && uvs.is_empty()) {
 							// We can't generate tangents without UVs, so create dummy tangents.
 							surf_tool->set_tangent(Plane(1.0, 0.0, 0.0, 1.0));
 						}
+					}
+
+					if (face[idx].size() >= 2 && !face[idx][1].is_empty()) {
+						int uv = face[idx][1].to_int() - 1;
+						if (uv < 0) {
+							uv += uvs.size() + 1;
+						}
+						ERR_FAIL_INDEX_V(uv, uvs.size(), ERR_FILE_CORRUPT);
+						surf_tool->set_uv(uvs[uv]);
 					}
 
 					int vtx = face[idx][0].to_int() - 1;
@@ -385,7 +366,7 @@ static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes,
 				face[1] = face[2];
 			}
 		} else if (l.begins_with("s ")) { //smoothing
-			String what = l.substr(2).strip_edges();
+			String what = l.substr(2, l.length()).strip_edges();
 			bool do_smooth;
 			if (what == "off") {
 				do_smooth = false;
@@ -422,11 +403,11 @@ static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes,
 			//groups are too annoying
 			if (surf_tool->get_vertex_array().size()) {
 				//another group going on, commit it
-				if (normals.is_empty()) {
+				if (normals.size() == 0) {
 					surf_tool->generate_normals();
 				}
 
-				if (generate_tangents && uses_uvs) {
+				if (generate_tangents && uvs.size()) {
 					surf_tool->generate_tangents();
 				}
 
@@ -445,14 +426,13 @@ static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes,
 
 				Array array = surf_tool->commit_to_arrays();
 
-				if (mesh_flags & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES && generate_tangents && uses_uvs) {
-					// Compression is enabled, so let's validate that the normals and generated tangents are correct.
+				if (mesh_flags & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES && generate_tangents) {
+					// Compression is enabled, so let's validate that the normals and tangents are correct.
 					Vector<Vector3> norms = array[Mesh::ARRAY_NORMAL];
 					Vector<float> tangents = array[Mesh::ARRAY_TANGENT];
-					ERR_FAIL_COND_V(tangents.is_empty(), ERR_FILE_CORRUPT);
 					for (int vert = 0; vert < norms.size(); vert++) {
 						Vector3 tan = Vector3(tangents[vert * 4 + 0], tangents[vert * 4 + 1], tangents[vert * 4 + 2]);
-						if (std::abs(tan.dot(norms[vert])) > 0.0001) {
+						if (abs(tan.dot(norms[vert])) > 0.0001) {
 							// Tangent is not perpendicular to the normal, so we can't use compression.
 							mesh_flags &= ~RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES;
 						}
@@ -460,7 +440,6 @@ static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes,
 				}
 
 				mesh->add_surface(Mesh::PRIMITIVE_TRIANGLES, array, TypedArray<Array>(), Dictionary(), material, name, mesh_flags);
-
 				print_verbose("OBJ: Added surface :" + mesh->get_surface_name(mesh->get_surface_count() - 1));
 
 				if (!current_material.is_empty()) {
@@ -475,7 +454,6 @@ static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes,
 
 				surf_tool->clear();
 				surf_tool->begin(Mesh::PRIMITIVE_TRIANGLES);
-				uses_uvs = false;
 			}
 
 			if (l.begins_with("o ") || f->eof_reached()) {
@@ -496,7 +474,7 @@ static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes,
 			}
 
 			if (l.begins_with("o ")) {
-				name = l.substr(2).strip_edges();
+				name = l.substr(2, l.length()).strip_edges();
 			}
 
 			if (l.begins_with("usemtl ")) {
@@ -504,7 +482,7 @@ static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes,
 			}
 
 			if (l.begins_with("g ")) {
-				current_group = l.substr(2).strip_edges();
+				current_group = l.substr(2, l.length()).strip_edges();
 			}
 
 		} else if (l.begins_with("mtllib ")) { //parse material
@@ -524,43 +502,6 @@ static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes,
 		}
 	}
 
-	if (p_generate_lightmap_uv2) {
-		Vector<uint8_t> lightmap_cache;
-		mesh->lightmap_unwrap_cached(Transform3D(), p_generate_lightmap_uv2_texel_size, p_src_lightmap_cache, lightmap_cache);
-
-		if (!lightmap_cache.is_empty()) {
-			if (r_lightmap_caches.is_empty()) {
-				r_lightmap_caches.push_back(lightmap_cache);
-			} else {
-				// MD5 is stored at the beginning of the cache data.
-				const String new_md5 = String::md5(lightmap_cache.ptr());
-
-				for (int i = 0; i < r_lightmap_caches.size(); i++) {
-					const String md5 = String::md5(r_lightmap_caches[i].ptr());
-					if (new_md5 < md5) {
-						r_lightmap_caches.insert(i, lightmap_cache);
-						break;
-					}
-
-					if (new_md5 == md5) {
-						break;
-					}
-				}
-			}
-		}
-	}
-
-	if (p_generate_lods) {
-		// Use normal merge/split angles that match the defaults used for 3D scene importing.
-		mesh->generate_lods(60.0f, {});
-	}
-
-	if (p_generate_shadow_mesh) {
-		mesh->create_shadow_mesh();
-	}
-
-	mesh->optimize_indices();
-
 	if (p_single_mesh && mesh->get_surface_count() > 0) {
 		r_meshes.push_back(mesh);
 	}
@@ -571,10 +512,7 @@ static Error _parse_obj(const String &p_path, List<Ref<ImporterMesh>> &r_meshes,
 Node *EditorOBJImporter::import_scene(const String &p_path, uint32_t p_flags, const HashMap<StringName, Variant> &p_options, List<String> *r_missing_deps, Error *r_err) {
 	List<Ref<ImporterMesh>> meshes;
 
-	// LOD, shadow mesh and lightmap UV2 generation are handled by ResourceImporterScene in this case,
-	// so disable it within the OBJ mesh import.
-	Vector<Vector<uint8_t>> mesh_lightmap_caches;
-	Error err = _parse_obj(p_path, meshes, false, p_flags & IMPORT_GENERATE_TANGENT_ARRAYS, false, false, false, 0.2, PackedByteArray(), Vector3(1, 1, 1), Vector3(0, 0, 0), p_flags & IMPORT_FORCE_DISABLE_MESH_COMPRESSION, mesh_lightmap_caches, r_missing_deps);
+	Error err = _parse_obj(p_path, meshes, false, p_flags & IMPORT_GENERATE_TANGENT_ARRAYS, false, Vector3(1, 1, 1), Vector3(0, 0, 0), p_flags & IMPORT_FORCE_DISABLE_MESH_COMPRESSION, r_missing_deps);
 
 	if (err != OK) {
 		if (r_err) {
@@ -602,6 +540,9 @@ Node *EditorOBJImporter::import_scene(const String &p_path, uint32_t p_flags, co
 
 void EditorOBJImporter::get_extensions(List<String> *r_extensions) const {
 	r_extensions->push_back("obj");
+}
+
+EditorOBJImporter::EditorOBJImporter() {
 }
 
 ////////////////////////////////////////////////////
@@ -640,51 +581,20 @@ String ResourceImporterOBJ::get_preset_name(int p_idx) const {
 
 void ResourceImporterOBJ::get_import_options(const String &p_path, List<ImportOption> *r_options, int p_preset) const {
 	r_options->push_back(ImportOption(PropertyInfo(Variant::BOOL, "generate_tangents"), true));
-	r_options->push_back(ImportOption(PropertyInfo(Variant::BOOL, "generate_lods"), true));
-	r_options->push_back(ImportOption(PropertyInfo(Variant::BOOL, "generate_shadow_mesh"), true));
-	r_options->push_back(ImportOption(PropertyInfo(Variant::BOOL, "generate_lightmap_uv2", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_UPDATE_ALL_IF_MODIFIED), false));
-	r_options->push_back(ImportOption(PropertyInfo(Variant::FLOAT, "generate_lightmap_uv2_texel_size", PROPERTY_HINT_RANGE, "0.001,100,0.001"), 0.2));
 	r_options->push_back(ImportOption(PropertyInfo(Variant::VECTOR3, "scale_mesh"), Vector3(1, 1, 1)));
 	r_options->push_back(ImportOption(PropertyInfo(Variant::VECTOR3, "offset_mesh"), Vector3(0, 0, 0)));
+	r_options->push_back(ImportOption(PropertyInfo(Variant::BOOL, "optimize_mesh"), true));
 	r_options->push_back(ImportOption(PropertyInfo(Variant::BOOL, "force_disable_mesh_compression"), false));
 }
 
 bool ResourceImporterOBJ::get_option_visibility(const String &p_path, const String &p_option, const HashMap<StringName, Variant> &p_options) const {
-	if (p_option == "generate_lightmap_uv2_texel_size" && !p_options["generate_lightmap_uv2"]) {
-		// Only display the lightmap texel size import option when lightmap UV2 generation is enabled.
-		return false;
-	}
-
 	return true;
 }
 
-Error ResourceImporterOBJ::import(ResourceUID::ID p_source_id, const String &p_source_file, const String &p_save_path, const HashMap<StringName, Variant> &p_options, List<String> *r_platform_variants, List<String> *r_gen_files, Variant *r_metadata) {
+Error ResourceImporterOBJ::import(const String &p_source_file, const String &p_save_path, const HashMap<StringName, Variant> &p_options, List<String> *r_platform_variants, List<String> *r_gen_files, Variant *r_metadata) {
 	List<Ref<ImporterMesh>> meshes;
 
-	Vector<uint8_t> src_lightmap_cache;
-	Vector<Vector<uint8_t>> mesh_lightmap_caches;
-
-	Error err;
-	{
-		src_lightmap_cache = FileAccess::get_file_as_bytes(p_source_file + ".unwrap_cache", &err);
-		if (err != OK) {
-			src_lightmap_cache.clear();
-		}
-	}
-
-	err = _parse_obj(p_source_file, meshes, true, p_options["generate_tangents"], p_options["generate_lods"], p_options["generate_shadow_mesh"], p_options["generate_lightmap_uv2"], p_options["generate_lightmap_uv2_texel_size"], src_lightmap_cache, p_options["scale_mesh"], p_options["offset_mesh"], p_options["force_disable_mesh_compression"], mesh_lightmap_caches, nullptr);
-
-	if (mesh_lightmap_caches.size()) {
-		Ref<FileAccess> f = FileAccess::open(p_source_file + ".unwrap_cache", FileAccess::WRITE);
-		if (f.is_valid()) {
-			f->store_32(mesh_lightmap_caches.size());
-			for (int i = 0; i < mesh_lightmap_caches.size(); i++) {
-				String md5 = String::md5(mesh_lightmap_caches[i].ptr());
-				f->store_buffer(mesh_lightmap_caches[i].ptr(), mesh_lightmap_caches[i].size());
-			}
-		}
-	}
-	err = OK;
+	Error err = _parse_obj(p_source_file, meshes, true, p_options["generate_tangents"], p_options["optimize_mesh"], p_options["scale_mesh"], p_options["offset_mesh"], p_options["force_disable_mesh_compression"], nullptr);
 
 	ERR_FAIL_COND_V(err != OK, err);
 	ERR_FAIL_COND_V(meshes.size() != 1, ERR_BUG);
@@ -698,4 +608,7 @@ Error ResourceImporterOBJ::import(ResourceUID::ID p_source_id, const String &p_s
 	r_gen_files->push_back(save_path);
 
 	return OK;
+}
+
+ResourceImporterOBJ::ResourceImporterOBJ() {
 }

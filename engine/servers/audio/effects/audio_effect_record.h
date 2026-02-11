@@ -28,12 +28,16 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AUDIO_EFFECT_RECORD_H
+#define AUDIO_EFFECT_RECORD_H
 
+#include "core/io/file_access.h"
+#include "core/io/marshalls.h"
+#include "core/os/os.h"
 #include "core/os/thread.h"
 #include "scene/resources/audio_stream_wav.h"
 #include "servers/audio/audio_effect.h"
-#include "servers/audio/audio_server.h"
+#include "servers/audio_server.h"
 
 class AudioEffectRecord;
 
@@ -93,3 +97,5 @@ public:
 	AudioEffectRecord();
 	~AudioEffectRecord();
 };
+
+#endif // AUDIO_EFFECT_RECORD_H

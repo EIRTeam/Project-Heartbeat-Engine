@@ -28,13 +28,13 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef BASE_BUTTON_H
+#define BASE_BUTTON_H
 
 #include "core/input/shortcut.h"
 #include "scene/gui/control.h"
 
 class ButtonGroup;
-class Timer;
 
 class BaseButton : public Control {
 	GDCLASS(BaseButton, Control);
@@ -61,7 +61,7 @@ private:
 		bool hovering = false;
 		bool press_attempt = false;
 		bool pressing_inside = false;
-		bool pressed_down_with_focus = false;
+
 		bool disabled = false;
 
 	} status;
@@ -87,7 +87,6 @@ protected:
 	void _notification(int p_what);
 
 	bool _was_pressed_by_mouse() const;
-	void _accessibility_action_click(const Variant &p_data);
 
 	GDVIRTUAL0(_pressed)
 	GDVIRTUAL1(_toggled, bool)
@@ -135,7 +134,7 @@ public:
 	void set_shortcut(const Ref<Shortcut> &p_shortcut);
 	Ref<Shortcut> get_shortcut() const;
 
-	virtual Control *make_custom_tooltip(const String &p_text) const override;
+	virtual String get_tooltip(const Point2 &p_pos) const override;
 
 	void set_button_group(const Ref<ButtonGroup> &p_group);
 	Ref<ButtonGroup> get_button_group() const;
@@ -166,3 +165,5 @@ public:
 	bool is_allow_unpress();
 	ButtonGroup();
 };
+
+#endif // BASE_BUTTON_H

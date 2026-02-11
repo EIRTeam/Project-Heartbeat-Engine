@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef SPRITE_FRAMES_H
+#define SPRITE_FRAMES_H
 
 #include "scene/resources/texture.h"
 
@@ -59,7 +60,6 @@ protected:
 public:
 	void add_animation(const StringName &p_anim);
 	bool has_animation(const StringName &p_anim) const;
-	void duplicate_animation(const StringName &p_from, const StringName &p_to);
 	void remove_animation(const StringName &p_anim);
 	void rename_animation(const StringName &p_prev, const StringName &p_next);
 
@@ -109,3 +109,5 @@ public:
 
 	SpriteFrames();
 };
+
+#endif // SPRITE_FRAMES_H

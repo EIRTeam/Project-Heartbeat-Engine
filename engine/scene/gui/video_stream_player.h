@@ -28,24 +28,31 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef VIDEO_STREAM_PLAYER_H
+#define VIDEO_STREAM_PLAYER_H
 
 #include "scene/gui/control.h"
 #include "scene/resources/video_stream.h"
 #include "servers/audio/audio_rb_resampler.h"
+#include "servers/audio_server.h"
 
 class VideoStreamPlayer : public Control {
 	GDCLASS(VideoStreamPlayer, Control);
 
+	struct Output {
+		AudioFrame vol;
+		int bus_index = 0;
+		Viewport *viewport = nullptr; //pointer only used for reference to previous mix
+	};
 	Ref<VideoStreamPlayback> playback;
 	Ref<VideoStream> stream;
 
 	int sp_get_channel_count() const;
 	bool mix(AudioFrame *p_buffer, int p_frames);
 
+	RID stream_rid;
+
 	Ref<Texture2D> texture;
-	Size2 texture_size;
-	void texture_changed(const Ref<Texture2D> &p_texture);
 
 	AudioRBResampler resampler;
 	Vector<AudioFrame> mix_buffer;
@@ -56,13 +63,14 @@ class VideoStreamPlayer : public Control {
 	bool paused_from_tree = false;
 	bool autoplay = false;
 	float volume = 1.0;
-	float speed_scale = 1.0;
+	double last_audio_time = 0.0;
 	bool expand = false;
 	bool loop = false;
-	bool first_frame = false;
 	int buffering_ms = 500;
 	int audio_track = 0;
 	int bus_index = 0;
+	float playback_speed = 1.0f;
+	bool process_while_paused = false;
 
 	StringName bus;
 
@@ -101,9 +109,6 @@ public:
 	void set_volume_db(float p_db);
 	float get_volume_db() const;
 
-	void set_speed_scale(float p_speed_scale);
-	float get_speed_scale() const;
-
 	String get_stream_name() const;
 	double get_stream_length() const;
 	double get_stream_position() const;
@@ -121,5 +126,14 @@ public:
 	void set_bus(const StringName &p_bus);
 	StringName get_bus() const;
 
+	float get_playback_speed() const;
+	void set_playback_speed(float p_playback_speed);
+
+	void set_process_while_paused(bool p_process_while_paused);
+	bool get_process_while_paused() const;
+
+	VideoStreamPlayer();
 	~VideoStreamPlayer();
 };
+
+#endif // VIDEO_STREAM_PLAYER_H

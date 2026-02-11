@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef OPENXR_ANDROID_EXTENSION_H
+#define OPENXR_ANDROID_EXTENSION_H
 
 #include "../../util.h"
 #include "../openxr_extension_wrapper.h"
@@ -41,9 +42,9 @@ public:
 
 	OpenXRAndroidExtension();
 
-	virtual HashMap<String, bool *> get_requested_extensions(XrVersion p_version) override;
+	virtual HashMap<String, bool *> get_requested_extensions() override;
 	virtual void on_before_instance_created() override;
-	virtual void *set_instance_create_info_and_get_next_pointer(XrVersion p_xr_version, void *p_next_pointer) override;
+	virtual void *set_instance_create_info_and_get_next_pointer(void *p_next_pointer) override;
 
 	virtual ~OpenXRAndroidExtension() override;
 
@@ -53,9 +54,10 @@ private:
 	JavaVM *vm;
 	jobject activity_object;
 	bool loader_init_extension_available = false;
-	bool loader_init_android_extension_available = false;
 	bool create_instance_extension_available = false;
 
 	// Initialize the loader
 	EXT_PROTO_XRRESULT_FUNC1(xrInitializeLoaderKHR, (const XrLoaderInitInfoBaseHeaderKHR *), loaderInitInfo)
 };
+
+#endif // OPENXR_ANDROID_EXTENSION_H

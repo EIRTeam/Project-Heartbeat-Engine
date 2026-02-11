@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef FLOW_CONTAINER_H
+#define FLOW_CONTAINER_H
 
 #include "scene/gui/container.h"
 
@@ -51,7 +52,6 @@ public:
 private:
 	int cached_size = 0;
 	int cached_line_count = 0;
-	int cached_line_max_child_count = 0;
 
 	bool vertical = false;
 	bool reverse_fill = false;
@@ -74,7 +74,6 @@ protected:
 
 public:
 	int get_line_count() const;
-	int get_line_max_child_count() const;
 
 	void set_alignment(AlignmentMode p_alignment);
 	AlignmentMode get_alignment() const;
@@ -114,3 +113,5 @@ public:
 
 VARIANT_ENUM_CAST(FlowContainer::AlignmentMode);
 VARIANT_ENUM_CAST(FlowContainer::LastWrapAlignmentMode);
+
+#endif // FLOW_CONTAINER_H

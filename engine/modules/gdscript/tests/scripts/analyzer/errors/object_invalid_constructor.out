@@ -1,2 +1,2 @@
 GDTEST_ANALYZER_ERROR
->> ERROR at line 4: Invalid constructor "Object()", use "Object.new()" instead.
+Invalid constructor "Object()", use "Object.new()" instead.

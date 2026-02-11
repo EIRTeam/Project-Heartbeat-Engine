@@ -53,9 +53,7 @@ jmethodID FileAccessFilesystemJAndroid::_file_write = nullptr;
 jmethodID FileAccessFilesystemJAndroid::_file_flush = nullptr;
 jmethodID FileAccessFilesystemJAndroid::_file_exists = nullptr;
 jmethodID FileAccessFilesystemJAndroid::_file_last_modified = nullptr;
-jmethodID FileAccessFilesystemJAndroid::_file_last_accessed = nullptr;
 jmethodID FileAccessFilesystemJAndroid::_file_resize = nullptr;
-jmethodID FileAccessFilesystemJAndroid::_file_size = nullptr;
 
 String FileAccessFilesystemJAndroid::get_path() const {
 	return path_src;
@@ -79,9 +77,15 @@ Error FileAccessFilesystemJAndroid::open_internal(const String &p_path, int p_mo
 		int res = env->CallIntMethod(file_access_handler, _file_open, js, p_mode_flags);
 		env->DeleteLocalRef(js);
 
-		if (res < 0) {
-			// Errors are passed back as their negative value to differentiate from the positive file id.
-			return static_cast<Error>(-res);
+		if (res <= 0) {
+			switch (res) {
+				case 0:
+				default:
+					return ERR_FILE_CANT_OPEN;
+
+				case -2:
+					return ERR_FILE_NOT_FOUND;
+			}
 		}
 
 		id = res;
@@ -171,6 +175,43 @@ void FileAccessFilesystemJAndroid::_set_eof(bool eof) {
 	}
 }
 
+uint8_t FileAccessFilesystemJAndroid::get_8() const {
+	ERR_FAIL_COND_V_MSG(!is_open(), 0, "File must be opened before use.");
+	uint8_t byte;
+	get_buffer(&byte, 1);
+	return byte;
+}
+
+uint16_t FileAccessFilesystemJAndroid::get_16() const {
+	ERR_FAIL_COND_V_MSG(!is_open(), 0, "File must be opened before use.");
+	uint16_t bytes = 0;
+	get_buffer(reinterpret_cast<uint8_t *>(&bytes), 2);
+	if (big_endian) {
+		bytes = BSWAP16(bytes);
+	}
+	return bytes;
+}
+
+uint32_t FileAccessFilesystemJAndroid::get_32() const {
+	ERR_FAIL_COND_V_MSG(!is_open(), 0, "File must be opened before use.");
+	uint32_t bytes = 0;
+	get_buffer(reinterpret_cast<uint8_t *>(&bytes), 4);
+	if (big_endian) {
+		bytes = BSWAP32(bytes);
+	}
+	return bytes;
+}
+
+uint64_t FileAccessFilesystemJAndroid::get_64() const {
+	ERR_FAIL_COND_V_MSG(!is_open(), 0, "File must be opened before use.");
+	uint64_t bytes = 0;
+	get_buffer(reinterpret_cast<uint8_t *>(&bytes), 8);
+	if (big_endian) {
+		bytes = BSWAP64(bytes);
+	}
+	return bytes;
+}
+
 String FileAccessFilesystemJAndroid::get_line() const {
 	ERR_FAIL_COND_V_MSG(!is_open(), String(), "File must be opened before use.");
 
@@ -200,11 +241,10 @@ String FileAccessFilesystemJAndroid::get_line() const {
 
 		for (; bytes_read > 0; line_buffer_position++, bytes_read--) {
 			uint8_t elem = line_buffer[line_buffer_position];
-			if (elem == '\r' || elem == '\n' || elem == '\0') {
+			if (elem == '\n' || elem == '\0') {
 				// Found the end of the line
-				const bool is_crlf = elem == '\r' && line_buffer_position + 1 < current_buffer_size && line_buffer[line_buffer_position + 1] == '\n';
-				const_cast<FileAccessFilesystemJAndroid *>(this)->seek(start_position + line_buffer_position + (is_crlf ? 2 : 1));
-				if (result.append_utf8((const char *)line_buffer.ptr(), line_buffer_position)) {
+				const_cast<FileAccessFilesystemJAndroid *>(this)->seek(start_position + line_buffer_position + 1);
+				if (result.parse_utf8((const char *)line_buffer.ptr(), line_buffer_position, true)) {
 					return String();
 				}
 				return result;
@@ -212,7 +252,7 @@ String FileAccessFilesystemJAndroid::get_line() const {
 		}
 	}
 
-	if (result.append_utf8((const char *)line_buffer.ptr(), line_buffer_position)) {
+	if (result.parse_utf8((const char *)line_buffer.ptr(), line_buffer_position, true)) {
 		return String();
 	}
 	return result;
@@ -237,23 +277,44 @@ uint64_t FileAccessFilesystemJAndroid::get_buffer(uint8_t *p_dst, uint64_t p_len
 	}
 }
 
-bool FileAccessFilesystemJAndroid::store_buffer(const uint8_t *p_src, uint64_t p_length) {
+void FileAccessFilesystemJAndroid::store_8(uint8_t p_dest) {
+	store_buffer(&p_dest, 1);
+}
+
+void FileAccessFilesystemJAndroid::store_16(uint16_t p_dest) {
+	if (big_endian) {
+		p_dest = BSWAP16(p_dest);
+	}
+	store_buffer(reinterpret_cast<uint8_t *>(&p_dest), 2);
+}
+
+void FileAccessFilesystemJAndroid::store_32(uint32_t p_dest) {
+	if (big_endian) {
+		p_dest = BSWAP32(p_dest);
+	}
+	store_buffer(reinterpret_cast<uint8_t *>(&p_dest), 4);
+}
+
+void FileAccessFilesystemJAndroid::store_64(uint64_t p_dest) {
+	if (big_endian) {
+		p_dest = BSWAP64(p_dest);
+	}
+	store_buffer(reinterpret_cast<uint8_t *>(&p_dest), 8);
+}
+
+void FileAccessFilesystemJAndroid::store_buffer(const uint8_t *p_src, uint64_t p_length) {
 	if (_file_write) {
-		ERR_FAIL_COND_V_MSG(!is_open(), false, "File must be opened before use.");
-		ERR_FAIL_COND_V(!p_src && p_length > 0, false);
+		ERR_FAIL_COND_MSG(!is_open(), "File must be opened before use.");
 		if (p_length == 0) {
-			return true;
+			return;
 		}
 
 		JNIEnv *env = get_jni_env();
-		ERR_FAIL_NULL_V(env, false);
+		ERR_FAIL_NULL(env);
 
 		jobject j_buffer = env->NewDirectByteBuffer((void *)p_src, p_length);
-		bool ok = env->CallBooleanMethod(file_access_handler, _file_write, id, j_buffer);
+		env->CallVoidMethod(file_access_handler, _file_write, id, j_buffer);
 		env->DeleteLocalRef(j_buffer);
-		return ok;
-	} else {
-		return false;
 	}
 }
 
@@ -270,7 +331,19 @@ Error FileAccessFilesystemJAndroid::resize(int64_t p_length) {
 		ERR_FAIL_NULL_V(env, FAILED);
 		ERR_FAIL_COND_V_MSG(!is_open(), FAILED, "File must be opened before use.");
 		int res = env->CallIntMethod(file_access_handler, _file_resize, id, p_length);
-		return static_cast<Error>(res);
+		switch (res) {
+			case 0:
+				return OK;
+			case -4:
+				return ERR_INVALID_PARAMETER;
+			case -3:
+				return ERR_FILE_CANT_OPEN;
+			case -2:
+				return ERR_FILE_NOT_FOUND;
+			case -1:
+			default:
+				return FAILED;
+		}
 	} else {
 		return ERR_UNAVAILABLE;
 	}
@@ -303,7 +376,7 @@ bool FileAccessFilesystemJAndroid::file_exists(const String &p_path) {
 uint64_t FileAccessFilesystemJAndroid::_get_modified_time(const String &p_file) {
 	if (_file_last_modified) {
 		JNIEnv *env = get_jni_env();
-		ERR_FAIL_NULL_V(env, 0);
+		ERR_FAIL_NULL_V(env, false);
 
 		String path = fix_path(p_file).simplify_path();
 		jstring js = env->NewStringUTF(path.utf8().get_data());
@@ -312,36 +385,6 @@ uint64_t FileAccessFilesystemJAndroid::_get_modified_time(const String &p_file) 
 		return result;
 	} else {
 		return 0;
-	}
-}
-
-uint64_t FileAccessFilesystemJAndroid::_get_access_time(const String &p_file) {
-	if (_file_last_accessed) {
-		JNIEnv *env = get_jni_env();
-		ERR_FAIL_NULL_V(env, 0);
-
-		String path = fix_path(p_file).simplify_path();
-		jstring js = env->NewStringUTF(path.utf8().get_data());
-		uint64_t result = env->CallLongMethod(file_access_handler, _file_last_accessed, js);
-		env->DeleteLocalRef(js);
-		return result;
-	} else {
-		return 0;
-	}
-}
-
-int64_t FileAccessFilesystemJAndroid::_get_size(const String &p_file) {
-	if (_file_size) {
-		JNIEnv *env = get_jni_env();
-		ERR_FAIL_NULL_V(env, -1);
-
-		String path = fix_path(p_file).simplify_path();
-		jstring js = env->NewStringUTF(path.utf8().get_data());
-		int64_t result = env->CallLongMethod(file_access_handler, _file_size, js);
-		env->DeleteLocalRef(js);
-		return result;
-	} else {
-		return -1;
 	}
 }
 
@@ -361,13 +404,11 @@ void FileAccessFilesystemJAndroid::setup(jobject p_file_access_handler) {
 	_file_seek_end = env->GetMethodID(cls, "fileSeekFromEnd", "(IJ)V");
 	_file_read = env->GetMethodID(cls, "fileRead", "(ILjava/nio/ByteBuffer;)I");
 	_file_close = env->GetMethodID(cls, "fileClose", "(I)V");
-	_file_write = env->GetMethodID(cls, "fileWrite", "(ILjava/nio/ByteBuffer;)Z");
+	_file_write = env->GetMethodID(cls, "fileWrite", "(ILjava/nio/ByteBuffer;)V");
 	_file_flush = env->GetMethodID(cls, "fileFlush", "(I)V");
 	_file_exists = env->GetMethodID(cls, "fileExists", "(Ljava/lang/String;)Z");
 	_file_last_modified = env->GetMethodID(cls, "fileLastModified", "(Ljava/lang/String;)J");
-	_file_last_accessed = env->GetMethodID(cls, "fileLastAccessed", "(Ljava/lang/String;)J");
 	_file_resize = env->GetMethodID(cls, "fileResize", "(IJ)I");
-	_file_size = env->GetMethodID(cls, "fileSize", "(Ljava/lang/String;)J");
 }
 
 void FileAccessFilesystemJAndroid::terminate() {

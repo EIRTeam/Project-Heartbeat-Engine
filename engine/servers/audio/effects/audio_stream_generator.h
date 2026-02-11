@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AUDIO_STREAM_GENERATOR_H
+#define AUDIO_STREAM_GENERATOR_H
 
 #include "core/templates/ring_buffer.h"
 #include "servers/audio/audio_stream.h"
@@ -36,30 +37,15 @@
 class AudioStreamGenerator : public AudioStream {
 	GDCLASS(AudioStreamGenerator, AudioStream);
 
-public:
-	enum AudioStreamGeneratorMixRate {
-		MIX_RATE_OUTPUT,
-		MIX_RATE_INPUT,
-		MIX_RATE_CUSTOM,
-		MIX_RATE_MAX,
-	};
-
-private:
-	AudioStreamGeneratorMixRate mix_rate_mode = MIX_RATE_CUSTOM;
-	float mix_rate = 44100;
-	float buffer_len = 0.5;
+	float mix_rate;
+	float buffer_len;
 
 protected:
 	static void _bind_methods();
 
 public:
-	float _get_target_rate() const;
-
 	void set_mix_rate(float p_mix_rate);
 	float get_mix_rate() const;
-
-	void set_mix_rate_mode(AudioStreamGeneratorMixRate p_mix_rate_mode);
-	AudioStreamGeneratorMixRate get_mix_rate_mode() const;
 
 	void set_buffer_length(float p_seconds);
 	float get_buffer_length() const;
@@ -69,7 +55,7 @@ public:
 
 	virtual double get_length() const override;
 	virtual bool is_monophonic() const override;
-	AudioStreamGenerator() {}
+	AudioStreamGenerator();
 };
 
 class AudioStreamGeneratorPlayback : public AudioStreamPlaybackResampled {
@@ -110,4 +96,4 @@ public:
 	AudioStreamGeneratorPlayback();
 };
 
-VARIANT_ENUM_CAST(AudioStreamGenerator::AudioStreamGeneratorMixRate);
+#endif // AUDIO_STREAM_GENERATOR_H

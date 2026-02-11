@@ -28,14 +28,16 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef GL_MANAGER_X11_EGL_H
+#define GL_MANAGER_X11_EGL_H
 
 #if defined(X11_ENABLED) && defined(GLES3_ENABLED)
 
+#include "core/error/error_list.h"
 #include "core/os/os.h"
 #include "core/templates/local_vector.h"
 #include "drivers/egl/egl_manager.h"
-#include "servers/display/display_server.h"
+#include "servers/display_server.h"
 
 #include <X11/Xlib.h>
 
@@ -50,8 +52,10 @@ private:
 public:
 	void window_resize(DisplayServer::WindowID p_window_id, int p_width, int p_height) {}
 
-	GLManagerEGL_X11() {}
-	~GLManagerEGL_X11() {}
+	GLManagerEGL_X11(){};
+	~GLManagerEGL_X11(){};
 };
 
 #endif // X11_ENABLED && GLES3_ENABLED
+
+#endif // GL_MANAGER_X11_EGL_H

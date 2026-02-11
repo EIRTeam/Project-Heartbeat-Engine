@@ -25,7 +25,6 @@
 
 #include "tvgCommon.h"
 #include "tvgArray.h"
-#include "tvgInlist.h"
 
 struct SvgNode;
 struct SvgStyleGradient;
@@ -216,7 +215,6 @@ enum class SvgParserLengthType
 {
     Vertical,
     Horizontal,
-    Diagonal,
     //In case of, for example, radius of radial gradient
     Other
 };
@@ -552,18 +550,8 @@ struct SvgParser
 
 struct SvgNodeIdPair
 {
-    INLIST_ITEM(SvgNodeIdPair);
-    SvgNodeIdPair(SvgNode* n, char* i) : node{n}, id{i} {}
     SvgNode* node;
     char *id;
-};
-
-struct FontFace
-{
-    char* name = nullptr;
-    char* src = nullptr;
-    size_t srcLen = 0;
-    char* decoded = nullptr;
 };
 
 enum class OpenedTagType : uint8_t
@@ -580,12 +568,11 @@ struct SvgLoaderData
     SvgNode* def = nullptr; //also used to store nested graphic nodes
     SvgNode* cssStyle = nullptr;
     Array<SvgStyleGradient*> gradients;
-    Array<SvgStyleGradient*> gradientStack; //For stops
+    SvgStyleGradient* latestGradient = nullptr; //For stops
     SvgParser* svgParse = nullptr;
-    Inlist<SvgNodeIdPair> cloneNodes;
+    Array<SvgNodeIdPair> cloneNodes;
     Array<SvgNodeIdPair> nodesToStyle;
     Array<char*> images;        //embedded images
-    Array<FontFace> fonts;
     int level = 0;
     bool result = false;
     OpenedTagType openedTag = OpenedTagType::Other;

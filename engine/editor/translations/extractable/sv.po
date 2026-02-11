@@ -18,12 +18,6 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=n != 1;\n"
 "X-Generator: Weblate 5.5-dev\n"
 
-msgid "Save"
-msgstr "Spara"
-
-msgid "Clear"
-msgstr "Rensa"
-
 msgid "Add current color as a preset."
 msgstr "Lägg till nuvarande färg som en förinställning."
 
@@ -61,6 +55,9 @@ msgstr "Öppna en Katalog"
 msgid "Open a File or Directory"
 msgstr "Öppna en Fil eller Katalog"
 
+msgid "Save"
+msgstr "Spara"
+
 msgid "Save a File"
 msgstr "Spara en Fil"
 
@@ -79,11 +76,11 @@ msgstr "Sökväg:"
 msgid "Refresh files."
 msgstr "Uppdatera filer."
 
-msgid "Directories & Files:"
-msgstr "Kataloger & Filer:"
-
 msgid "Toggle the visibility of hidden files."
 msgstr "Växla synligheten av dolda filer."
+
+msgid "Directories & Files:"
+msgstr "Kataloger & Filer:"
 
 msgid "File:"
 msgstr "Fil:"
@@ -117,6 +114,9 @@ msgstr "Klistra in"
 
 msgid "Select All"
 msgstr "Välj Alla"
+
+msgid "Clear"
+msgstr "Rensa"
 
 msgid "Undo"
 msgstr "Ångra"

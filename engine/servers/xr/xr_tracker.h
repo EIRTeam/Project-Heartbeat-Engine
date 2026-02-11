@@ -28,10 +28,11 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef XR_TRACKER_H
+#define XR_TRACKER_H
 
 #include "core/os/thread_safe.h"
-#include "servers/xr/xr_server.h"
+#include "servers/xr_server.h"
 
 /**
 	The XR tracker object is a common base for all different types of XR trackers.
@@ -56,3 +57,5 @@ public:
 	void set_tracker_desc(const String &p_desc);
 	String get_tracker_desc() const;
 };
+
+#endif // XR_TRACKER_H

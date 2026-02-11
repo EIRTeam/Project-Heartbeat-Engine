@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef EDITOR_PROFILER_H
+#define EDITOR_PROFILER_H
 
 #include "scene/gui/box_container.h"
 #include "scene/gui/button.h"
@@ -103,11 +104,6 @@ private:
 	TextureRect *graph = nullptr;
 	Ref<ImageTexture> graph_texture;
 	Vector<uint8_t> graph_image;
-
-	float graph_zoom = 0.0f;
-	float pan_accumulator = 0.0f;
-	int zoom_center = -1;
-
 	Tree *variables = nullptr;
 	HSplitContainer *h_split = nullptr;
 
@@ -123,6 +119,8 @@ private:
 	Vector<Metric> frame_metrics;
 	int total_metrics = 0;
 	int last_metric = -1;
+
+	int max_functions = 0;
 
 	bool updating_frame = false;
 
@@ -140,7 +138,6 @@ private:
 
 	void _activate_pressed();
 	void _clear_pressed();
-	void _autostart_toggled(bool p_toggled_on);
 
 	void _internal_profiles_pressed();
 
@@ -157,7 +154,6 @@ private:
 	void _graph_tex_input(const Ref<InputEvent> &p_ev);
 
 	Color _get_color_from_signature(const StringName &p_signature) const;
-	int _get_zoom_left_border() const;
 
 	void _cursor_metric_changed(double);
 
@@ -172,7 +168,7 @@ protected:
 public:
 	void add_frame_metric(const Metric &p_metric, bool p_final = false);
 	void set_enabled(bool p_enable, bool p_clear = true);
-	void set_profiling(bool p_pressed);
+	void set_pressed(bool p_pressed);
 	bool is_profiling();
 	bool is_seeking() { return seeking; }
 	void disable_seeking();
@@ -183,3 +179,5 @@ public:
 
 	EditorProfiler();
 };
+
+#endif // EDITOR_PROFILER_H

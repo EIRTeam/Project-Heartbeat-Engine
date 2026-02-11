@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef TEST_BASIS_H
+#define TEST_BASIS_H
 
 #include "core/math/basis.h"
 #include "core/math/random_number_generator.h"
@@ -38,11 +39,11 @@
 namespace TestBasis {
 
 Vector3 deg_to_rad(const Vector3 &p_rotation) {
-	return p_rotation / 180.0 * Math::PI;
+	return p_rotation / 180.0 * Math_PI;
 }
 
 Vector3 rad2deg(const Vector3 &p_rotation) {
-	return p_rotation / Math::PI * 180.0;
+	return p_rotation / Math_PI * 180.0;
 }
 
 String get_rot_order_name(EulerOrder ro) {
@@ -92,9 +93,9 @@ void test_rotation(Vector3 deg_original_euler, EulerOrder rot_order) {
 
 	Basis res = to_rotation.inverse() * rotation_from_computed_euler;
 
-	CHECK_MESSAGE((res.get_column(0) - Vector3(1.0, 0.0, 0.0)).length() <= 0.001, vformat("Fail due to X %s\n", String(res.get_column(0))));
-	CHECK_MESSAGE((res.get_column(1) - Vector3(0.0, 1.0, 0.0)).length() <= 0.001, vformat("Fail due to Y %s\n", String(res.get_column(1))));
-	CHECK_MESSAGE((res.get_column(2) - Vector3(0.0, 0.0, 1.0)).length() <= 0.001, vformat("Fail due to Z %s\n", String(res.get_column(2))));
+	CHECK_MESSAGE((res.get_column(0) - Vector3(1.0, 0.0, 0.0)).length() <= 0.1, vformat("Fail due to X %s\n", String(res.get_column(0))));
+	CHECK_MESSAGE((res.get_column(1) - Vector3(0.0, 1.0, 0.0)).length() <= 0.1, vformat("Fail due to Y %s\n", String(res.get_column(1))));
+	CHECK_MESSAGE((res.get_column(2) - Vector3(0.0, 0.0, 1.0)).length() <= 0.1, vformat("Fail due to Z %s\n", String(res.get_column(2))));
 
 	// Double check `to_rotation` decomposing with XYZ rotation order.
 	const Vector3 euler_xyz_from_rotation = to_rotation.get_euler(EulerOrder::XYZ);
@@ -102,9 +103,9 @@ void test_rotation(Vector3 deg_original_euler, EulerOrder rot_order) {
 
 	res = to_rotation.inverse() * rotation_from_xyz_computed_euler;
 
-	CHECK_MESSAGE((res.get_column(0) - Vector3(1.0, 0.0, 0.0)).length() <= 0.001, vformat("Double check with XYZ rot order failed, due to X %s\n", String(res.get_column(0))));
-	CHECK_MESSAGE((res.get_column(1) - Vector3(0.0, 1.0, 0.0)).length() <= 0.001, vformat("Double check with XYZ rot order failed, due to Y %s\n", String(res.get_column(1))));
-	CHECK_MESSAGE((res.get_column(2) - Vector3(0.0, 0.0, 1.0)).length() <= 0.001, vformat("Double check with XYZ rot order failed, due to Z %s\n", String(res.get_column(2))));
+	CHECK_MESSAGE((res.get_column(0) - Vector3(1.0, 0.0, 0.0)).length() <= 0.1, vformat("Double check with XYZ rot order failed, due to X %s\n", String(res.get_column(0))));
+	CHECK_MESSAGE((res.get_column(1) - Vector3(0.0, 1.0, 0.0)).length() <= 0.1, vformat("Double check with XYZ rot order failed, due to Y %s\n", String(res.get_column(1))));
+	CHECK_MESSAGE((res.get_column(2) - Vector3(0.0, 0.0, 1.0)).length() <= 0.1, vformat("Double check with XYZ rot order failed, due to Z %s\n", String(res.get_column(2))));
 
 	INFO(vformat("Rotation order: %s\n.", get_rot_order_name(rot_order)));
 	INFO(vformat("Original Rotation: %s\n", String(deg_original_euler)));
@@ -175,12 +176,32 @@ TEST_CASE("[Basis] Euler conversions") {
 	vectors_to_test.push_back(Vector3(120.0, -150.0, -130.0));
 	vectors_to_test.push_back(Vector3(120.0, 150.0, -130.0));
 	vectors_to_test.push_back(Vector3(120.0, 150.0, 130.0));
-	vectors_to_test.push_back(Vector3(89.9, 0.0, 0.0));
-	vectors_to_test.push_back(Vector3(-89.9, 0.0, 0.0));
-	vectors_to_test.push_back(Vector3(0.0, 89.9, 0.0));
-	vectors_to_test.push_back(Vector3(0.0, -89.9, 0.0));
-	vectors_to_test.push_back(Vector3(0.0, 0.0, 89.9));
-	vectors_to_test.push_back(Vector3(0.0, 0.0, -89.9));
+
+	for (int h = 0; h < euler_order_to_test.size(); h += 1) {
+		for (int i = 0; i < vectors_to_test.size(); i += 1) {
+			test_rotation(vectors_to_test[i], euler_order_to_test[h]);
+		}
+	}
+}
+
+TEST_CASE("[Stress][Basis] Euler conversions") {
+	Vector<EulerOrder> euler_order_to_test;
+	euler_order_to_test.push_back(EulerOrder::XYZ);
+	euler_order_to_test.push_back(EulerOrder::XZY);
+	euler_order_to_test.push_back(EulerOrder::YZX);
+	euler_order_to_test.push_back(EulerOrder::YXZ);
+	euler_order_to_test.push_back(EulerOrder::ZXY);
+	euler_order_to_test.push_back(EulerOrder::ZYX);
+
+	Vector<Vector3> vectors_to_test;
+	// Add 1000 random vectors with weirds numbers.
+	RandomNumberGenerator rng;
+	for (int _ = 0; _ < 1000; _ += 1) {
+		vectors_to_test.push_back(Vector3(
+				rng.randf_range(-1800, 1800),
+				rng.randf_range(-1800, 1800),
+				rng.randf_range(-1800, 1800)));
+	}
 
 	for (int h = 0; h < euler_order_to_test.size(); h += 1) {
 		for (int i = 0; i < vectors_to_test.size(); i += 1) {
@@ -192,7 +213,7 @@ TEST_CASE("[Basis] Euler conversions") {
 TEST_CASE("[Basis] Set axis angle") {
 	Vector3 axis;
 	real_t angle;
-	real_t pi = (real_t)Math::PI;
+	real_t pi = (real_t)Math_PI;
 
 	// Testing the singularity when the angle is 0°.
 	Basis identity(1, 0, 0, 0, 1, 0, 0, 0, 1);
@@ -243,8 +264,8 @@ TEST_CASE("[Basis] Set axis angle") {
 }
 
 TEST_CASE("[Basis] Finite number checks") {
-	constexpr Vector3 x(0, 1, 2);
-	constexpr Vector3 infinite(Math::NaN, Math::NaN, Math::NaN);
+	const Vector3 x(0, 1, 2);
+	const Vector3 infinite(NAN, NAN, NAN);
 
 	CHECK_MESSAGE(
 			Basis(x, x, x).is_finite(),
@@ -301,7 +322,7 @@ TEST_CASE("[Basis] Is conformal checks") {
 			"Basis with non-uniform scale should not be conformal.");
 
 	CHECK_FALSE_MESSAGE(
-			Basis(Vector3(Math::SQRT12, Math::SQRT12, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)).is_conformal(),
+			Basis(Vector3(Math_SQRT12, Math_SQRT12, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)).is_conformal(),
 			"Basis with the X axis skewed 45 degrees should not be conformal.");
 
 	CHECK_MESSAGE(
@@ -331,7 +352,7 @@ TEST_CASE("[Basis] Is orthogonal checks") {
 			"Basis with a flip, rotation, and uniform scale should be orthogonal.");
 
 	CHECK_FALSE_MESSAGE(
-			Basis(Vector3(Math::SQRT12, Math::SQRT12, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)).is_orthogonal(),
+			Basis(Vector3(Math_SQRT12, Math_SQRT12, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)).is_orthogonal(),
 			"Basis with the X axis skewed 45 degrees should not be orthogonal.");
 
 	CHECK_MESSAGE(
@@ -361,7 +382,7 @@ TEST_CASE("[Basis] Is orthonormal checks") {
 			"Basis with a flip, rotation, and uniform scale should not be orthonormal.");
 
 	CHECK_FALSE_MESSAGE(
-			Basis(Vector3(Math::SQRT12, Math::SQRT12, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)).is_orthonormal(),
+			Basis(Vector3(Math_SQRT12, Math_SQRT12, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)).is_orthonormal(),
 			"Basis with the X axis skewed 45 degrees should not be orthonormal.");
 
 	CHECK_FALSE_MESSAGE(
@@ -391,7 +412,7 @@ TEST_CASE("[Basis] Is rotation checks") {
 			"Basis with a squeeze should not be a rotation.");
 
 	CHECK_FALSE_MESSAGE(
-			Basis(Vector3(Math::SQRT12, Math::SQRT12, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)).is_rotation(),
+			Basis(Vector3(Math_SQRT12, Math_SQRT12, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)).is_rotation(),
 			"Basis with the X axis skewed 45 degrees should not be a rotation.");
 
 	CHECK_FALSE_MESSAGE(
@@ -400,3 +421,5 @@ TEST_CASE("[Basis] Is rotation checks") {
 }
 
 } // namespace TestBasis
+
+#endif // TEST_BASIS_H

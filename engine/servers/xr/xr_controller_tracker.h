@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef XR_CONTROLLER_TRACKER_H
+#define XR_CONTROLLER_TRACKER_H
 
 #include "core/os/thread_safe.h"
 #include "servers/xr/xr_positional_tracker.h"
@@ -41,8 +42,11 @@ class XRControllerTracker : public XRPositionalTracker {
 	GDCLASS(XRControllerTracker, XRPositionalTracker);
 	_THREAD_SAFE_CLASS_
 
+protected:
+	static void _bind_methods();
+
 public:
-	XRControllerTracker() {
-		type = XRServer::TRACKER_CONTROLLER;
-	}
+	XRControllerTracker();
 };
+
+#endif // XR_CONTROLLER_TRACKER_H

@@ -28,13 +28,14 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef TTS_MACOS_H
+#define TTS_MACOS_H
 
 #include "core/string/ustring.h"
 #include "core/templates/hash_map.h"
 #include "core/templates/list.h"
 #include "core/variant/array.h"
-#include "servers/display/display_server.h"
+#include "servers/display_server.h"
 
 #import <AppKit/AppKit.h>
 
@@ -47,12 +48,12 @@
 @interface TTS_MacOS : NSObject <AVSpeechSynthesizerDelegate> {
 	// AVSpeechSynthesizer
 	bool speaking;
-	HashMap<id, int64_t> ids;
+	HashMap<id, int> ids;
 
 	// NSSpeechSynthesizer
 	bool paused;
 	bool have_utterance;
-	int64_t last_utterance;
+	int last_utterance;
 
 	id synth; // NSSpeechSynthesizer or AVSpeechSynthesizer
 	List<DisplayServer::TTSUtterance> queue;
@@ -63,6 +64,8 @@
 - (void)stopSpeaking;
 - (bool)isSpeaking;
 - (bool)isPaused;
-- (void)speak:(const String &)text voice:(const String &)voice volume:(int)volume pitch:(float)pitch rate:(float)rate utterance_id:(int64_t)utterance_id interrupt:(bool)interrupt;
+- (void)speak:(const String &)text voice:(const String &)voice volume:(int)volume pitch:(float)pitch rate:(float)rate utterance_id:(int)utterance_id interrupt:(bool)interrupt;
 - (Array)getVoices;
 @end
+
+#endif // TTS_MACOS_H

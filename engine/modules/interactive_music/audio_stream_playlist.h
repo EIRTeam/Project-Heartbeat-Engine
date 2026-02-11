@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AUDIO_STREAM_PLAYLIST_H
+#define AUDIO_STREAM_PLAYLIST_H
 
 #include "servers/audio/audio_stream.h"
 
@@ -69,7 +70,6 @@ public:
 	virtual Ref<AudioStreamPlayback> instantiate_playback() override;
 	virtual String get_stream_name() const override;
 	virtual double get_length() const override;
-	virtual bool is_meta_stream() const override { return true; }
 
 protected:
 	static void _bind_methods();
@@ -121,3 +121,5 @@ public:
 
 	~AudioStreamPlaybackPlaylist();
 };
+
+#endif // AUDIO_STREAM_PLAYLIST_H

@@ -28,8 +28,10 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef MENU_BAR_H
+#define MENU_BAR_H
 
+#include "scene/gui/button.h"
 #include "scene/gui/popup_menu.h"
 
 class MenuBar : public Control {
@@ -54,7 +56,6 @@ class MenuBar : public Control {
 		bool hidden = false;
 		bool disabled = false;
 		RID submenu_rid;
-		NativeMenu::SystemMenus sysmenu_id = NativeMenu::INVALID_MENU_ID;
 
 		Menu(const String &p_name) {
 			name = p_name;
@@ -72,6 +73,7 @@ class MenuBar : public Control {
 	int active_menu = -1;
 
 	Vector2i old_mouse_pos;
+	ObjectID shortcut_context;
 
 	struct ThemeCache {
 		Ref<StyleBox> normal;
@@ -133,8 +135,6 @@ class MenuBar : public Control {
 		return -1;
 	}
 
-	void _popup_changed(ObjectID p_menu);
-
 	void bind_global_menu();
 	void unbind_global_menu();
 
@@ -194,3 +194,5 @@ public:
 	MenuBar();
 	~MenuBar();
 };
+
+#endif // MENU_BAR_H

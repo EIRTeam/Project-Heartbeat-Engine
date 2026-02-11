@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using Godot.Bridge;
 using Godot.NativeInterop;
@@ -14,8 +12,6 @@ namespace Godot
     {
         private bool _disposed;
         private static readonly Type _cachedType = typeof(GodotObject);
-
-        private static readonly Dictionary<Type, StringName?> _nativeNames = new Dictionary<Type, StringName?>();
 
         internal IntPtr NativePtr;
         private bool _memoryOwn;
@@ -33,19 +29,8 @@ namespace Godot
             }
         }
 
-        internal GodotObject(IntPtr nativePtr) : this(false)
-        {
-            // NativePtr must be non-zero before calling ConstructAndInitialize to avoid invoking the constructor NativeCtor.
-            // We don't want to invoke the constructor, because we already have a constructed instance in nativePtr.
-            NativePtr = nativePtr;
-            unsafe
-            {
-                ConstructAndInitialize(NativeCtor, NativeName, _cachedType, refCounted: false);
-            }
-        }
-
         internal unsafe void ConstructAndInitialize(
-            delegate* unmanaged<godot_bool, IntPtr> nativeCtor,
+            delegate* unmanaged<IntPtr> nativeCtor,
             StringName nativeName,
             Type cachedType,
             bool refCounted
@@ -55,8 +40,7 @@ namespace Godot
             {
                 Debug.Assert(nativeCtor != null);
 
-                // Need postinitialization.
-                NativePtr = nativeCtor(godot_bool.True);
+                NativePtr = nativeCtor();
 
                 InteropUtils.TieManagedToUnmanaged(this, NativePtr,
                     nativeName, refCounted, GetType(), cachedType);
@@ -90,7 +74,8 @@ namespace Godot
             // NativePtr is assigned, that would result in UB or crashes when calling
             // native functions that receive the pointer, which can happen because the
             // debugger calls ToString() and tries to get the value of properties.
-            ObjectDisposedException.ThrowIf(instance._disposed || instance.NativePtr == IntPtr.Zero, instance);
+            if (instance._disposed || instance.NativePtr == IntPtr.Zero)
+                throw new ObjectDisposedException(instance.GetType().FullName);
 
             return instance.NativePtr;
         }
@@ -194,56 +179,16 @@ namespace Godot
             return new SignalAwaiter(source, signal, this);
         }
 
-        internal static bool IsNativeClass(Type t)
-        {
-            if (ReferenceEquals(t.Assembly, typeof(GodotObject).Assembly))
-            {
-                return true;
-            }
-
-            if (ReflectionUtils.IsEditorHintCached)
-            {
-                return t.Assembly.GetName().Name == "GodotSharpEditor";
-            }
-
-            return false;
-        }
-
         internal static Type InternalGetClassNativeBase(Type t)
         {
-            while (!IsNativeClass(t))
-            {
-                Debug.Assert(t.BaseType is not null, "Script types must derive from a native Godot type.");
+            var name = t.Assembly.GetName().Name;
 
-                t = t.BaseType;
-            }
+            if (name == "GodotSharp" || name == "GodotSharpEditor")
+                return t;
 
-            return t;
-        }
+            Debug.Assert(t.BaseType is not null, "Script types must derive from a native Godot type.");
 
-        internal static StringName? InternalGetClassNativeBaseName(Type t)
-        {
-            if (_nativeNames.TryGetValue(t, out var name))
-            {
-                return name;
-            }
-
-            var baseType = InternalGetClassNativeBase(t);
-
-            if (_nativeNames.TryGetValue(baseType, out name))
-            {
-                return name;
-            }
-
-            var field = baseType.GetField("NativeName",
-                BindingFlags.DeclaredOnly | BindingFlags.Static |
-                BindingFlags.Public | BindingFlags.NonPublic);
-
-            name = field?.GetValue(null) as StringName;
-
-            _nativeNames[baseType] = name;
-
-            return name;
+            return InternalGetClassNativeBase(t.BaseType);
         }
 
         // ReSharper disable once VirtualMemberNeverOverridden.Global
@@ -315,7 +260,7 @@ namespace Godot
             return methodBind;
         }
 
-        internal static unsafe delegate* unmanaged<godot_bool, IntPtr> ClassDB_get_constructor(StringName type)
+        internal static unsafe delegate* unmanaged<IntPtr> ClassDB_get_constructor(StringName type)
         {
             // for some reason the '??' operator doesn't support 'delegate*'
             var typeSelf = (godot_string_name)type.NativeValue;

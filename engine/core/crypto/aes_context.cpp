@@ -110,3 +110,6 @@ void AESContext::_bind_methods() {
 	BIND_ENUM_CONSTANT(MODE_CBC_DECRYPT);
 	BIND_ENUM_CONSTANT(MODE_MAX);
 }
+
+AESContext::AESContext() {
+}

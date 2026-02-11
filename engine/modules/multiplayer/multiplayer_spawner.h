@@ -28,9 +28,13 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef MULTIPLAYER_SPAWNER_H
+#define MULTIPLAYER_SPAWNER_H
+
+#include "scene_replication_config.h"
 
 #include "core/templates/local_vector.h"
+#include "core/variant/typed_array.h"
 #include "scene/main/node.h"
 #include "scene/resources/packed_scene.h"
 
@@ -90,7 +94,7 @@ public:
 	PackedStringArray get_configuration_warnings() const override;
 
 	Node *get_spawn_node() const {
-		return spawn_node.is_valid() ? ObjectDB::get_instance<Node>(spawn_node) : nullptr;
+		return spawn_node.is_valid() ? Object::cast_to<Node>(ObjectDB::get_instance(spawn_node)) : nullptr;
 	}
 
 	void add_spawnable_scene(const String &p_path);
@@ -114,3 +118,5 @@ public:
 
 	MultiplayerSpawner() {}
 };
+
+#endif // MULTIPLAYER_SPAWNER_H

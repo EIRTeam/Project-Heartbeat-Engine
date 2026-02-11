@@ -28,11 +28,13 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef DEBUG_ADAPTER_PARSER_H
+#define DEBUG_ADAPTER_PARSER_H
 
 #include "core/config/project_settings.h"
 #include "core/debugger/remote_debugger.h"
-#include "editor/debugger/debug_adapter/debug_adapter_types.h"
+#include "debug_adapter_protocol.h"
+#include "debug_adapter_types.h"
 
 struct DAPeer;
 class DebugAdapterProtocol;
@@ -45,9 +47,9 @@ private:
 
 	_FORCE_INLINE_ bool is_valid_path(const String &p_path) const {
 		// If path contains \, it's a Windows path, so we need to convert it to /, and check as case-insensitive.
-		if (p_path.contains_char('\\')) {
+		if (p_path.contains("\\")) {
 			String project_path = ProjectSettings::get_singleton()->get_resource_path();
-			String path = p_path.replace_char('\\', '/');
+			String path = p_path.replace("\\", "/");
 			return path.containsn(project_path);
 		}
 		return p_path.begins_with(ProjectSettings::get_singleton()->get_resource_path());
@@ -85,7 +87,6 @@ public:
 	Dictionary req_godot_put_msg(const Dictionary &p_params) const;
 
 	// Internal requests
-	Vector<String> _extract_play_arguments(const Dictionary &p_args) const;
 	Dictionary _launch_process(const Dictionary &p_params) const;
 
 	// Events
@@ -102,3 +103,5 @@ public:
 	Dictionary ev_custom_data(const String &p_msg, const Array &p_data) const;
 	Dictionary ev_breakpoint(const DAP::Breakpoint &p_breakpoint, const bool &p_enabled) const;
 };
+
+#endif // DEBUG_ADAPTER_PARSER_H

@@ -28,11 +28,14 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AUDIO_STREAM_H
+#define AUDIO_STREAM_H
 
+#include "core/io/image.h"
 #include "core/io/resource.h"
 #include "scene/property_list_helper.h"
-#include "servers/audio/audio_server.h"
+#include "servers/audio/audio_filter_sw.h"
+#include "servers/audio_server.h"
 
 #include "core/object/gdvirtual.gen.inc"
 #include "core/variant/native_ptr.h"
@@ -45,10 +48,8 @@ class AudioSamplePlayback : public RefCounted {
 
 public:
 	Ref<AudioStream> stream;
-	Ref<AudioStreamPlayback> stream_playback;
 
 	float offset = 0.0f;
-	float pitch_scale = 1.0;
 	Vector<AudioFrame> volume_vector;
 	StringName bus;
 };
@@ -80,14 +81,13 @@ class AudioStreamPlayback : public RefCounted {
 
 protected:
 	static void _bind_methods();
-	PackedVector2Array _mix_audio_bind(float p_rate_scale, int p_frames);
-	GDVIRTUAL1_REQUIRED(_start, double)
-	GDVIRTUAL0_REQUIRED(_stop)
-	GDVIRTUAL0RC_REQUIRED(bool, _is_playing)
+	GDVIRTUAL1(_start, double)
+	GDVIRTUAL0(_stop)
+	GDVIRTUAL0RC(bool, _is_playing)
 	GDVIRTUAL0RC(int, _get_loop_count)
-	GDVIRTUAL0RC_REQUIRED(double, _get_playback_position)
+	GDVIRTUAL0RC(double, _get_playback_position)
 	GDVIRTUAL1(_seek, double)
-	GDVIRTUAL3R_REQUIRED(int, _mix, GDExtensionPtr<AudioFrame>, float, int)
+	GDVIRTUAL3R(int, _mix, GDExtensionPtr<AudioFrame>, float, int)
 	GDVIRTUAL0(_tag_used_streams)
 	GDVIRTUAL2(_set_parameter, const StringName &, const Variant &)
 	GDVIRTUAL1RC(Variant, _get_parameter, const StringName &)
@@ -116,11 +116,6 @@ public:
 
 	AudioStreamPlayback();
 	~AudioStreamPlayback();
-
-	Vector<AudioFrame> mix_audio(float p_rate_scale, int p_frames);
-	void start_playback(double p_from_pos = 0.0);
-	void stop_playback();
-	void seek_playback(double p_time);
 };
 
 class AudioStreamPlaybackResampled : public AudioStreamPlayback {
@@ -144,8 +139,8 @@ protected:
 	virtual int _mix_internal(AudioFrame *p_buffer, int p_frames);
 	virtual float get_stream_sampling_rate();
 
-	GDVIRTUAL2R_REQUIRED(int, _mix_resampled, GDExtensionPtr<AudioFrame>, int)
-	GDVIRTUAL0RC_REQUIRED(float, _get_stream_sampling_rate)
+	GDVIRTUAL2R(int, _mix_resampled, GDExtensionPtr<AudioFrame>, int)
+	GDVIRTUAL0RC(float, _get_stream_sampling_rate)
 
 	static void _bind_methods();
 
@@ -170,7 +165,7 @@ class AudioStream : public Resource {
 protected:
 	static void _bind_methods();
 
-	GDVIRTUAL0RC_REQUIRED(Ref<AudioStreamPlayback>, _instantiate_playback)
+	GDVIRTUAL0RC(Ref<AudioStreamPlayback>, _instantiate_playback)
 	GDVIRTUAL0RC(String, _get_stream_name)
 	GDVIRTUAL0RC(double, _get_length)
 	GDVIRTUAL0RC(bool, _is_monophonic)
@@ -178,7 +173,6 @@ protected:
 	GDVIRTUAL0RC(bool, _has_loop)
 	GDVIRTUAL0RC(int, _get_bar_beats)
 	GDVIRTUAL0RC(int, _get_beat_count)
-	GDVIRTUAL0RC(Dictionary, _get_tags);
 	GDVIRTUAL0RC(TypedArray<Dictionary>, _get_parameter_list)
 
 public:
@@ -189,7 +183,6 @@ public:
 	virtual bool has_loop() const;
 	virtual int get_bar_beats() const;
 	virtual int get_beat_count() const;
-	virtual Dictionary get_tags() const;
 
 	virtual double get_length() const;
 	virtual bool is_monophonic() const;
@@ -226,6 +219,9 @@ class AudioStreamMicrophone : public AudioStream {
 
 	HashSet<AudioStreamPlaybackMicrophone *> playbacks;
 
+protected:
+	static void _bind_methods();
+
 public:
 	virtual Ref<AudioStreamPlayback> instantiate_playback() override;
 	virtual String get_stream_name() const override;
@@ -233,6 +229,8 @@ public:
 	virtual double get_length() const override; //if supported, otherwise return 0
 
 	virtual bool is_monophonic() const override;
+
+	AudioStreamMicrophone();
 };
 
 class AudioStreamPlaybackMicrophone : public AudioStreamPlaybackResampled {
@@ -325,9 +323,6 @@ public:
 	void set_streams_count(int p_count);
 	int get_streams_count() const;
 
-	void set_random_pitch_semitones(float p_pitch_semitones);
-	float get_random_pitch_semitones() const;
-
 	void set_random_pitch(float p_pitch_scale);
 	float get_random_pitch() const;
 
@@ -377,3 +372,5 @@ public:
 };
 
 VARIANT_ENUM_CAST(AudioStreamRandomizer::PlaybackMode);
+
+#endif // AUDIO_STREAM_H

@@ -183,10 +183,10 @@ void CanonicalIterator::setSource(const UnicodeString &newSource, UErrorCode &st
 
     // catch degenerate case
     if (newSource.length() == 0) {
-        pieces = static_cast<UnicodeString**>(uprv_malloc(sizeof(UnicodeString*)));
-        pieces_lengths = static_cast<int32_t*>(uprv_malloc(1 * sizeof(int32_t)));
+        pieces = (UnicodeString **)uprv_malloc(sizeof(UnicodeString *));
+        pieces_lengths = (int32_t*)uprv_malloc(1 * sizeof(int32_t));
         pieces_length = 1;
-        current = static_cast<int32_t*>(uprv_malloc(1 * sizeof(int32_t)));
+        current = (int32_t*)uprv_malloc(1 * sizeof(int32_t));
         current_length = 1;
         if (pieces == nullptr || pieces_lengths == nullptr || current == nullptr) {
             status = U_MEMORY_ALLOCATION_ERROR;
@@ -229,10 +229,10 @@ void CanonicalIterator::setSource(const UnicodeString &newSource, UErrorCode &st
 
 
     // allocate the arrays, and find the strings that are CE to each segment
-    pieces = static_cast<UnicodeString**>(uprv_malloc(list_length * sizeof(UnicodeString*)));
+    pieces = (UnicodeString **)uprv_malloc(list_length * sizeof(UnicodeString *));
     pieces_length = list_length;
-    pieces_lengths = static_cast<int32_t*>(uprv_malloc(list_length * sizeof(int32_t)));
-    current = static_cast<int32_t*>(uprv_malloc(list_length * sizeof(int32_t)));
+    pieces_lengths = (int32_t*)uprv_malloc(list_length * sizeof(int32_t));
+    current = (int32_t*)uprv_malloc(list_length * sizeof(int32_t));
     current_length = list_length;
     if (pieces == nullptr || pieces_lengths == nullptr || current == nullptr) {
         status = U_MEMORY_ALLOCATION_ERROR;
@@ -330,7 +330,7 @@ void U_EXPORT2 CanonicalIterator::permute(UnicodeString &source, UBool skipZeros
         // prefix this character to all of them
         ne = subpermute.nextElement(el);
         while (ne != nullptr) {
-            UnicodeString* permRes = static_cast<UnicodeString*>(ne->value.pointer);
+            UnicodeString *permRes = (UnicodeString *)(ne->value.pointer);
             UnicodeString *chStr = new UnicodeString(cp);
             //test for nullptr
             if (chStr == nullptr) {
@@ -363,9 +363,6 @@ UnicodeString* CanonicalIterator::getEquivalents(const UnicodeString &segment, i
     char16_t USeg[256];
     int32_t segLen = segment.extract(USeg, 256, status);
     getEquivalents2(&basic, USeg, segLen, status);
-    if (U_FAILURE(status)) {
-        return nullptr;
-    }
 
     // now get all the permutations
     // add only the ones that are canonically equivalent
@@ -378,7 +375,7 @@ UnicodeString* CanonicalIterator::getEquivalents(const UnicodeString &segment, i
     //while (it.hasNext())
     while (ne != nullptr) {
         //String item = (String) it.next();
-        UnicodeString item = *static_cast<UnicodeString*>(ne->value.pointer);
+        UnicodeString item = *((UnicodeString *)(ne->value.pointer));
 
         permutations.removeAll();
         permute(item, CANITER_SKIP_ZEROES, &permutations, status);
@@ -390,7 +387,7 @@ UnicodeString* CanonicalIterator::getEquivalents(const UnicodeString &segment, i
         while (ne2 != nullptr) {
             //String possible = (String) it2.next();
             //UnicodeString *possible = new UnicodeString(*((UnicodeString *)(ne2->value.pointer)));
-            UnicodeString possible(*static_cast<UnicodeString*>(ne2->value.pointer));
+            UnicodeString possible(*((UnicodeString *)(ne2->value.pointer)));
             UnicodeString attempt;
             nfd->normalize(possible, attempt, status);
 
@@ -432,7 +429,7 @@ UnicodeString* CanonicalIterator::getEquivalents(const UnicodeString &segment, i
     el = UHASH_FIRST;
     ne = result.nextElement(el);
     while(ne != nullptr) {
-        finalResult[result_len++] = *static_cast<UnicodeString*>(ne->value.pointer);
+        finalResult[result_len++] = *((UnicodeString *)(ne->value.pointer));
         ne = result.nextElement(el);
     }
 
@@ -469,9 +466,6 @@ Hashtable *CanonicalIterator::getEquivalents2(Hashtable *fillinResult, const cha
             Hashtable remainder(status);
             remainder.setValueDeleter(uprv_deleteUObject);
             if (extract(&remainder, cp2, segment, segLen, i, status) == nullptr) {
-                if (U_FAILURE(status)) {
-                    return nullptr;
-                }
                 continue;
             }
 
@@ -482,7 +476,7 @@ Hashtable *CanonicalIterator::getEquivalents2(Hashtable *fillinResult, const cha
             int32_t el = UHASH_FIRST;
             const UHashElement *ne = remainder.nextElement(el);
             while (ne != nullptr) {
-                UnicodeString item = *static_cast<UnicodeString*>(ne->value.pointer);
+                UnicodeString item = *((UnicodeString *)(ne->value.pointer));
                 UnicodeString *toAdd = new UnicodeString(prefix);
                 /* test for nullptr */
                 if (toAdd == nullptr) {
@@ -495,13 +489,6 @@ Hashtable *CanonicalIterator::getEquivalents2(Hashtable *fillinResult, const cha
                 //if (PROGRESS) printf("Adding: %s\n", UToS(Tr(*toAdd)));
 
                 ne = remainder.nextElement(el);
-            }
-            // ICU-22642 Guards against strings that have so many permutations
-            // that they would otherwise hang the function.
-            constexpr int32_t kResultLimit = 4096;
-            if (fillinResult->count() > kResultLimit) {
-                status = U_UNSUPPORTED_ERROR;
-                return nullptr;
             }
         }
     }

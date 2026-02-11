@@ -28,9 +28,10 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef SCENE_CACHE_INTERFACE_H
+#define SCENE_CACHE_INTERFACE_H
 
-#include "core/object/ref_counted.h"
+#include "scene/main/multiplayer_api.h"
 
 class Node;
 class SceneMultiplayer;
@@ -88,3 +89,5 @@ public:
 
 	SceneCacheInterface(SceneMultiplayer *p_multiplayer) { multiplayer = p_multiplayer; }
 };
+
+#endif // SCENE_CACHE_INTERFACE_H

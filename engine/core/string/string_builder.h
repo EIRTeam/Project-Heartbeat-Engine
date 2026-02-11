@@ -28,20 +28,21 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef STRING_BUILDER_H
+#define STRING_BUILDER_H
 
 #include "core/string/ustring.h"
-#include "core/templates/local_vector.h"
+#include "core/templates/vector.h"
 
 class StringBuilder {
 	uint32_t string_length = 0;
 
-	LocalVector<String> strings;
-	LocalVector<const char *> c_strings;
+	Vector<String> strings;
+	Vector<const char *> c_strings;
 
 	// -1 means it's a Godot String
 	// a natural number means C string.
-	LocalVector<int32_t> appended_strings;
+	Vector<int32_t> appended_strings;
 
 public:
 	StringBuilder &append(const String &p_string);
@@ -76,4 +77,8 @@ public:
 	_FORCE_INLINE_ operator String() const {
 		return as_string();
 	}
+
+	StringBuilder() {}
 };
+
+#endif // STRING_BUILDER_H

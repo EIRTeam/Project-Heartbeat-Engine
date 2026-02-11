@@ -28,11 +28,12 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef PRIMITIVE_MESHES_H
+#define PRIMITIVE_MESHES_H
 
 #include "scene/resources/font.h"
 #include "scene/resources/mesh.h"
-#include "servers/text/text_server.h"
+#include "servers/text_server.h"
 
 ///@TODO probably should change a few integers to unsigned integers...
 
@@ -66,9 +67,6 @@ protected:
 	// assume primitive triangles as the type, correct for all but one and it will change this :)
 	Mesh::PrimitiveType primitive_type = Mesh::PRIMITIVE_TRIANGLES;
 
-	// Copy of our texel_size project setting.
-	float texel_size = 0.2;
-
 	static void _bind_methods();
 
 	virtual void _create_mesh_array(Array &p_arr) const {}
@@ -76,9 +74,7 @@ protected:
 
 	Vector2 get_uv2_scale(Vector2 p_margin_scale = Vector2(1.0, 1.0)) const;
 	float get_lightmap_texel_size() const;
-	virtual void _update_lightmap_size() {}
-
-	void _on_settings_changed();
+	virtual void _update_lightmap_size(){};
 
 public:
 	virtual int get_surface_count() const override;
@@ -152,6 +148,8 @@ public:
 
 	void set_rings(const int p_rings);
 	int get_rings() const;
+
+	CapsuleMesh();
 };
 
 /**
@@ -186,6 +184,8 @@ public:
 
 	void set_subdivide_depth(const int p_divisions);
 	int get_subdivide_depth() const;
+
+	BoxMesh();
 };
 
 /**
@@ -233,6 +233,8 @@ public:
 
 	void set_cap_bottom(bool p_cap_bottom);
 	bool is_cap_bottom() const;
+
+	CylinderMesh();
 };
 
 /*
@@ -276,6 +278,8 @@ public:
 
 	void set_orientation(const Orientation p_orientation);
 	Orientation get_orientation() const;
+
+	PlaneMesh();
 };
 
 VARIANT_ENUM_CAST(PlaneMesh::Orientation)
@@ -327,6 +331,8 @@ public:
 
 	void set_subdivide_depth(const int p_divisions);
 	int get_subdivide_depth() const;
+
+	PrismMesh();
 };
 
 /**
@@ -365,6 +371,8 @@ public:
 
 	void set_is_hemisphere(const bool p_is_hemisphere);
 	bool get_is_hemisphere() const;
+
+	SphereMesh();
 };
 
 /**
@@ -397,6 +405,8 @@ public:
 
 	void set_ring_segments(const int p_ring_segments);
 	int get_ring_segments() const;
+
+	TorusMesh();
 };
 
 /**
@@ -526,17 +536,17 @@ private:
 		Vector2 point;
 		bool sharp = false;
 
-		ContourPoint() {}
+		ContourPoint(){};
 		ContourPoint(const Vector2 &p_pt, bool p_sharp) {
 			point = p_pt;
 			sharp = p_sharp;
-		}
+		};
 	};
 
 	struct ContourInfo {
 		real_t length = 0.0;
 		bool ccw = true;
-		ContourInfo() {}
+		ContourInfo(){};
 		ContourInfo(real_t p_len, bool p_ccw) {
 			length = p_len;
 			ccw = p_ccw;
@@ -567,8 +577,8 @@ private:
 		Vector<Vector2> triangles;
 		Vector<Vector<ContourPoint>> contours;
 		Vector<ContourInfo> contours_info;
-		Vector2 min_p = Vector2(Math::INF, Math::INF);
-		Vector2 max_p = Vector2(-Math::INF, -Math::INF);
+		Vector2 min_p = Vector2(INFINITY, INFINITY);
+		Vector2 max_p = Vector2(-INFINITY, -INFINITY);
 	};
 	mutable HashMap<GlyphMeshKey, GlyphMeshData, GlyphMeshKeyHasher> cache;
 
@@ -653,7 +663,7 @@ public:
 	void set_structured_text_bidi_override(TextServer::StructuredTextParser p_parser);
 	TextServer::StructuredTextParser get_structured_text_bidi_override() const;
 
-	void set_structured_text_bidi_override_options(const Array &p_args);
+	void set_structured_text_bidi_override_options(Array p_args);
 	Array get_structured_text_bidi_override_options() const;
 
 	void set_uppercase(bool p_uppercase);
@@ -676,3 +686,5 @@ public:
 };
 
 VARIANT_ENUM_CAST(RibbonTrailMesh::Shape)
+
+#endif // PRIMITIVE_MESHES_H

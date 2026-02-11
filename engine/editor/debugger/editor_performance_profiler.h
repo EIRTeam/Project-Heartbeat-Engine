@@ -28,9 +28,11 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef EDITOR_PERFORMANCE_PROFILER_H
+#define EDITOR_PERFORMANCE_PROFILER_H
 
 #include "core/templates/hash_map.h"
+#include "core/templates/rb_map.h"
 #include "main/performance.h"
 #include "scene/gui/control.h"
 #include "scene/gui/label.h"
@@ -51,8 +53,9 @@ private:
 		Performance::MonitorType type = Performance::MONITOR_TYPE_QUANTITY;
 		int frame_index = 0;
 
-		Monitor() {}
+		Monitor();
 		Monitor(const String &p_name, const String &p_base, int p_frame_index, Performance::MonitorType p_type, TreeItem *p_item);
+		void update_value(float p_value);
 		void reset();
 	};
 
@@ -68,8 +71,7 @@ private:
 	const int POINT_SEPARATION = 5;
 	const int MARKER_MARGIN = 2;
 
-	String _format_label(float p_value, Performance::MonitorType p_type) const;
-	void _update_monitor_value(Monitor *p_monitor, float p_value);
+	static String _create_label(float p_value, Performance::MonitorType p_type);
 	void _monitor_select();
 	void _monitor_draw();
 	void _build_monitor_tree();
@@ -82,8 +84,10 @@ protected:
 
 public:
 	void reset();
-	void update_monitors(const Vector<StringName> &p_names, const PackedInt32Array &p_types);
+	void update_monitors(const Vector<StringName> &p_names);
 	void add_profile_frame(const Vector<float> &p_values);
 	List<float> *get_monitor_data(const StringName &p_name);
 	EditorPerformanceProfiler();
 };
+
+#endif // EDITOR_PERFORMANCE_PROFILER_H

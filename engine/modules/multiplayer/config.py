@@ -12,7 +12,6 @@ def get_doc_classes():
         "SceneMultiplayer",
         "MultiplayerSpawner",
         "MultiplayerSynchronizer",
-        "OfflineMultiplayerPeer",
     ]
 
 

@@ -28,11 +28,11 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef HEIGHT_MAP_SHAPE_3D_H
+#define HEIGHT_MAP_SHAPE_3D_H
 
 #include "scene/resources/3d/shape_3d.h"
 
-class ArrayMesh;
 class Image;
 
 class HeightMapShape3D : public Shape3D {
@@ -62,8 +62,9 @@ public:
 	void update_map_data_from_image(const Ref<Image> &p_image, real_t p_height_min, real_t p_height_max);
 
 	virtual Vector<Vector3> get_debug_mesh_lines() const override;
-	virtual Ref<ArrayMesh> get_debug_arraymesh_faces(const Color &p_modulate) const override;
 	virtual real_t get_enclosing_radius() const override;
 
 	HeightMapShape3D();
 };
+
+#endif // HEIGHT_MAP_SHAPE_3D_H

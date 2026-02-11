@@ -30,6 +30,9 @@
 
 #include "scene_replication_config.h"
 
+#include "scene/main/multiplayer_api.h"
+#include "scene/main/node.h"
+
 bool SceneReplicationConfig::_set(const StringName &p_name, const Variant &p_value) {
 	String prop_name = p_name;
 

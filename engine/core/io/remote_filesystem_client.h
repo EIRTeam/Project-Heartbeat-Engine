@@ -28,8 +28,10 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef REMOTE_FILESYSTEM_CLIENT_H
+#define REMOTE_FILESYSTEM_CLIENT_H
 
+#include "core/io/ip_address.h"
 #include "core/string/ustring.h"
 #include "core/templates/hash_set.h"
 #include "core/templates/local_vector.h"
@@ -59,3 +61,5 @@ public:
 	Error synchronize_with_server(const String &p_host, int p_port, const String &p_password, String &r_cache_path);
 	virtual ~RemoteFilesystemClient() {}
 };
+
+#endif // REMOTE_FILESYSTEM_CLIENT_H

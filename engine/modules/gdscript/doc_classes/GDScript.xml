@@ -16,10 +16,11 @@
 			<return type="Variant" />
 			<description>
 				Returns a new instance of the script.
+				For example:
 				[codeblock]
 				var MyClass = load("myclass.gd")
 				var instance = MyClass.new()
-				print(instance.get_script() == MyClass) # Prints true
+				assert(instance.get_script() == MyClass)
 				[/codeblock]
 			</description>
 		</method>

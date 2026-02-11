@@ -23,8 +23,9 @@
 #ifndef _TVG_SCENE_H_
 #define _TVG_SCENE_H_
 
-#include "tvgMath.h"
+#include <float.h>
 #include "tvgPaint.h"
+
 
 struct SceneIterator : Iterator
 {
@@ -60,10 +61,8 @@ struct Scene::Impl
     list<Paint*> paints;
     RenderData rd = nullptr;
     Scene* scene = nullptr;
-    RenderRegion vport = {0, 0, INT32_MAX, INT32_MAX};
-    Array<RenderEffect*>* effects = nullptr;
-    uint8_t compFlag = CompositionFlag::Invalid;
-    uint8_t opacity;         //for composition
+    uint8_t opacity;                     //for composition
+    bool needComp = false;               //composite or not
 
     Impl(Scene* s) : scene(s)
     {
@@ -71,8 +70,6 @@ struct Scene::Impl
 
     ~Impl()
     {
-        resetEffects();
-
         for (auto paint : paints) {
             if (P(paint)->unref() == 0) delete(paint);
         }
@@ -82,64 +79,59 @@ struct Scene::Impl
         }
     }
 
-    uint8_t needComposition(uint8_t opacity)
+    bool needComposition(uint8_t opacity)
     {
-        compFlag = CompositionFlag::Invalid;
+        if (opacity == 0 || paints.empty()) return false;
 
-        if (opacity == 0 || paints.empty()) return 0;
-
-        //post effects, masking, blending may require composition
-        if (effects) compFlag |= CompositionFlag::PostProcessing;
+        //Masking may require composition (even if opacity == 255)
         auto compMethod = scene->composite(nullptr);
-        if (compMethod != CompositeMethod::None && compMethod != CompositeMethod::ClipPath) compFlag |= CompositionFlag::Masking;
-        if (PP(scene)->blendMethod != BlendMethod::Normal) compFlag |= CompositionFlag::Blending;
+        if (compMethod != CompositeMethod::None && compMethod != CompositeMethod::ClipPath) return true;
+
+        //Blending may require composition (even if opacity == 255)
+        if (scene->blend() != BlendMethod::Normal) return true;
 
         //Half translucent requires intermediate composition.
-        if (opacity == 255) return compFlag;
+        if (opacity == 255) return false;
 
-        //Only shape or picture may not require composition.
-        if (paints.size() == 1) {
-            auto type = paints.front()->type();
-            if (type == Type::Shape || type == Type::Picture) return compFlag;
-        }
+        //If scene has several children or only scene, it may require composition.
+        //OPTIMIZE: the bitmap type of the picture would not need the composition.
+        //OPTIMIZE: a single paint of a scene would not need the composition.
+        if (paints.size() == 1 && paints.front()->identifier() == TVG_CLASS_ID_SHAPE) return false;
 
-        compFlag |= CompositionFlag::Opacity;
-
-        return 1;
+        return true;
     }
 
-    RenderData update(RenderMethod* renderer, const Matrix& transform, Array<RenderData>& clips, uint8_t opacity, RenderUpdateFlag flag, TVG_UNUSED bool clipper)
+    RenderData update(RenderMethod* renderer, const RenderTransform* transform, Array<RenderData>& clips, uint8_t opacity, RenderUpdateFlag flag, bool clipper)
     {
-        this->vport = renderer->viewport();
-
-        if (needComposition(opacity)) {
+        if ((needComp = needComposition(opacity))) {
             /* Overriding opacity value. If this scene is half-translucent,
-               It must do intermediate composition with that opacity value. */
+               It must do intermeidate composition with that opacity value. */
             this->opacity = opacity;
             opacity = 255;
         }
-        for (auto paint : paints) {
-            paint->pImpl->update(renderer, transform, clips, opacity, flag, false);
-        }
 
-        if (effects) {
-            for (auto e = effects->begin(); e < effects->end(); ++e) {
-                renderer->prepare(*e, transform);
+        if (clipper) {
+            Array<RenderData> rds(paints.size());
+            for (auto paint : paints) {
+                rds.push(paint->pImpl->update(renderer, transform, clips, opacity, flag, true));
             }
+            rd = renderer->prepare(rds, rd, transform, clips, opacity, flag);
+            return rd;
+        } else {
+            for (auto paint : paints) {
+                paint->pImpl->update(renderer, transform, clips, opacity, flag, false);
+            }
+            return nullptr;
         }
-
-        return nullptr;
     }
 
     bool render(RenderMethod* renderer)
     {
-        RenderCompositor* cmp = nullptr;
+        Compositor* cmp = nullptr;
         auto ret = true;
 
-        renderer->blend(PP(scene)->blendMethod);
-
-        if (compFlag) {
-            cmp = renderer->target(bounds(renderer), renderer->colorSpace(), static_cast<CompositionFlag>(compFlag));
+        if (needComp) {
+            cmp = renderer->target(bounds(renderer), renderer->colorSpace());
             renderer->beginComposite(cmp, CompositeMethod::None, opacity);
         }
 
@@ -147,17 +139,7 @@ struct Scene::Impl
             ret &= paint->pImpl->render(renderer);
         }
 
-        if (cmp) {
-            //Apply post effects if any.
-            if (effects) {
-                //Notify the possiblity of the direct composition of the effect result to the origin surface.
-                auto direct = (effects->count == 1) & (compFlag == CompositionFlag::PostProcessing);
-                for (auto e = effects->begin(); e < effects->end(); ++e) {
-                    if ((*e)->valid) renderer->render(cmp, *e, direct);
-                }
-            }
-            renderer->endComposite(cmp);
-        }
+        if (cmp) renderer->endComposite(cmp);
 
         return ret;
     }
@@ -181,23 +163,7 @@ struct Scene::Impl
             if (y2 < region.y + region.h) y2 = (region.y + region.h);
         }
 
-        //Extends the render region if post effects require
-        int32_t ex = 0, ey = 0, ew = 0, eh = 0;
-        if (effects) {
-            for (auto e = effects->begin(); e < effects->end(); ++e) {
-                auto effect = *e;
-                if (effect->valid && renderer->region(effect)) {
-                    ex = std::min(ex, effect->extend.x);
-                    ey = std::min(ey, effect->extend.y);
-                    ew = std::max(ew, effect->extend.w);
-                    eh = std::max(eh, effect->extend.h);
-                }
-            }
-        }
-
-        auto ret = RenderRegion{x1 + ex, y1 + ey, (x2 - x1) + ew, (y2 - y1) + eh};
-        ret.intersect(this->vport);
-        return ret;
+        return {x1, y1, (x2 - x1), (y2 - y1)};
     }
 
     bool bounds(float* px, float* py, float* pw, float* ph, bool stroking)
@@ -232,12 +198,10 @@ struct Scene::Impl
         return true;
     }
 
-    Paint* duplicate(Paint* ret)
+    Paint* duplicate()
     {
-        if (ret) TVGERR("RENDERER", "TODO: duplicate()");
-
-        auto scene = Scene::gen().release();
-        auto dup = scene->pImpl;
+        auto ret = Scene::gen().release();
+        auto dup = ret->pImpl;
 
         for (auto paint : paints) {
             auto cdup = paint->duplicate();
@@ -245,42 +209,7 @@ struct Scene::Impl
             dup->paints.push_back(cdup);
         }
 
-        if (effects) {
-            dup->effects = new Array<RenderEffect*>;
-            for (auto p = effects->begin(); p < effects->end(); ++p) {
-                RenderEffect* ret = nullptr;
-                switch ((*p)->type) {
-                    case SceneEffect::GaussianBlur: {
-                        ret = new RenderEffectGaussianBlur(*(RenderEffectGaussianBlur*)(*p));
-                        break;
-                    }
-                    case SceneEffect::DropShadow: {
-                        ret = new RenderEffectDropShadow(*(RenderEffectDropShadow*)(*p));
-                        break;
-                    }
-                    case SceneEffect::Fill: {
-                        ret = new RenderEffectFill(*(RenderEffectFill*)(*p));
-                        break;
-                    }
-                    case SceneEffect::Tint: {
-                        ret = new RenderEffectTint(*(RenderEffectTint*)(*p));
-                        break;
-                    }
-                    case SceneEffect::Tritone: {
-                        ret = new RenderEffectTritone(*(RenderEffectTritone*)(*p));
-                        break;
-                    }
-                    default: break;
-                }
-                if (ret) {
-                    ret->rd = nullptr;
-                    ret->valid = false;
-                    dup->effects->push(ret);
-                }
-            }
-        }
-
-        return scene;
+        return ret;
     }
 
     void clear(bool free)
@@ -295,8 +224,6 @@ struct Scene::Impl
     {
         return new SceneIterator(&paints);
     }
-
-    Result resetEffects();
 };
 
 #endif //_TVG_SCENE_H_

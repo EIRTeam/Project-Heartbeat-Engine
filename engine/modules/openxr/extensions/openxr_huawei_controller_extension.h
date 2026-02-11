@@ -28,18 +28,14 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef OPENXR_HUAWEI_CONTROLLER_EXTENSION_H
+#define OPENXR_HUAWEI_CONTROLLER_EXTENSION_H
 
 #include "openxr_extension_wrapper.h"
 
 class OpenXRHuaweiControllerExtension : public OpenXRExtensionWrapper {
-	GDCLASS(OpenXRHuaweiControllerExtension, OpenXRExtensionWrapper);
-
-protected:
-	static void _bind_methods() {}
-
 public:
-	virtual HashMap<String, bool *> get_requested_extensions(XrVersion p_version) override;
+	virtual HashMap<String, bool *> get_requested_extensions() override;
 
 	bool is_available();
 
@@ -48,3 +44,5 @@ public:
 private:
 	bool available = false;
 };
+
+#endif // OPENXR_HUAWEI_CONTROLLER_EXTENSION_H

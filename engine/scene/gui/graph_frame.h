@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef GRAPH_FRAME_H
+#define GRAPH_FRAME_H
 
 #include "scene/gui/graph_element.h"
 
@@ -36,6 +37,12 @@ class HBoxContainer;
 
 class GraphFrame : public GraphElement {
 	GDCLASS(GraphFrame, GraphElement);
+
+	struct _MinSizeCache {
+		int min_size = 0;
+		bool will_stretch = false;
+		int final_size = 0;
+	};
 
 	struct ThemeCache {
 		Ref<StyleBox> panel;
@@ -98,3 +105,5 @@ public:
 
 	GraphFrame();
 };
+
+#endif // GRAPH_FRAME_H

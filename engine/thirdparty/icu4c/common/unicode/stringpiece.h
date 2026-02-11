@@ -32,7 +32,6 @@
 #if U_SHOW_CPLUSPLUS_API
 
 #include <cstddef>
-#include <string_view>
 #include <type_traits>
 
 #include "unicode/uobject.h"
@@ -176,16 +175,6 @@ class U_COMMON_API StringPiece : public UMemory {
    * @stable ICU 4.2
    */
   StringPiece(const StringPiece& x, int32_t pos, int32_t len);
-
-#ifndef U_HIDE_INTERNAL_API
-  /**
-   * Converts to a std::string_view().
-   * @internal
-   */
-  inline operator std::string_view() const {
-    return {data(), static_cast<std::string_view::size_type>(size())};
-  }
-#endif  // U_HIDE_INTERNAL_API
 
   /**
    * Returns the string pointer. May be nullptr if it is empty.
@@ -333,7 +322,7 @@ class U_COMMON_API StringPiece : public UMemory {
  * @return true if the string data is equal
  * @stable ICU 4.8
  */
-U_COMMON_API UBool U_EXPORT2 
+U_EXPORT UBool U_EXPORT2 
 operator==(const StringPiece& x, const StringPiece& y);
 
 /**

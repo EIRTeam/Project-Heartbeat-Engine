@@ -28,23 +28,20 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef OPENXR_COMPOSITION_LAYER_DEPTH_EXTENSION_H
+#define OPENXR_COMPOSITION_LAYER_DEPTH_EXTENSION_H
 
+#include "openxr_composition_layer_provider.h"
 #include "openxr_extension_wrapper.h"
 
-class OpenXRCompositionLayerDepthExtension : public OpenXRExtensionWrapper {
-	GDCLASS(OpenXRCompositionLayerDepthExtension, OpenXRExtensionWrapper);
-
-protected:
-	static void _bind_methods() {}
-
+class OpenXRCompositionLayerDepthExtension : public OpenXRExtensionWrapper, public OpenXRCompositionLayerProvider {
 public:
 	static OpenXRCompositionLayerDepthExtension *get_singleton();
 
 	OpenXRCompositionLayerDepthExtension();
 	virtual ~OpenXRCompositionLayerDepthExtension() override;
 
-	virtual HashMap<String, bool *> get_requested_extensions(XrVersion p_version) override;
+	virtual HashMap<String, bool *> get_requested_extensions() override;
 	bool is_available();
 	virtual int get_composition_layer_count() override;
 	virtual XrCompositionLayerBaseHeader *get_composition_layer(int p_index) override;
@@ -55,3 +52,5 @@ private:
 
 	bool available = false;
 };
+
+#endif // OPENXR_COMPOSITION_LAYER_DEPTH_EXTENSION_H

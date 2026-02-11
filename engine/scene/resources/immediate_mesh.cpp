@@ -312,8 +312,6 @@ void ImmediateMesh::surface_end() {
 	uses_uv2s = false;
 
 	surface_active = false;
-
-	emit_changed();
 }
 
 void ImmediateMesh::clear_surfaces() {
@@ -420,5 +418,5 @@ ImmediateMesh::ImmediateMesh() {
 }
 ImmediateMesh::~ImmediateMesh() {
 	ERR_FAIL_NULL(RenderingServer::get_singleton());
-	RS::get_singleton()->free_rid(mesh);
+	RS::get_singleton()->free(mesh);
 }

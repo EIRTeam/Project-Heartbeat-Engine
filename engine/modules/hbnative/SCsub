@@ -1,0 +1,45 @@
+# SCsub
+
+Import("env")
+Import("env_modules")
+
+env_hbnative = env_modules.Clone()
+
+thirdparty_obj = []
+
+thirdparty_sources = []
+
+if env["platform"] in ["linuxbsd", "macos", "android"]:
+    thirdparty_sources = ["tiny_process_lib/process.cpp", "tiny_process_lib/process_unix.cpp"]
+elif env["platform"] == "windows":
+    thirdparty_sources = ["tiny_process_lib/process.cpp", "tiny_process_lib/process_win.cpp"]
+
+thirdparty_dir = "thirdparty/"
+thirdparty_sources = [thirdparty_dir + file for file in thirdparty_sources]
+
+env_hbnative.Prepend(CPPPATH=[thirdparty_dir])
+if env_hbnative["builtin_libogg"]:
+    env_hbnative.Prepend(CPPPATH=["#thirdparty/libogg/"])
+if env_hbnative["builtin_libvorbis"]:
+    env_hbnative.Prepend(CPPPATH=["#thirdparty/libvorbis/"])
+
+env_hbnative.Prepend(CCFLAGS="-std=c++20")
+
+env_process = env_modules.Clone()
+env_process.Prepend(CPPPATH=[thirdparty_dir])
+env_process.disable_warnings()
+env_process.add_source_files(thirdparty_obj, thirdparty_sources)
+env_process.Prepend(CPPDEFINES=["UNICODE"])
+env.modules_sources += thirdparty_obj
+
+module_obj = []
+
+env_hbnative.Prepend(CPPDEFINES=["UNICODE"])
+env_hbnative.add_source_files(module_obj, "*.cpp")  # Add all cpp files to the build
+env_hbnative.add_source_files(module_obj, "process/*.cpp")
+env_hbnative.add_source_files(module_obj, "diva/*.cpp")
+env_hbnative.add_source_files(module_obj, "rectpack/*.cpp")
+
+env.modules_sources += module_obj
+
+env.Depends(module_obj, thirdparty_obj)

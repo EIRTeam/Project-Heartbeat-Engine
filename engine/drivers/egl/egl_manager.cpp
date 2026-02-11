@@ -30,11 +30,6 @@
 
 #include "egl_manager.h"
 
-#include "core/crypto/crypto_core.h"
-#include "core/io/dir_access.h"
-#include "core/io/file_access.h"
-#include "drivers/gles3/rasterizer_gles3.h"
-
 #ifdef EGL_ENABLED
 
 #if defined(EGL_STATIC)
@@ -54,16 +49,6 @@ extern "C" EGLAPI EGLDisplay EGLAPIENTRY eglGetPlatformDisplayEXT(EGLenum platfo
 
 #ifndef EGL_EXT_platform_base
 #define GLAD_EGL_EXT_platform_base 0
-#endif
-
-#ifdef WINDOWS_ENABLED
-// Unofficial ANGLE extension: EGL_ANGLE_surface_orientation
-#ifndef EGL_OPTIMAL_SURFACE_ORIENTATION_ANGLE
-#define EGL_OPTIMAL_SURFACE_ORIENTATION_ANGLE 0x33A7
-#define EGL_SURFACE_ORIENTATION_ANGLE 0x33A8
-#define EGL_SURFACE_ORIENTATION_INVERT_X_ANGLE 0x0001
-#define EGL_SURFACE_ORIENTATION_INVERT_Y_ANGLE 0x0002
-#endif
 #endif
 
 // Creates and caches a GLDisplay. Returns -1 on error.
@@ -130,18 +115,6 @@ int EGLManager::_get_gldisplay_id(void *p_display) {
 	}
 #endif
 
-#ifdef WINDOWS_ENABLED
-	String client_extensions_string = eglQueryString(new_gldisplay.egl_display, EGL_EXTENSIONS);
-	if (eglGetError() == EGL_SUCCESS) {
-		Vector<String> egl_extensions = client_extensions_string.split(" ");
-
-		if (egl_extensions.has("EGL_ANGLE_surface_orientation")) {
-			new_gldisplay.has_EGL_ANGLE_surface_orientation = true;
-			print_verbose("EGL: EGL_ANGLE_surface_orientation is supported.");
-		}
-	}
-#endif
-
 	displays.push_back(new_gldisplay);
 
 	// Return the new GLDisplay's ID.
@@ -152,7 +125,7 @@ int EGLManager::_get_gldisplay_id(void *p_display) {
 String EGLManager::shader_cache_dir;
 
 void EGLManager::_set_cache(const void *p_key, EGLsizeiANDROID p_key_size, const void *p_value, EGLsizeiANDROID p_value_size) {
-	String name = CryptoCore::b64_encode_str((const uint8_t *)p_key, p_key_size).replace_char('/', '_');
+	String name = CryptoCore::b64_encode_str((const uint8_t *)p_key, p_key_size).replace("/", "_");
 	String path = shader_cache_dir.path_join(name) + ".cache";
 
 	Error err = OK;
@@ -164,7 +137,7 @@ void EGLManager::_set_cache(const void *p_key, EGLsizeiANDROID p_key_size, const
 }
 
 EGLsizeiANDROID EGLManager::_get_cache(const void *p_key, EGLsizeiANDROID p_key_size, void *p_value, EGLsizeiANDROID p_value_size) {
-	String name = CryptoCore::b64_encode_str((const uint8_t *)p_key, p_key_size).replace_char('/', '_');
+	String name = CryptoCore::b64_encode_str((const uint8_t *)p_key, p_key_size).replace("/", "_");
 	String path = shader_cache_dir.path_join(name) + ".cache";
 
 	Error err = OK;
@@ -264,29 +237,8 @@ Error EGLManager::window_create(DisplayServer::WindowID p_window_id, void *p_dis
 	GLWindow &glwindow = windows[p_window_id];
 	glwindow.gldisplay_id = gldisplay_id;
 
-	Vector<EGLAttrib> egl_attribs;
-
-#ifdef WINDOWS_ENABLED
-	if (gldisplay.has_EGL_ANGLE_surface_orientation) {
-		EGLint optimal_orientation;
-		if (eglGetConfigAttrib(gldisplay.egl_display, gldisplay.egl_config, EGL_OPTIMAL_SURFACE_ORIENTATION_ANGLE, &optimal_orientation)) {
-			// We only need to support inverting Y for optimizing ANGLE on D3D11.
-			if (optimal_orientation & EGL_SURFACE_ORIENTATION_INVERT_Y_ANGLE && !(optimal_orientation & EGL_SURFACE_ORIENTATION_INVERT_X_ANGLE)) {
-				egl_attribs.push_back(EGL_SURFACE_ORIENTATION_ANGLE);
-				egl_attribs.push_back(EGL_SURFACE_ORIENTATION_INVERT_Y_ANGLE);
-			}
-		} else {
-			ERR_PRINT(vformat("Failed to get EGL_OPTIMAL_SURFACE_ORIENTATION_ANGLE, error: 0x%08X", eglGetError()));
-		}
-	}
-
-	if (!egl_attribs.is_empty()) {
-		egl_attribs.push_back(EGL_NONE);
-	}
-#endif
-
 	if (GLAD_EGL_VERSION_1_5) {
-		glwindow.egl_surface = eglCreatePlatformWindowSurface(gldisplay.egl_display, gldisplay.egl_config, p_native_window, egl_attribs.ptr());
+		glwindow.egl_surface = eglCreatePlatformWindowSurface(gldisplay.egl_display, gldisplay.egl_config, p_native_window, nullptr);
 	} else {
 		EGLNativeWindowType *native_window_type = (EGLNativeWindowType *)p_native_window;
 		glwindow.egl_surface = eglCreateWindowSurface(gldisplay.egl_display, gldisplay.egl_config, *native_window_type, nullptr);
@@ -297,20 +249,6 @@ Error EGLManager::window_create(DisplayServer::WindowID p_window_id, void *p_dis
 	}
 
 	glwindow.initialized = true;
-
-#ifdef WINDOWS_ENABLED
-	if (gldisplay.has_EGL_ANGLE_surface_orientation) {
-		EGLint orientation;
-		if (eglQuerySurface(gldisplay.egl_display, glwindow.egl_surface, EGL_SURFACE_ORIENTATION_ANGLE, &orientation)) {
-			if (orientation & EGL_SURFACE_ORIENTATION_INVERT_Y_ANGLE && !(orientation & EGL_SURFACE_ORIENTATION_INVERT_X_ANGLE)) {
-				glwindow.flipped_y = true;
-				print_verbose("EGL: Using optimal surface orientation: Invert Y");
-			}
-		} else {
-			ERR_PRINT(vformat("Failed to get EGL_SURFACE_ORIENTATION_ANGLE, error: 0x%08X", eglGetError()));
-		}
-	}
-#endif
 
 	window_make_current(p_window_id);
 
@@ -378,10 +316,6 @@ void EGLManager::window_make_current(DisplayServer::WindowID p_window_id) {
 	GLDisplay &current_display = displays[current_window->gldisplay_id];
 
 	eglMakeCurrent(current_display.egl_display, current_window->egl_surface, current_window->egl_surface, current_display.egl_context);
-
-#ifdef WINDOWS_ENABLED
-	RasterizerGLES3::set_screen_flipped_y(glwindow.flipped_y);
-#endif
 }
 
 void EGLManager::set_use_vsync(bool p_use) {
@@ -417,37 +351,13 @@ EGLContext EGLManager::get_context(DisplayServer::WindowID p_window_id) {
 	return display.egl_context;
 }
 
-EGLDisplay EGLManager::get_display(DisplayServer::WindowID p_window_id) {
-	GLWindow &glwindow = windows[p_window_id];
-
-	if (!glwindow.initialized) {
-		return EGL_NO_CONTEXT;
-	}
-
-	GLDisplay &display = displays[glwindow.gldisplay_id];
-
-	return display.egl_display;
-}
-
-EGLConfig EGLManager::get_config(DisplayServer::WindowID p_window_id) {
-	GLWindow &glwindow = windows[p_window_id];
-
-	if (!glwindow.initialized) {
-		return nullptr;
-	}
-
-	GLDisplay &display = displays[glwindow.gldisplay_id];
-
-	return display.egl_config;
-}
-
 Error EGLManager::initialize(void *p_native_display) {
 #if defined(GLAD_ENABLED) && !defined(EGL_STATIC)
 	// Loading EGL with a new display gets us just the bare minimum API. We'll then
 	// have to temporarily get a proper display and reload EGL once again to
 	// initialize everything else.
 	if (!gladLoaderLoadEGL(EGL_NO_DISPLAY)) {
-		ERR_FAIL_V_MSG(ERR_UNAVAILABLE, "Can't load EGL dynamic library.");
+		ERR_FAIL_V_MSG(ERR_UNAVAILABLE, "Can't load EGL.");
 	}
 
 	EGLDisplay tmp_display = EGL_NO_DISPLAY;
@@ -477,7 +387,7 @@ Error EGLManager::initialize(void *p_native_display) {
 	int version = gladLoaderLoadEGL(tmp_display);
 	if (!version) {
 		eglTerminate(tmp_display);
-		ERR_FAIL_V_MSG(ERR_UNAVAILABLE, "Can't load EGL dynamic library.");
+		ERR_FAIL_V_MSG(ERR_UNAVAILABLE, "Can't load EGL.");
 	}
 
 	int major = GLAD_VERSION_MAJOR(version);

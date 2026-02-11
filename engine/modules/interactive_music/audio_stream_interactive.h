@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AUDIO_STREAM_INTERACTIVE_H
+#define AUDIO_STREAM_INTERACTIVE_H
 
 #include "servers/audio/audio_stream.h"
 
@@ -99,7 +100,7 @@ private:
 		TransitionFromTime from_time = TRANSITION_FROM_TIME_NEXT_BEAT;
 		TransitionToTime to_time = TRANSITION_TO_TIME_START;
 		FadeMode fade_mode = FADE_AUTOMATIC;
-		float fade_beats = 1;
+		int fade_beats = 1;
 		bool use_filler_clip = false;
 		int filler_clip = 0;
 		bool hold_previous = false;
@@ -182,8 +183,6 @@ public:
 	virtual Ref<AudioStreamPlayback> instantiate_playback() override;
 	virtual String get_stream_name() const override;
 	virtual double get_length() const override { return 0; }
-	virtual bool is_meta_stream() const override { return true; }
-
 	AudioStreamInteractive();
 
 protected:
@@ -260,7 +259,6 @@ public:
 
 	void switch_to_clip_by_name(const StringName &p_name);
 	void switch_to_clip(int p_index);
-	int get_current_clip_index() const;
 
 	virtual void set_parameter(const StringName &p_name, const Variant &p_value) override;
 	virtual Variant get_parameter(const StringName &p_name) const override;
@@ -268,3 +266,5 @@ public:
 	AudioStreamPlaybackInteractive();
 	~AudioStreamPlaybackInteractive();
 };
+
+#endif // AUDIO_STREAM_INTERACTIVE_H

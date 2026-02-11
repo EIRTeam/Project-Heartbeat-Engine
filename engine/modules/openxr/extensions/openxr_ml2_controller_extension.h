@@ -28,18 +28,14 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef OPENXR_ML2_CONTROLLER_EXTENSION_H
+#define OPENXR_ML2_CONTROLLER_EXTENSION_H
 
 #include "openxr_extension_wrapper.h"
 
 class OpenXRML2ControllerExtension : public OpenXRExtensionWrapper {
-	GDCLASS(OpenXRML2ControllerExtension, OpenXRExtensionWrapper);
-
-protected:
-	static void _bind_methods() {}
-
 public:
-	virtual HashMap<String, bool *> get_requested_extensions(XrVersion p_version) override;
+	virtual HashMap<String, bool *> get_requested_extensions() override;
 
 	bool is_available();
 
@@ -48,3 +44,5 @@ public:
 private:
 	bool available = false;
 };
+
+#endif // OPENXR_ML2_CONTROLLER_EXTENSION_H

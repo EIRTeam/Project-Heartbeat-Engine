@@ -28,18 +28,19 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AUDIO_FILTER_SW_H
+#define AUDIO_FILTER_SW_H
 
-#include "core/typedefs.h"
+#include "core/math/math_funcs.h"
 
 class AudioFilterSW {
 public:
 	struct Coeffs {
-		double a1 = 0.0;
-		double a2 = 0.0;
-		double b0 = 0.0;
-		double b1 = 0.0;
-		double b2 = 0.0;
+		float a1 = 0.0f;
+		float a2 = 0.0f;
+		float b0 = 0.0f;
+		float b1 = 0.0f;
+		float b2 = 0.0f;
 	};
 
 	enum Mode {
@@ -121,3 +122,5 @@ void AudioFilterSW::Processor::process_one_interp(float &p_sample) {
 	coeffs.a1 += incr_coeffs.a1;
 	coeffs.a2 += incr_coeffs.a2;
 }
+
+#endif // AUDIO_FILTER_SW_H

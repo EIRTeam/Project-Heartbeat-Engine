@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef ANIMATION_BLEND_SPACE_2D_H
+#define ANIMATION_BLEND_SPACE_2D_H
 
 #include "scene/animation/animation_tree.h"
 
@@ -78,7 +79,7 @@ protected:
 	void _blend_triangle(const Vector2 &p_pos, const Vector2 *p_points, float *r_weights);
 
 	bool auto_triangles = true;
-	bool triangles_dirty = false;
+	bool trianges_dirty = false;
 
 	void _update_triangles();
 	void _queue_auto_triangles();
@@ -148,3 +149,5 @@ public:
 };
 
 VARIANT_ENUM_CAST(AnimationNodeBlendSpace2D::BlendMode)
+
+#endif // ANIMATION_BLEND_SPACE_2D_H

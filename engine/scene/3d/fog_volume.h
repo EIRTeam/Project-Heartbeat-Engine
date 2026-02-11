@@ -28,10 +28,13 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef FOG_VOLUME_H
+#define FOG_VOLUME_H
 
 #include "core/templates/rid.h"
 #include "scene/3d/visual_instance_3d.h"
+#include "scene/main/node.h"
+#include "scene/main/viewport.h"
 #include "scene/resources/material.h"
 
 class FogVolume : public VisualInstance3D {
@@ -68,3 +71,5 @@ public:
 	FogVolume();
 	~FogVolume();
 };
+
+#endif // FOG_VOLUME_H

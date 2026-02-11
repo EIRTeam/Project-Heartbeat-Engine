@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef PIPELINE_CACHE_RD_H
+#define PIPELINE_CACHE_RD_H
 
 #include "core/os/spin_lock.h"
 #include "servers/rendering/rendering_device.h"
@@ -37,6 +38,7 @@ class PipelineCacheRD {
 	SpinLock spin_lock;
 
 	RID shader;
+	uint64_t input_mask;
 
 	RD::RenderPrimitive render_primitive;
 	RD::PipelineRasterizationState rasterization_state;
@@ -90,10 +92,15 @@ public:
 	}
 
 	_FORCE_INLINE_ uint64_t get_vertex_input_mask() {
-		ERR_FAIL_COND_V(shader.is_null(), 0);
-		return RD::get_singleton()->shader_get_vertex_input_attribute_mask(shader);
+		if (input_mask == 0) {
+			ERR_FAIL_COND_V(shader.is_null(), 0);
+			input_mask = RD::get_singleton()->shader_get_vertex_input_attribute_mask(shader);
+		}
+		return input_mask;
 	}
 	void clear();
 	PipelineCacheRD();
 	~PipelineCacheRD();
 };
+
+#endif // PIPELINE_CACHE_RD_H

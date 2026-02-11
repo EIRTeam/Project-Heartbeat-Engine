@@ -1,2 +1,2 @@
 GDTEST_ANALYZER_ERROR
->> ERROR at line 5: Could not resolve member "EV1": Cyclic reference.
+Could not resolve member "EV1": Cyclic reference.

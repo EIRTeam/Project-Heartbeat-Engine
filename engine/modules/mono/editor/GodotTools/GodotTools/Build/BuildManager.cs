@@ -52,7 +52,7 @@ namespace GodotTools.Build
         {
             var plugin = GodotSharpEditor.Instance;
             plugin.ShowErrorDialog(message, "Build error");
-            plugin.MSBuildPanel.MakeVisible();
+            plugin.MakeBottomPanelItemVisible(plugin.MSBuildPanel);
         }
 
         private static string GetLogFilePath(BuildInfo buildInfo)
@@ -230,7 +230,7 @@ namespace GodotTools.Build
 
             if (!success)
             {
-                ShowBuildErrorDialog("Failed to build project. Check MSBuild panel for details.");
+                ShowBuildErrorDialog("Failed to build project");
             }
 
             return success;
@@ -263,6 +263,11 @@ namespace GodotTools.Build
             {
                 pr.Step("Running dotnet publish", 0);
                 success = Publish(buildInfo);
+            }
+
+            if (!success)
+            {
+                ShowBuildErrorDialog("Failed to publish .NET project");
             }
 
             return success;

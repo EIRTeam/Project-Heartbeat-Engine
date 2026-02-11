@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef GLTF_SKELETON_H
+#define GLTF_SKELETON_H
 
 #include "../gltf_defines.h"
 
@@ -65,10 +66,10 @@ protected:
 
 public:
 	Vector<GLTFNodeIndex> get_joints();
-	void set_joints(const Vector<GLTFNodeIndex> &p_joints);
+	void set_joints(Vector<GLTFNodeIndex> p_joints);
 
 	Vector<GLTFNodeIndex> get_roots();
-	void set_roots(const Vector<GLTFNodeIndex> &p_roots);
+	void set_roots(Vector<GLTFNodeIndex> p_roots);
 
 	Skeleton3D *get_godot_skeleton();
 
@@ -80,7 +81,7 @@ public:
 	// }
 
 	TypedArray<String> get_unique_names();
-	void set_unique_names(const TypedArray<String> &p_unique_names);
+	void set_unique_names(TypedArray<String> p_unique_names);
 
 	//RBMap<int32_t, GLTFNodeIndex> get_godot_bone_node() {
 	//	return godot_bone_node;
@@ -89,7 +90,7 @@ public:
 	//	godot_bone_node = p_godot_bone_node;
 	//}
 	Dictionary get_godot_bone_node();
-	void set_godot_bone_node(const Dictionary &p_indict);
+	void set_godot_bone_node(Dictionary p_indict);
 
 	//Dictionary get_godot_bone_node() {
 	//	return VariantConversion::to_dict(godot_bone_node);
@@ -102,3 +103,5 @@ public:
 
 	int32_t get_bone_attachment_count();
 };
+
+#endif // GLTF_SKELETON_H

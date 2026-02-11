@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef ENET_PACKET_PEER_H
+#define ENET_PACKET_PEER_H
 
 #include "core/io/packet_peer.h"
 
@@ -112,7 +113,6 @@ public:
 	double get_statistic(PeerStatistic p_stat);
 	PeerState get_state() const;
 	int get_channels() const;
-	int get_packet_flags() const;
 
 	// Extras
 	IPAddress get_remote_address() const;
@@ -127,3 +127,5 @@ public:
 
 VARIANT_ENUM_CAST(ENetPacketPeer::PeerState);
 VARIANT_ENUM_CAST(ENetPacketPeer::PeerStatistic);
+
+#endif // ENET_PACKET_PEER_H

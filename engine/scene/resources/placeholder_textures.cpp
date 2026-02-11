@@ -30,8 +30,6 @@
 
 #include "placeholder_textures.h"
 
-#include "servers/rendering/rendering_server.h"
-
 void PlaceholderTexture2D::set_size(Size2 p_size) {
 	size = p_size;
 	emit_changed();
@@ -72,7 +70,7 @@ PlaceholderTexture2D::PlaceholderTexture2D() {
 PlaceholderTexture2D::~PlaceholderTexture2D() {
 	ERR_FAIL_NULL(RenderingServer::get_singleton());
 	if (rid.is_valid()) {
-		RS::get_singleton()->free_rid(rid);
+		RS::get_singleton()->free(rid);
 	}
 }
 
@@ -129,7 +127,7 @@ PlaceholderTexture3D::PlaceholderTexture3D() {
 PlaceholderTexture3D::~PlaceholderTexture3D() {
 	ERR_FAIL_NULL(RenderingServer::get_singleton());
 	if (rid.is_valid()) {
-		RS::get_singleton()->free_rid(rid);
+		RS::get_singleton()->free(rid);
 	}
 }
 
@@ -197,6 +195,6 @@ PlaceholderTextureLayered::PlaceholderTextureLayered(LayeredType p_type) {
 PlaceholderTextureLayered::~PlaceholderTextureLayered() {
 	ERR_FAIL_NULL(RenderingServer::get_singleton());
 	if (rid.is_valid()) {
-		RS::get_singleton()->free_rid(rid);
+		RS::get_singleton()->free(rid);
 	}
 }

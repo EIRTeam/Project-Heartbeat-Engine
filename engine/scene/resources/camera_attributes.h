@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef CAMERA_ATTRIBUTES_H
+#define CAMERA_ATTRIBUTES_H
 
 #include "core/io/resource.h"
 #include "core/templates/rid.h"
@@ -52,7 +53,7 @@ protected:
 	float auto_exposure_max = 64.0;
 	float auto_exposure_speed = 0.5;
 	float auto_exposure_scale = 0.4;
-	virtual void _update_auto_exposure() {}
+	virtual void _update_auto_exposure(){};
 
 public:
 	virtual RID get_rid() const override;
@@ -178,3 +179,5 @@ public:
 	CameraAttributesPhysical();
 	~CameraAttributesPhysical();
 };
+
+#endif // CAMERA_ATTRIBUTES_H

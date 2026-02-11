@@ -1,15 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
-	<Type Name="Ref&lt;*&gt;">
-		<SmartPointer Usage="Minimal">reference</SmartPointer>
-		<DisplayString Condition="!reference">[empty]</DisplayString>
-		<DisplayString Condition="!!reference">{*reference}</DisplayString>
-		<Expand>
-			<Item Condition="!!reference" Name="[ptr]">reference</Item>
-			<Item Condition="!!reference" Name="[refcount]">reference->refcount.count.value</Item>
-		</Expand>
-	</Type>
-
 	<Type Name="Vector&lt;*&gt;">
 		<Expand>
 			<Item Name="[size]">_cowdata._ptr ? (((const unsigned long long *)(_cowdata._ptr))[-1]) : 0</Item>
@@ -30,12 +20,22 @@
 		</Expand>
 	</Type>
 
+	<Type Name="TypedArray&lt;*&gt;">
+		<Expand>
+			<Item Name="[size]"> _p->array._cowdata._ptr ? (((const unsigned long long *)(_p->array._cowdata._ptr))[-1]) : 0</Item>
+			<ArrayItems>
+				<Size>_p->array._cowdata._ptr ? (((const unsigned long long *)(_p->array._cowdata._ptr))[-1]) : 0</Size>
+				<ValuePointer >(Variant *) _p->array._cowdata._ptr</ValuePointer>
+			</ArrayItems>
+		</Expand>
+	</Type>
+
 	<Type Name="Dictionary">
 		<Expand>
-			<Item Name="[size]">_p &amp;&amp; _p->variant_map._head_element ? _p->variant_map._size : 0</Item>
+			<Item Name="[size]">_p &amp;&amp; _p->variant_map.head_element ? _p->variant_map.num_elements : 0</Item>
 			<LinkedListItems>
-				<Size>_p &amp;&amp; _p->variant_map._head_element ? _p->variant_map._size : 0</Size>
-				<HeadPointer>_p ? _p->variant_map._head_element : nullptr</HeadPointer>
+				<Size>_p &amp;&amp; _p->variant_map.head_element ? _p->variant_map.num_elements : 0</Size>
+				<HeadPointer>_p ? _p->variant_map.head_element : nullptr</HeadPointer>
 				<NextPointer>next</NextPointer>
 				<ValueNode Name="[{data.key}]">(*this),view(MapHelper)</ValueNode>
 			</LinkedListItems>
@@ -91,16 +91,6 @@
 		<StringView Condition="_data &amp;&amp; !_data->cname">_data->name,s32b</StringView>
 	</Type>
 
-	<Type Name="HashSet&lt;*,*,*&gt;">
-		<Expand>
-			<Item Name="[size]">_size</Item>
-			<ArrayItems>
-				<Size>_size</Size>
-				<ValuePointer>($T1 *) _keys._cowdata._ptr</ValuePointer>
-			</ArrayItems>
-		</Expand>
-	</Type>
-
 	<Type Name="HashMapElement&lt;*,*&gt;">
 		<DisplayString>{{Key = {($T1 *) &amp;data.key}  Value = {($T2 *) &amp;data.value}}}</DisplayString>
 		<Expand>
@@ -112,10 +102,10 @@
 	<!-- elements displayed by index -->
 	<Type Name="HashMap&lt;*,*,*,*,*&gt;" Priority="Medium">
 		<Expand>
-			<Item Name="[size]">_head_element ? _size : 0</Item>
+			<Item Name="[size]">head_element ? num_elements : 0</Item>
 			<LinkedListItems>
-				<Size>_head_element ? _size : 0</Size>
-				<HeadPointer>_head_element</HeadPointer>
+				<Size>head_element ? num_elements : 0</Size>
+				<HeadPointer>head_element</HeadPointer>
 				<NextPointer>next</NextPointer>
 				<ValueNode>(*this)</ValueNode>
 			</LinkedListItems>
@@ -126,10 +116,10 @@
 	<!-- show elements by index by specifying "ShowElementsByIndex"-->
 	<Type Name="HashMap&lt;*,*,*,*,*&gt;" ExcludeView="ShowElementsByIndex" Priority="MediumHigh">
 		<Expand>
-			<Item Name="[size]">_head_element ? _size : 0</Item>
+			<Item Name="[size]">head_element ? num_elements : 0</Item>
 			<LinkedListItems>
-				<Size>_head_element ? _size : 0</Size>
-				<HeadPointer>_head_element</HeadPointer>
+				<Size>head_element ? num_elements : 0</Size>
+				<HeadPointer>head_element</HeadPointer>
 				<NextPointer>next</NextPointer>
 				<ValueNode Name="[{data.key}]">(*this),view(MapHelper)</ValueNode>
 			</LinkedListItems>
@@ -143,7 +133,7 @@
 	<Type Name="HashMapElement&lt;*,*&gt;" IncludeView="MapHelper">
 		<DisplayString>{data.value}</DisplayString>
 		<Expand>
-			<Item Name="[key]">($T1 *) &amp;data.key</Item>
+			<Item Name="[key]"  >($T1 *) &amp;data.key</Item>
 			<Item Name="[value]">($T2 *) &amp;data.value</Item>
 		</Expand>
 	</Type>
@@ -275,164 +265,39 @@
 	</Type>
 
 	<Type Name="Vector2">
-		<DisplayString>({x,g}, {y,g})</DisplayString>
+		<DisplayString>{{{x},{y}}}</DisplayString>
 		<Expand>
-			<Item Name="[x]">x</Item>
-			<Item Name="[y]">y</Item>
-		</Expand>
-	</Type>
-	<Type Name="Vector2i">
-		<DisplayString>({x}, {y})</DisplayString>
-		<Expand>
-			<Item Name="[x]">x</Item>
-			<Item Name="[y]">y</Item>
+			<Item Name="x">x</Item>
+			<Item Name="y">y</Item>
 		</Expand>
 	</Type>
 
 	<Type Name="Vector3">
-		<DisplayString>({x,g}, {y,g}, {z,g})</DisplayString>
+		<DisplayString>{{{x},{y},{z}}}</DisplayString>
 		<Expand>
-			<Item Name="[x]">x</Item>
-			<Item Name="[y]">y</Item>
-			<Item Name="[z]">z</Item>
-		</Expand>
-	</Type>
-	<Type Name="Vector3i">
-		<DisplayString>({x}, {y}, {z})</DisplayString>
-		<Expand>
-			<Item Name="[x]">x</Item>
-			<Item Name="[y]">y</Item>
-			<Item Name="[z]">z</Item>
-		</Expand>
-	</Type>
-
-	<Type Name="Vector4">
-		<DisplayString>({x,g}, {y,g}, {z,g}, {w,g})</DisplayString>
-		<Expand>
-			<Item Name="[x]">x</Item>
-			<Item Name="[y]">y</Item>
-			<Item Name="[z]">z</Item>
-			<Item Name="[w]">w</Item>
-		</Expand>
-	</Type>
-	<Type Name="Vector4i">
-		<DisplayString>({x}, {y}, {z}, {w})</DisplayString>
-		<Expand>
-			<Item Name="[x]">x</Item>
-			<Item Name="[y]">y</Item>
-			<Item Name="[z]">z</Item>
-			<Item Name="[w]">w</Item>
+			<Item Name="x">x</Item>
+			<Item Name="y">y</Item>
+			<Item Name="z">z</Item>
 		</Expand>
 	</Type>
 
 	<Type Name="Quaternion">
-		<DisplayString>({x,g}, {y,g}, {z,g}, {w,g})</DisplayString>
+		<DisplayString>Quaternion {{{x},{y},{z},{w}}}</DisplayString>
 		<Expand>
-			<Item Name="[x]">x</Item>
-			<Item Name="[y]">y</Item>
-			<Item Name="[z]">z</Item>
-			<Item Name="[w]">w</Item>
+			<Item Name="x">x</Item>
+			<Item Name="y">y</Item>
+			<Item Name="z">z</Item>
+			<Item Name="w">w</Item>
 		</Expand>
 	</Type>
 
 	<Type Name="Color">
-		<DisplayString>({r,g}, {g,g}, {b,g}, {a,g})</DisplayString>
+		<DisplayString>Color {{{r},{g},{b},{a}}}</DisplayString>
 		<Expand>
-			<Item Name="[red]">r</Item>
-			<Item Name="[green]">g</Item>
-			<Item Name="[blue]">b</Item>
-			<Item Name="[alpha]">a</Item>
-		</Expand>
-	</Type>
-
-	<Type Name="Rect2">
-		<DisplayString>[P: {position}, S: {size}]</DisplayString>
-		<Expand>
-			<Item Name="[position]">position,nr</Item>
-			<Item Name="[size]">size,nr</Item>
-		</Expand>
-	</Type>
-	<Type Name="Rect2i">
-		<DisplayString>[P: {position}, S: {size}]</DisplayString>
-		<Expand>
-			<Item Name="[position]">position,nr</Item>
-			<Item Name="[size]">size,nr</Item>
-		</Expand>
-	</Type>
-
-	<Type Name="AABB">
-		<DisplayString>[P: {position}, S: {size}]</DisplayString>
-		<Expand>
-			<Item Name="[position]">position,nr</Item>
-			<Item Name="[size]">size,nr</Item>
-		</Expand>
-	</Type>
-
-	<Type Name="Plane">
-		<DisplayString>[N: {normal}, D: {d,g}]</DisplayString>
-		<Expand>
-			<Item Name="[normal]">normal,nr</Item>
-			<Item Name="[d]">d</Item>
-		</Expand>
-	</Type>
-
-	<Type Name="Basis">
-		<DisplayString>[X: {rows[0]}, Y: {rows[1]}, Z: {rows[2]}]</DisplayString>
-		<Expand>
-			<Item Name="[x]">rows[0],nr</Item>
-			<Item Name="[y]">rows[1],nr</Item>
-			<Item Name="[z]">rows[2],nr</Item>
-		</Expand>
-	</Type>
-
-	<Type Name="Transform2D">
-		<DisplayString>[X: {columns[0]}, Y: {columns[1]}, O: {columns[2]}]</DisplayString>
-		<Expand>
-			<Item Name="[x]">columns[0],nr</Item>
-			<Item Name="[y]">columns[1],nr</Item>
-			<Item Name="[origin]">columns[2],nr</Item>
-		</Expand>
-	</Type>
-
-	<Type Name="Transform3D">
-		<!-- Can't call column functions, so just pretend we can via obscene code duplication. -->
-		<DisplayString>[X: ({basis.rows[0].x,g}, {basis.rows[1].x,g}, {basis.rows[2].x,g}), Y: ({basis.rows[0].y,g}, {basis.rows[1].y,g}, {basis.rows[2].y,g}), Z: ({basis.rows[0].z,g}, {basis.rows[1].z,g}, {basis.rows[2].z,g}), O: {origin}]</DisplayString>
-		<Expand>
-			<Synthetic Name="[x]">
-				<DisplayString>({basis.rows[0].x,g}, {basis.rows[1].x,g}, {basis.rows[2].x,g})</DisplayString>
-				<Expand>
-					<Item Name="[x]">basis.rows[0].x</Item>
-					<Item Name="[y]">basis.rows[1].x</Item>
-					<Item Name="[z]">basis.rows[2].x</Item>
-				</Expand>
-			</Synthetic>
-			<Synthetic Name="[y]">
-				<DisplayString>({basis.rows[0].y,g}, {basis.rows[1].y,g}, {basis.rows[2].y,g})</DisplayString>
-				<Expand>
-					<Item Name="[x]">basis.rows[0].y</Item>
-					<Item Name="[y]">basis.rows[1].y</Item>
-					<Item Name="[z]">basis.rows[2].y</Item>
-				</Expand>
-			</Synthetic>
-			<Synthetic Name="[z]">
-				<DisplayString>({basis.rows[0].z,g}, {basis.rows[1].z,g}, {basis.rows[2].z,g})</DisplayString>
-				<Expand>
-					<Item Name="[x]">basis.rows[0].z</Item>
-					<Item Name="[y]">basis.rows[1].z</Item>
-					<Item Name="[z]">basis.rows[2].z</Item>
-				</Expand>
-			</Synthetic>
-			<Item Name="[origin]">origin,nr</Item>
-		</Expand>
-	</Type>
-
-	<Type Name="Projection">
-		<DisplayString>[X: {columns[0]}, Y: {columns[1]}, Z: {columns[2]}, W: {columns[3]}]</DisplayString>
-		<Expand>
-			<Item Name="[x]">columns[0],nr</Item>
-			<Item Name="[y]">columns[1],nr</Item>
-			<Item Name="[z]">columns[2],nr</Item>
-			<Item Name="[w]">columns[3],nr</Item>
+			<Item Name="red">r</Item>
+			<Item Name="green">g</Item>
+			<Item Name="blue">b</Item>
+			<Item Name="alpha">a</Item>
 		</Expand>
 	</Type>
 </AutoVisualizer>

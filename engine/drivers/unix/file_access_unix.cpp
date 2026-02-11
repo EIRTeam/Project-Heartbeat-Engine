@@ -35,32 +35,16 @@
 #include "core/os/os.h"
 #include "core/string/print_string.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#if !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__NetBSD__) && !defined(WEB_ENABLED)
-#include <sys/xattr.h>
-#endif
 #include <unistd.h>
-#include <cerrno>
 
-#if defined(TOOLS_ENABLED)
-#include <climits>
-#include <cstdlib>
-#endif
-
-void FileAccessUnix::check_errors(bool p_write) const {
+void FileAccessUnix::check_errors() const {
 	ERR_FAIL_NULL_MSG(f, "File must be opened before use.");
 
-	last_error = OK;
-	if (ferror(f)) {
-		if (p_write) {
-			last_error = ERR_FILE_CANT_WRITE;
-		} else {
-			last_error = ERR_FILE_CANT_READ;
-		}
-	}
-	if (!p_write && feof(f)) {
+	if (feof(f)) {
 		last_error = ERR_FILE_EOF;
 	}
 }
@@ -103,46 +87,8 @@ Error FileAccessUnix::open_internal(const String &p_path, int p_mode_flags) {
 		}
 	}
 
-#if defined(TOOLS_ENABLED)
-	if (p_mode_flags & READ) {
-		String real_path = get_real_path();
-		if (real_path != path) {
-			// Don't warn on symlinks, since they can be used to simply share addons on multiple projects.
-			if (real_path.to_lower() == path.to_lower()) {
-				// The File system is case insensitive, but other platforms can be sensitive to it
-				// To ease cross-platform development, we issue a warning if users try to access
-				// a file using the wrong case (which *works* on Windows and macOS, but won't on other
-				// platforms).
-				WARN_PRINT(vformat("Case mismatch opening requested file '%s', stored as '%s' in the filesystem. This file will not open when exported to other case-sensitive platforms.", path, real_path));
-			}
-		}
-	}
-#endif
-
 	if (is_backup_save_enabled() && (p_mode_flags == WRITE)) {
-		// Set save path to the symlink target, not the link itself.
-		String link;
-		bool is_link = false;
-		{
-			CharString cs = path.utf8();
-			struct stat lst = {};
-			if (lstat(cs.get_data(), &lst) == 0) {
-				is_link = S_ISLNK(lst.st_mode);
-			}
-			if (is_link) {
-				char buf[PATH_MAX];
-				memset(buf, 0, PATH_MAX);
-				ssize_t len = readlink(cs.get_data(), buf, sizeof(buf));
-				if (len > 0) {
-					link.append_utf8(buf, len);
-				}
-				if (!link.is_absolute_path()) {
-					link = path.get_base_dir().path_join(link);
-				}
-			}
-		}
-		save_path = is_link ? link : path;
-
+		save_path = path;
 		// Create a temporary file in the same directory as the target file.
 		path = path + "-XXXXXX";
 		CharString cs = path.utf8();
@@ -151,15 +97,7 @@ Error FileAccessUnix::open_internal(const String &p_path, int p_mode_flags) {
 			last_error = ERR_FILE_CANT_OPEN;
 			return last_error;
 		}
-
-		struct stat file_stat = {};
-		int error = stat(save_path.utf8().get_data(), &file_stat);
-		if (!error) {
-			fchmod(fd, file_stat.st_mode & 0xFFF); // Mask to remove file type
-		} else {
-			fchmod(fd, 0644); // Fallback permissions
-		}
-
+		fchmod(fd, 0666);
 		path = String::utf8(cs.ptr());
 
 		f = fdopen(fd, mode_string);
@@ -235,29 +173,10 @@ String FileAccessUnix::get_path_absolute() const {
 	return path;
 }
 
-#if defined(TOOLS_ENABLED)
-String FileAccessUnix::get_real_path() const {
-	char *resolved_path = ::realpath(path.utf8().get_data(), nullptr);
-
-	if (!resolved_path) {
-		return path;
-	}
-
-	String result;
-	Error parse_ok = result.append_utf8(resolved_path);
-	::free(resolved_path);
-
-	if (parse_ok != OK) {
-		return path;
-	}
-
-	return result.simplify_path();
-}
-#endif
-
 void FileAccessUnix::seek(uint64_t p_position) {
 	ERR_FAIL_NULL_MSG(f, "File must be opened before use.");
 
+	last_error = OK;
 	if (fseeko(f, p_position, SEEK_SET)) {
 		check_errors();
 	}
@@ -296,16 +215,70 @@ uint64_t FileAccessUnix::get_length() const {
 }
 
 bool FileAccessUnix::eof_reached() const {
-	return feof(f);
+	return last_error == ERR_FILE_EOF;
+}
+
+uint8_t FileAccessUnix::get_8() const {
+	ERR_FAIL_NULL_V_MSG(f, 0, "File must be opened before use.");
+	uint8_t b;
+	if (fread(&b, 1, 1, f) == 0) {
+		check_errors();
+		b = '\0';
+	}
+	return b;
+}
+
+uint16_t FileAccessUnix::get_16() const {
+	ERR_FAIL_NULL_V_MSG(f, 0, "File must be opened before use.");
+
+	uint16_t b = 0;
+	if (fread(&b, 1, 2, f) != 2) {
+		check_errors();
+	}
+
+	if (big_endian) {
+		b = BSWAP16(b);
+	}
+
+	return b;
+}
+
+uint32_t FileAccessUnix::get_32() const {
+	ERR_FAIL_NULL_V_MSG(f, 0, "File must be opened before use.");
+
+	uint32_t b = 0;
+	if (fread(&b, 1, 4, f) != 4) {
+		check_errors();
+	}
+
+	if (big_endian) {
+		b = BSWAP32(b);
+	}
+
+	return b;
+}
+
+uint64_t FileAccessUnix::get_64() const {
+	ERR_FAIL_NULL_V_MSG(f, 0, "File must be opened before use.");
+
+	uint64_t b = 0;
+	if (fread(&b, 1, 8, f) != 8) {
+		check_errors();
+	}
+
+	if (big_endian) {
+		b = BSWAP64(b);
+	}
+
+	return b;
 }
 
 uint64_t FileAccessUnix::get_buffer(uint8_t *p_dst, uint64_t p_length) const {
-	ERR_FAIL_NULL_V_MSG(f, -1, "File must be opened before use.");
 	ERR_FAIL_COND_V(!p_dst && p_length > 0, -1);
+	ERR_FAIL_NULL_V_MSG(f, -1, "File must be opened before use.");
 
 	uint64_t read = fread(p_dst, 1, p_length, f);
 	check_errors();
-
 	return read;
 }
 
@@ -335,25 +308,60 @@ void FileAccessUnix::flush() {
 	fflush(f);
 }
 
-bool FileAccessUnix::store_buffer(const uint8_t *p_src, uint64_t p_length) {
-	ERR_FAIL_NULL_V_MSG(f, false, "File must be opened before use.");
-	ERR_FAIL_COND_V(!p_src && p_length > 0, false);
-	bool res = fwrite(p_src, 1, p_length, f) == p_length;
-	check_errors(true);
-	return res;
+void FileAccessUnix::store_8(uint8_t p_dest) {
+	ERR_FAIL_NULL_MSG(f, "File must be opened before use.");
+	ERR_FAIL_COND(fwrite(&p_dest, 1, 1, f) != 1);
+}
+
+void FileAccessUnix::store_16(uint16_t p_dest) {
+	ERR_FAIL_NULL_MSG(f, "File must be opened before use.");
+
+	if (big_endian) {
+		p_dest = BSWAP16(p_dest);
+	}
+
+	ERR_FAIL_COND(fwrite(&p_dest, 1, 2, f) != 2);
+}
+
+void FileAccessUnix::store_32(uint32_t p_dest) {
+	ERR_FAIL_NULL_MSG(f, "File must be opened before use.");
+
+	if (big_endian) {
+		p_dest = BSWAP32(p_dest);
+	}
+
+	ERR_FAIL_COND(fwrite(&p_dest, 1, 4, f) != 4);
+}
+
+void FileAccessUnix::store_64(uint64_t p_dest) {
+	ERR_FAIL_NULL_MSG(f, "File must be opened before use.");
+
+	if (big_endian) {
+		p_dest = BSWAP64(p_dest);
+	}
+
+	ERR_FAIL_COND(fwrite(&p_dest, 1, 8, f) != 8);
+}
+
+void FileAccessUnix::store_buffer(const uint8_t *p_src, uint64_t p_length) {
+	ERR_FAIL_NULL_MSG(f, "File must be opened before use.");
+	ERR_FAIL_COND(!p_src && p_length > 0);
+	ERR_FAIL_COND(fwrite(p_src, 1, p_length, f) != p_length);
 }
 
 bool FileAccessUnix::file_exists(const String &p_path) {
+	int err;
 	struct stat st = {};
-	const CharString filename_utf8 = fix_path(p_path).utf8();
+	String filename = fix_path(p_path);
 
 	// Does the name exist at all?
-	if (stat(filename_utf8.get_data(), &st)) {
+	err = stat(filename.utf8().get_data(), &st);
+	if (err) {
 		return false;
 	}
 
 	// See if we have access to the file
-	if (access(filename_utf8.get_data(), F_OK)) {
+	if (access(filename.utf8().get_data(), F_OK)) {
 		return false;
 	}
 
@@ -369,53 +377,15 @@ bool FileAccessUnix::file_exists(const String &p_path) {
 
 uint64_t FileAccessUnix::_get_modified_time(const String &p_file) {
 	String file = fix_path(p_file);
-	struct stat st = {};
-	int err = stat(file.utf8().get_data(), &st);
+	struct stat status = {};
+	int err = stat(file.utf8().get_data(), &status);
 
 	if (!err) {
-		uint64_t modified_time = 0;
-		if ((st.st_mode & S_IFMT) == S_IFLNK || (st.st_mode & S_IFMT) == S_IFREG || (st.st_mode & S_IFDIR) == S_IFDIR) {
-			modified_time = st.st_mtime;
-		}
-#ifdef ANDROID_ENABLED
-		// Workaround for GH-101007
-		//FIXME: After saving, all timestamps (st_mtime, st_ctime, st_atime) are set to the same value.
-		// After exporting or after some time, only 'modified_time' resets to a past timestamp.
-		uint64_t created_time = st.st_ctime;
-		if (modified_time < created_time) {
-			modified_time = created_time;
-		}
-#endif
-		return modified_time;
+		return status.st_mtime;
 	} else {
+		print_verbose("Failed to get modified time for: " + p_file + "");
 		return 0;
 	}
-}
-
-uint64_t FileAccessUnix::_get_access_time(const String &p_file) {
-	String file = fix_path(p_file);
-	struct stat st = {};
-	int err = stat(file.utf8().get_data(), &st);
-
-	if (!err) {
-		if ((st.st_mode & S_IFMT) == S_IFLNK || (st.st_mode & S_IFMT) == S_IFREG || (st.st_mode & S_IFDIR) == S_IFDIR) {
-			return st.st_atime;
-		}
-	}
-	ERR_FAIL_V_MSG(0, "Failed to get access time for: " + p_file + "");
-}
-
-int64_t FileAccessUnix::_get_size(const String &p_file) {
-	String file = fix_path(p_file);
-	struct stat st = {};
-	int err = stat(file.utf8().get_data(), &st);
-
-	if (!err) {
-		if ((st.st_mode & S_IFMT) == S_IFLNK || (st.st_mode & S_IFMT) == S_IFREG) {
-			return st.st_size;
-		}
-	}
-	ERR_FAIL_V_MSG(-1, "Failed to get size for: " + p_file + "");
 }
 
 BitField<FileAccess::UnixPermissionFlags> FileAccessUnix::_get_unix_permissions(const String &p_file) {
@@ -509,122 +479,11 @@ Error FileAccessUnix::_set_read_only_attribute(const String &p_file, bool p_ro) 
 #endif
 }
 
-PackedByteArray FileAccessUnix::_get_extended_attribute(const String &p_file, const String &p_attribute_name) {
-	ERR_FAIL_COND_V(p_attribute_name.is_empty(), PackedByteArray());
-
-	String file = fix_path(p_file);
-	PackedByteArray data;
-#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(WEB_ENABLED)
-	// Not supported.
-#elif defined(__APPLE__)
-	CharString attr_name = p_attribute_name.utf8();
-	ssize_t attr_size = getxattr(file.utf8().get_data(), attr_name.get_data(), nullptr, 0, 0, 0);
-	if (attr_size <= 0) {
-		return PackedByteArray();
-	}
-
-	data.resize(attr_size);
-	attr_size = getxattr(file.utf8().get_data(), attr_name.get_data(), (void *)data.ptrw(), data.size(), 0, 0);
-	ERR_FAIL_COND_V_MSG(attr_size != data.size(), PackedByteArray(), "Failed to set extended attributes for: " + p_file);
-#else
-	CharString attr_name = ("user." + p_attribute_name).utf8();
-	ssize_t attr_size = getxattr(file.utf8().get_data(), attr_name.get_data(), nullptr, 0);
-	if (attr_size <= 0) {
-		return PackedByteArray();
-	}
-
-	data.resize(attr_size);
-	attr_size = getxattr(file.utf8().get_data(), attr_name.get_data(), (void *)data.ptrw(), data.size());
-	ERR_FAIL_COND_V_MSG(attr_size != data.size(), PackedByteArray(), "Failed to set extended attributes for: " + p_file);
-#endif
-	return data;
-}
-
-Error FileAccessUnix::_set_extended_attribute(const String &p_file, const String &p_attribute_name, const PackedByteArray &p_data) {
-	ERR_FAIL_COND_V(p_attribute_name.is_empty(), FAILED);
-
-	String file = fix_path(p_file);
-#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(WEB_ENABLED)
-	// Not supported.
-#elif defined(__APPLE__)
-	int err = setxattr(file.utf8().get_data(), p_attribute_name.utf8().get_data(), (const void *)p_data.ptr(), p_data.size(), 0, 0);
-	if (err != 0) {
-		return FAILED;
-	}
-#else
-	int err = setxattr(file.utf8().get_data(), ("user." + p_attribute_name).utf8().get_data(), (const void *)p_data.ptr(), p_data.size(), 0);
-	if (err != 0) {
-		return FAILED;
-	}
-#endif
-	return OK;
-}
-
-Error FileAccessUnix::_remove_extended_attribute(const String &p_file, const String &p_attribute_name) {
-	ERR_FAIL_COND_V(p_attribute_name.is_empty(), FAILED);
-
-	String file = fix_path(p_file);
-#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(WEB_ENABLED)
-	// Not supported.
-#elif defined(__APPLE__)
-	int err = removexattr(file.utf8().get_data(), p_attribute_name.utf8().get_data(), 0);
-	if (err != 0) {
-		return FAILED;
-	}
-#else
-	int err = removexattr(file.utf8().get_data(), ("user." + p_attribute_name).utf8().get_data());
-	if (err != 0) {
-		return FAILED;
-	}
-#endif
-	return OK;
-}
-
-PackedStringArray FileAccessUnix::_get_extended_attributes_list(const String &p_file) {
-	PackedStringArray ret;
-	String file = fix_path(p_file);
-#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(WEB_ENABLED)
-	// Not supported.
-#elif defined(__APPLE__)
-	size_t size = listxattr(file.utf8().get_data(), nullptr, 0, 0);
-	if (size > 0) {
-		PackedByteArray data;
-		data.resize(size);
-		listxattr(file.utf8().get_data(), (char *)data.ptrw(), data.size(), 0);
-		int64_t start = 0;
-		for (int64_t x = 0; x < data.size(); x++) {
-			if (x != start && data[x] == 0) {
-				ret.push_back(String::utf8((const char *)(data.ptr() + start), x - start));
-				start = x + 1;
-			}
-		}
-	}
-#else
-	size_t size = listxattr(file.utf8().get_data(), nullptr, 0);
-	if (size > 0) {
-		PackedByteArray data;
-		data.resize(size);
-		listxattr(file.utf8().get_data(), (char *)data.ptrw(), data.size());
-		int64_t start = 0;
-		for (int64_t x = 0; x < data.size(); x++) {
-			if (x != start && data[x] == 0) {
-				String name = String::utf8((const char *)(data.ptr() + start), x - start);
-				if (name.begins_with("user.")) {
-					ret.push_back(name.trim_prefix("user."));
-				}
-				start = x + 1;
-			}
-		}
-	}
-#endif
-	return ret;
-}
-
 void FileAccessUnix::close() {
 	_close();
 }
 
-FileAccessUnix::CloseNotificationFunc FileAccessUnix::close_notification_func = nullptr;
+CloseNotificationFunc FileAccessUnix::close_notification_func = nullptr;
 
 FileAccessUnix::~FileAccessUnix() {
 	_close();

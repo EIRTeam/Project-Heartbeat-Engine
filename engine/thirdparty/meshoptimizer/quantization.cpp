@@ -3,15 +3,9 @@
 
 #include <assert.h>
 
-union FloatBits
-{
-	float f;
-	unsigned int ui;
-};
-
 unsigned short meshopt_quantizeHalf(float v)
 {
-	FloatBits u = {v};
+	union { float f; unsigned int ui; } u = {v};
 	unsigned int ui = u.ui;
 
 	int s = (ui >> 16) & 0x8000;
@@ -36,7 +30,7 @@ float meshopt_quantizeFloat(float v, int N)
 {
 	assert(N >= 0 && N <= 23);
 
-	FloatBits u = {v};
+	union { float f; unsigned int ui; } u = {v};
 	unsigned int ui = u.ui;
 
 	const int mask = (1 << (23 - N)) - 1;
@@ -70,7 +64,7 @@ float meshopt_dequantizeHalf(unsigned short h)
 	// 112 is an exponent bias fixup; since we already applied it once, applying it twice converts 31 to 255
 	r += (em >= (31 << 10)) ? (112 << 23) : 0;
 
-	FloatBits u;
+	union { float f; unsigned int ui; } u;
 	u.ui = s | r;
 	return u.f;
 }

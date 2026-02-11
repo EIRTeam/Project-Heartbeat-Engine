@@ -28,11 +28,11 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AABB_H
+#define AABB_H
 
 #include "core/math/plane.h"
 #include "core/math/vector3.h"
-#include "core/templates/hashfuncs.h"
 
 /**
  * AABB (Axis Aligned Bounding Box)
@@ -59,15 +59,10 @@ struct [[nodiscard]] AABB {
 	const Vector3 &get_size() const { return size; }
 	void set_size(const Vector3 &p_size) { size = p_size; }
 
-	constexpr bool operator==(const AABB &p_rval) const {
-		return position == p_rval.position && size == p_rval.size;
-	}
-	constexpr bool operator!=(const AABB &p_rval) const {
-		return position != p_rval.position || size != p_rval.size;
-	}
+	bool operator==(const AABB &p_rval) const;
+	bool operator!=(const AABB &p_rval) const;
 
 	bool is_equal_approx(const AABB &p_aabb) const;
-	bool is_same(const AABB &p_aabb) const;
 	bool is_finite() const;
 	_FORCE_INLINE_ bool intersects(const AABB &p_aabb) const; /// Both AABBs overlap
 	_FORCE_INLINE_ bool intersects_inclusive(const AABB &p_aabb) const; /// Both AABBs (or their faces) overlap
@@ -90,7 +85,7 @@ struct [[nodiscard]] AABB {
 	bool intersects_plane(const Plane &p_plane) const;
 
 	_FORCE_INLINE_ bool has_point(const Vector3 &p_point) const;
-	_FORCE_INLINE_ Vector3 get_support(const Vector3 &p_direction) const;
+	_FORCE_INLINE_ Vector3 get_support(const Vector3 &p_normal) const;
 
 	Vector3 get_longest_axis() const;
 	int get_longest_axis_index() const;
@@ -132,20 +127,10 @@ struct [[nodiscard]] AABB {
 		return position + (size * 0.5f);
 	}
 
-	uint32_t hash() const {
-		uint32_t h = hash_murmur3_one_real(position.x);
-		h = hash_murmur3_one_real(position.y, h);
-		h = hash_murmur3_one_real(position.z, h);
-		h = hash_murmur3_one_real(size.x, h);
-		h = hash_murmur3_one_real(size.y, h);
-		h = hash_murmur3_one_real(size.z, h);
-		return hash_fmix32(h);
-	}
+	operator String() const;
 
-	explicit operator String() const;
-
-	AABB() = default;
-	constexpr AABB(const Vector3 &p_pos, const Vector3 &p_size) :
+	_FORCE_INLINE_ AABB() {}
+	inline AABB(const Vector3 &p_pos, const Vector3 &p_size) :
 			position(p_pos),
 			size(p_size) {
 	}
@@ -227,18 +212,15 @@ inline bool AABB::encloses(const AABB &p_aabb) const {
 			(src_max.z >= dst_max.z));
 }
 
-Vector3 AABB::get_support(const Vector3 &p_direction) const {
-	Vector3 support = position;
-	if (p_direction.x > 0.0f) {
-		support.x += size.x;
-	}
-	if (p_direction.y > 0.0f) {
-		support.y += size.y;
-	}
-	if (p_direction.z > 0.0f) {
-		support.z += size.z;
-	}
-	return support;
+Vector3 AABB::get_support(const Vector3 &p_normal) const {
+	Vector3 half_extents = size * 0.5f;
+	Vector3 ofs = position + half_extents;
+
+	return Vector3(
+				   (p_normal.x > 0) ? half_extents.x : -half_extents.x,
+				   (p_normal.y > 0) ? half_extents.y : -half_extents.y,
+				   (p_normal.z > 0) ? half_extents.z : -half_extents.z) +
+			ofs;
 }
 
 Vector3 AABB::get_endpoint(int p_point) const {
@@ -511,5 +493,4 @@ AABB AABB::quantized(real_t p_unit) const {
 	return ret;
 }
 
-template <>
-struct is_zero_constructible<AABB> : std::true_type {};
+#endif // AABB_H

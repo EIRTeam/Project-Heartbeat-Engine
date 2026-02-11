@@ -51,7 +51,7 @@ struct _IP_ResolverPrivate {
 			response.clear();
 			type = IP::TYPE_NONE;
 			hostname = "";
-		}
+		};
 
 		QueueItem() {
 			clear();
@@ -81,17 +81,17 @@ struct _IP_ResolverPrivate {
 				continue;
 			}
 
-			MutexLock lock(mutex);
+			mutex.lock();
 			List<IPAddress> response;
 			String hostname = queue[i].hostname;
 			IP::Type type = queue[i].type;
-			lock.temp_unlock();
+			mutex.unlock();
 
 			// We should not lock while resolving the hostname,
 			// only when modifying the queue.
 			IP::get_singleton()->_resolve_hostname(response, hostname, type);
 
-			lock.temp_relock();
+			MutexLock lock(mutex);
 			// Could have been completed by another function, or deleted.
 			if (queue[i].status.get() != IP::RESOLVER_STATUS_WAITING) {
 				continue;
@@ -131,22 +131,21 @@ PackedStringArray IP::resolve_hostname_addresses(const String &p_hostname, Type 
 	List<IPAddress> res;
 	String key = _IP_ResolverPrivate::get_cache_key(p_hostname, p_type);
 
-	{
-		MutexLock lock(resolver->mutex);
-		if (resolver->cache.has(key)) {
-			res = resolver->cache[key];
-		} else {
-			// This should be run unlocked so the resolver thread can keep resolving
-			// other requests.
-			lock.temp_unlock();
-			_resolve_hostname(res, p_hostname, p_type);
-			lock.temp_relock();
-			// We might be overriding another result, but we don't care as long as the result is valid.
-			if (res.size()) {
-				resolver->cache[key] = res;
-			}
+	resolver->mutex.lock();
+	if (resolver->cache.has(key)) {
+		res = resolver->cache[key];
+	} else {
+		// This should be run unlocked so the resolver thread can keep resolving
+		// other requests.
+		resolver->mutex.unlock();
+		_resolve_hostname(res, p_hostname, p_type);
+		resolver->mutex.lock();
+		// We might be overriding another result, but we don't care as long as the result is valid.
+		if (res.size()) {
+			resolver->cache[key] = res;
 		}
 	}
+	resolver->mutex.unlock();
 
 	PackedStringArray result;
 	for (const IPAddress &E : res) {
@@ -201,7 +200,7 @@ IPAddress IP::get_resolve_item_address(ResolverID p_id) const {
 	MutexLock lock(resolver->mutex);
 
 	if (resolver->queue[p_id].status.get() != IP::RESOLVER_STATUS_DONE) {
-		ERR_PRINT(vformat("Resolve of '%s' didn't complete yet.", resolver->queue[p_id].hostname));
+		ERR_PRINT("Resolve of '" + resolver->queue[p_id].hostname + "'' didn't complete yet.");
 		return IPAddress();
 	}
 
@@ -220,7 +219,7 @@ Array IP::get_resolve_item_addresses(ResolverID p_id) const {
 	MutexLock lock(resolver->mutex);
 
 	if (resolver->queue[p_id].status.get() != IP::RESOLVER_STATUS_DONE) {
-		ERR_PRINT(vformat("Resolve of '%s' didn't complete yet.", resolver->queue[p_id].hostname));
+		ERR_PRINT("Resolve of '" + resolver->queue[p_id].hostname + "'' didn't complete yet.");
 		return Array();
 	}
 
@@ -259,7 +258,7 @@ PackedStringArray IP::_get_local_addresses() const {
 	List<IPAddress> ip_addresses;
 	get_local_addresses(&ip_addresses);
 	for (const IPAddress &E : ip_addresses) {
-		addresses.push_back(String(E));
+		addresses.push_back(E);
 	}
 
 	return addresses;
@@ -324,6 +323,8 @@ void IP::_bind_methods() {
 	BIND_ENUM_CONSTANT(TYPE_ANY);
 }
 
+IP *IP::singleton = nullptr;
+
 IP *IP::get_singleton() {
 	return singleton;
 }
@@ -331,7 +332,7 @@ IP *IP::get_singleton() {
 IP *(*IP::_create)() = nullptr;
 
 IP *IP::create() {
-	ERR_FAIL_COND_V_MSG(singleton, nullptr, "IP singleton already exists.");
+	ERR_FAIL_COND_V_MSG(singleton, nullptr, "IP singleton already exist.");
 	ERR_FAIL_NULL_V(_create, nullptr);
 	return _create();
 }

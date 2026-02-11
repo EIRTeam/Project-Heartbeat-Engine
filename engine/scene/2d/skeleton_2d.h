@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef SKELETON_2D_H
+#define SKELETON_2D_H
 
 #include "scene/2d/node_2d.h"
 #include "scene/resources/2d/skeleton/skeleton_modification_2d.h"
@@ -122,7 +123,7 @@ class Skeleton2D : public Node2D {
 		bool local_pose_override_persistent = false;
 	};
 
-	LocalVector<Bone> bones;
+	Vector<Bone> bones;
 
 	bool bone_setup_dirty = true;
 	void _make_bone_setup_dirty();
@@ -173,3 +174,5 @@ public:
 	Skeleton2D();
 	~Skeleton2D();
 };
+
+#endif // SKELETON_2D_H

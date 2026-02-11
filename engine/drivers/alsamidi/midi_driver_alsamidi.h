@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef MIDI_DRIVER_ALSAMIDI_H
+#define MIDI_DRIVER_ALSAMIDI_H
 
 #ifdef ALSAMIDI_ENABLED
 
@@ -43,6 +44,8 @@
 #else
 #include <alsa/asoundlib.h>
 #endif
+
+#include <stdio.h>
 
 class MIDIDriverALSAMidi : public MIDIDriver {
 	Thread thread;
@@ -77,3 +80,5 @@ public:
 };
 
 #endif // ALSAMIDI_ENABLED
+
+#endif // MIDI_DRIVER_ALSAMIDI_H

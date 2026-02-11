@@ -1,22 +1,23 @@
 /*******************************************************************************
 * Author    :  Angus Johnson                                                   *
-* Date      :  5 July 2024                                                     *
-* Website   :  https://www.angusj.com                                          *
-* Copyright :  Angus Johnson 2010-2024                                         *
+* Date      :  1 November 2023                                                 *
+* Website   :  http://www.angusj.com                                           *
+* Copyright :  Angus Johnson 2010-2023                                         *
 * Purpose   :  FAST rectangular clipping                                       *
-* License   :  https://www.boost.org/LICENSE_1_0.txt                           *
+* License   :  http://www.boost.org/LICENSE_1_0.txt                            *
 *******************************************************************************/
 
 #ifndef CLIPPER_RECTCLIP_H
 #define CLIPPER_RECTCLIP_H
 
-#include "clipper2/clipper.core.h"
+#include <cstdlib>
+#include <vector>
 #include <queue>
+#include "clipper2/clipper.core.h"
 
 namespace Clipper2Lib
 {
 
-  // Location: the order is important here, see StartLocsIsClockwise()
   enum class Location { Left, Top, Right, Bottom, Inside };
 
   class OutPt2;
@@ -25,10 +26,10 @@ namespace Clipper2Lib
   class OutPt2 {
   public:
     Point64 pt;
-    size_t owner_idx = 0;
-    OutPt2List* edge = nullptr;
-    OutPt2* next = nullptr;
-    OutPt2* prev = nullptr;
+    size_t owner_idx;
+    OutPt2List* edge;
+    OutPt2* next;
+    OutPt2* prev;
   };
 
   //------------------------------------------------------------------------------
@@ -49,9 +50,9 @@ namespace Clipper2Lib
     OutPt2List edges_[8]; // clockwise and counter-clockwise
     std::vector<Location> start_locs_;
     void CheckEdges();
-    void TidyEdges(size_t idx, OutPt2List& cw, OutPt2List& ccw);
+    void TidyEdges(int idx, OutPt2List& cw, OutPt2List& ccw);
     void GetNextLocation(const Path64& path,
-      Location& loc, size_t& i, size_t highI);
+      Location& loc, int& i, int highI);
     OutPt2* Add(Point64 pt, bool start_new = false);
     void AddCorner(Location prev, Location curr);
     void AddCorner(Location& loc, bool isClockwise);

@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef BOX_SHAPE_3D_H
+#define BOX_SHAPE_3D_H
 
 #include "scene/resources/3d/shape_3d.h"
 
@@ -50,8 +51,9 @@ public:
 	Vector3 get_size() const;
 
 	virtual Vector<Vector3> get_debug_mesh_lines() const override;
-	virtual Ref<ArrayMesh> get_debug_arraymesh_faces(const Color &p_modulate) const override;
 	virtual real_t get_enclosing_radius() const override;
 
 	BoxShape3D();
 };
+
+#endif // BOX_SHAPE_3D_H

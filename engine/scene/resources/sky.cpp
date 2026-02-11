@@ -30,6 +30,8 @@
 
 #include "sky.h"
 
+#include "core/io/image_loader.h"
+
 void Sky::set_radiance_size(RadianceSize p_size) {
 	ERR_FAIL_INDEX(p_size, RADIANCE_SIZE_MAX);
 
@@ -105,5 +107,5 @@ Sky::Sky() {
 
 Sky::~Sky() {
 	ERR_FAIL_NULL(RenderingServer::get_singleton());
-	RS::get_singleton()->free_rid(sky);
+	RS::get_singleton()->free(sky);
 }

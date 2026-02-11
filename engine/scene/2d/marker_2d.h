@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef MARKER_2D_H
+#define MARKER_2D_H
 
 #include "scene/2d/node_2d.h"
 
@@ -44,13 +45,15 @@ protected:
 	static void _bind_methods();
 
 public:
-#ifdef DEBUG_ENABLED
+#ifdef TOOLS_ENABLED
 	virtual Rect2 _edit_get_rect() const override;
 	virtual bool _edit_use_rect() const override;
-#endif // DEBUG_ENABLED
+#endif
 
 	void set_gizmo_extents(real_t p_extents);
 	real_t get_gizmo_extents() const;
 
 	Marker2D();
 };
+
+#endif // MARKER_2D_H

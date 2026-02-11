@@ -28,12 +28,13 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AUDIO_STREAM_POLYPHONIC_H
+#define AUDIO_STREAM_POLYPHONIC_H
 
 #include "core/templates/local_vector.h"
 #include "scene/scene_string_names.h"
-#include "servers/audio/audio_server.h"
 #include "servers/audio/audio_stream.h"
+#include "servers/audio_server.h"
 
 class AudioStreamPolyphonic : public AudioStream {
 	GDCLASS(AudioStreamPolyphonic, AudioStream)
@@ -87,7 +88,6 @@ class AudioStreamPlaybackPolyphonic : public AudioStreamPlayback {
 	Ref<AudioSamplePlayback> sample_playback;
 
 	_FORCE_INLINE_ Stream *_find_stream(int64_t p_id);
-	_FORCE_INLINE_ const Stream *_find_stream(int64_t p_id) const;
 
 	friend class AudioStreamPolyphonic;
 
@@ -133,3 +133,5 @@ private:
 public:
 	AudioStreamPlaybackPolyphonic();
 };
+
+#endif // AUDIO_STREAM_POLYPHONIC_H

@@ -28,9 +28,9 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef ANIMATION_LIBRARY_H
+#define ANIMATION_LIBRARY_H
 
-#include "core/templates/rb_map.h"
 #include "core/variant/typed_array.h"
 #include "scene/resources/animation.h"
 
@@ -45,7 +45,7 @@ class AnimationLibrary : public Resource {
 	void _animation_changed(const StringName &p_name);
 
 	friend class AnimationMixer; // For faster access.
-	RBMap<StringName, Ref<Animation>, StringName::AlphCompare> animations;
+	HashMap<StringName, Ref<Animation>> animations;
 
 protected:
 	static void _bind_methods();
@@ -61,7 +61,6 @@ public:
 	bool has_animation(const StringName &p_name) const;
 	Ref<Animation> get_animation(const StringName &p_name) const;
 	void get_animation_list(List<StringName> *p_animations) const;
-	int get_animation_list_size() const;
 
 #ifdef TOOLS_ENABLED
 	virtual void get_argument_options(const StringName &p_function, int p_idx, List<String> *r_options) const override;
@@ -69,3 +68,5 @@ public:
 
 	AnimationLibrary();
 };
+
+#endif // ANIMATION_LIBRARY_H

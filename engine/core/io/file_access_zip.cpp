@@ -34,6 +34,8 @@
 
 #include "core/io/file_access.h"
 
+ZipArchive *ZipArchive::instance = nullptr;
+
 extern "C" {
 
 struct ZipData {
@@ -114,7 +116,7 @@ void ZipArchive::close_handle(unzFile p_file) const {
 }
 
 unzFile ZipArchive::get_file_handle(const String &p_file) const {
-	ERR_FAIL_COND_V_MSG(!file_exists(p_file), nullptr, vformat("File '%s' doesn't exist.", p_file));
+	ERR_FAIL_COND_V_MSG(!file_exists(p_file), nullptr, "File '" + p_file + " doesn't exist.");
 	File file = files[p_file];
 
 	zlib_filefunc_def io;
@@ -134,7 +136,7 @@ unzFile ZipArchive::get_file_handle(const String &p_file) const {
 	io.free_mem = godot_free;
 
 	unzFile pkg = unzOpen2(packages[file.package].filename.utf8().get_data(), &io);
-	ERR_FAIL_NULL_V_MSG(pkg, nullptr, vformat("Cannot open file '%s'.", packages[file.package].filename));
+	ERR_FAIL_NULL_V_MSG(pkg, nullptr, "Cannot open file '" + packages[file.package].filename + "'.");
 	int unz_err = unzGoToFilePos(pkg, &file.file_pos);
 	if (unz_err != UNZ_OK || unzOpenCurrentFile(pkg) != UNZ_OK) {
 		unzClose(pkg);
@@ -174,6 +176,7 @@ bool ZipArchive::try_open_pack(const String &p_path, bool p_replace_files, uint6
 
 	Package pkg;
 	pkg.filename = p_path;
+	pkg.zfile = zfile;
 	packages.push_back(pkg);
 	int pkg_num = packages.size() - 1;
 
@@ -200,8 +203,6 @@ bool ZipArchive::try_open_pack(const String &p_path, bool p_replace_files, uint6
 		}
 	}
 
-	unzClose(zfile);
-
 	return true;
 }
 
@@ -226,6 +227,10 @@ ZipArchive::ZipArchive() {
 }
 
 ZipArchive::~ZipArchive() {
+	for (int i = 0; i < packages.size(); i++) {
+		unzClose(packages[i].zfile);
+	}
+
 	packages.clear();
 }
 
@@ -286,6 +291,12 @@ bool FileAccessZip::eof_reached() const {
 	return at_eof;
 }
 
+uint8_t FileAccessZip::get_8() const {
+	uint8_t ret = 0;
+	get_buffer(&ret, 1);
+	return ret;
+}
+
 uint64_t FileAccessZip::get_buffer(uint8_t *p_dst, uint64_t p_length) const {
 	ERR_FAIL_COND_V(!p_dst && p_length > 0, -1);
 	ERR_FAIL_NULL_V(zfile, -1);
@@ -317,8 +328,8 @@ void FileAccessZip::flush() {
 	ERR_FAIL();
 }
 
-bool FileAccessZip::store_buffer(const uint8_t *p_src, uint64_t p_length) {
-	ERR_FAIL_V(false);
+void FileAccessZip::store_8(uint8_t p_dest) {
+	ERR_FAIL();
 }
 
 bool FileAccessZip::file_exists(const String &p_name) {

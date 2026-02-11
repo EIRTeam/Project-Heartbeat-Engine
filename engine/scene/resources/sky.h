@@ -28,10 +28,12 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef SKY_H
+#define SKY_H
 
-#include "core/io/resource.h"
+#include "core/os/thread.h"
 #include "scene/resources/material.h"
+#include "scene/resources/texture.h"
 
 class Sky : public Resource {
 	GDCLASS(Sky, Resource);
@@ -82,3 +84,5 @@ public:
 
 VARIANT_ENUM_CAST(Sky::RadianceSize)
 VARIANT_ENUM_CAST(Sky::ProcessMode)
+
+#endif // SKY_H

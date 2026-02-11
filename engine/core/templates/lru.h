@@ -28,14 +28,16 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef LRU_H
+#define LRU_H
 
+#include "core/math/math_funcs.h"
 #include "hash_map.h"
 #include "list.h"
 
-template <typename TKey, typename TData, typename Hasher = HashMapHasherDefault, typename Comparator = HashMapComparatorDefault<TKey>, void (*BeforeEvict)(TKey &, TData &) = nullptr>
+template <typename TKey, typename TData, typename Hasher = HashMapHasherDefault, typename Comparator = HashMapComparatorDefault<TKey>>
 class LRUCache {
-public:
+private:
 	struct Pair {
 		TKey key;
 		TData data;
@@ -49,22 +51,16 @@ public:
 
 	typedef typename List<Pair>::Element *Element;
 
-private:
 	List<Pair> _list;
 	HashMap<TKey, Element, Hasher, Comparator> _map;
 	size_t capacity;
 
 public:
-	const Pair *insert(const TKey &p_key, const TData &p_value) {
+	const TData *insert(const TKey &p_key, const TData &p_value) {
 		Element *e = _map.getptr(p_key);
 		Element n = _list.push_front(Pair(p_key, p_value));
 
 		if (e) {
-			GODOT_GCC_WARNING_PUSH_AND_IGNORE("-Waddress")
-			if constexpr (BeforeEvict != nullptr) {
-				BeforeEvict((*e)->get().key, (*e)->get().data);
-			}
-			GODOT_GCC_WARNING_POP
 			_list.erase(*e);
 			_map.erase(p_key);
 		}
@@ -72,16 +68,11 @@ public:
 
 		while (_map.size() > capacity) {
 			Element d = _list.back();
-			GODOT_GCC_WARNING_PUSH_AND_IGNORE("-Waddress")
-			if constexpr (BeforeEvict != nullptr) {
-				BeforeEvict(d->get().key, d->get().data);
-			}
-			GODOT_GCC_WARNING_POP
 			_map.erase(d->get().key);
 			_list.pop_back();
 		}
 
-		return &n->get();
+		return &n->get().data;
 	}
 
 	void clear() {
@@ -93,23 +84,12 @@ public:
 		return _map.getptr(p_key);
 	}
 
-	bool erase(const TKey &p_key) {
-		Element *e = _map.getptr(p_key);
-		if (!e) {
-			return false;
-		}
-		_list.move_to_front(*e);
-		_map.erase(p_key);
-		_list.pop_front();
-		return true;
-	}
-
 	const TData &get(const TKey &p_key) {
 		Element *e = _map.getptr(p_key);
 		CRASH_COND(!e);
 		_list.move_to_front(*e);
 		return (*e)->get().data;
-	}
+	};
 
 	const TData *getptr(const TKey &p_key) {
 		Element *e = _map.getptr(p_key);
@@ -129,11 +109,6 @@ public:
 			capacity = p_capacity;
 			while (_map.size() > capacity) {
 				Element d = _list.back();
-				GODOT_GCC_WARNING_PUSH_AND_IGNORE("-Waddress")
-				if constexpr (BeforeEvict != nullptr) {
-					BeforeEvict(d->get().key, d->get().data);
-				}
-				GODOT_GCC_WARNING_POP
 				_map.erase(d->get().key);
 				_list.pop_back();
 			}
@@ -148,3 +123,5 @@ public:
 		capacity = p_capacity;
 	}
 };
+
+#endif // LRU_H

@@ -916,7 +916,7 @@ _fromUnicodeWithCallback(UConverterFromUnicodeArgs *pArgs, UErrorCode *err) {
              * s<sourceLimit before converterSawEndOfInput is checked
              */
             converterSawEndOfInput=
-                static_cast<UBool>(U_SUCCESS(*err) &&
+                (UBool)(U_SUCCESS(*err) &&
                         pArgs->flush && pArgs->source==pArgs->sourceLimit &&
                         cnv->fromUChar32==0);
         } else {
@@ -941,7 +941,7 @@ _fromUnicodeWithCallback(UConverterFromUnicodeArgs *pArgs, UErrorCode *err) {
         for(;;) {
             /* update offsets if we write any */
             if(offsets!=nullptr) {
-                int32_t length = static_cast<int32_t>(pArgs->target - t);
+                int32_t length=(int32_t)(pArgs->target-t);
                 if(length>0) {
                     _updateOffsets(offsets, length, sourceIndex, errorInputLength);
 
@@ -956,7 +956,7 @@ _fromUnicodeWithCallback(UConverterFromUnicodeArgs *pArgs, UErrorCode *err) {
                 }
 
                 if(sourceIndex>=0) {
-                    sourceIndex += static_cast<int32_t>(pArgs->source - s);
+                    sourceIndex+=(int32_t)(pArgs->source-s);
                 }
             }
 
@@ -1066,10 +1066,10 @@ _fromUnicodeWithCallback(UConverterFromUnicodeArgs *pArgs, UErrorCode *err) {
 
                         U_ASSERT(cnv->preFromULength==0);
 
-                        length = static_cast<int32_t>(pArgs->sourceLimit - pArgs->source);
+                        length=(int32_t)(pArgs->sourceLimit-pArgs->source);
                         if(length>0) {
                             u_memcpy(cnv->preFromU, pArgs->source, length);
-                            cnv->preFromULength = static_cast<int8_t>(-length);
+                            cnv->preFromULength=(int8_t)-length;
                         }
 
                         pArgs->source=realSource;
@@ -1089,7 +1089,7 @@ _fromUnicodeWithCallback(UConverterFromUnicodeArgs *pArgs, UErrorCode *err) {
                 codePoint=cnv->fromUChar32;
                 errorInputLength=0;
                 U16_APPEND_UNSAFE(cnv->invalidUCharBuffer, errorInputLength, codePoint);
-                cnv->invalidUCharLength = static_cast<int8_t>(errorInputLength);
+                cnv->invalidUCharLength=(int8_t)errorInputLength;
 
                 /* set the converter state to deal with the next character */
                 cnv->fromUChar32=0;
@@ -1134,7 +1134,7 @@ ucnv_outputOverflowFromUnicode(UConverter *cnv,
         offsets=nullptr;
     }
 
-    overflow = reinterpret_cast<char*>(cnv->charErrorBuffer);
+    overflow=(char *)cnv->charErrorBuffer;
     length=cnv->charErrorBufferLength;
     i=0;
     while(i<length) {
@@ -1146,7 +1146,7 @@ ucnv_outputOverflowFromUnicode(UConverter *cnv,
                 overflow[j++]=overflow[i++];
             } while(i<length);
 
-            cnv->charErrorBufferLength = static_cast<int8_t>(j);
+            cnv->charErrorBufferLength=(int8_t)j;
             *target=t;
             if(offsets!=nullptr) {
                 *pOffsets=offsets;
@@ -1361,7 +1361,7 @@ _toUnicodeWithCallback(UConverterToUnicodeArgs *pArgs, UErrorCode *err) {
              * s<sourceLimit before converterSawEndOfInput is checked
              */
             converterSawEndOfInput=
-                static_cast<UBool>(U_SUCCESS(*err) &&
+                (UBool)(U_SUCCESS(*err) &&
                         pArgs->flush && pArgs->source==pArgs->sourceLimit &&
                         cnv->toULength==0);
         } else {
@@ -1386,7 +1386,7 @@ _toUnicodeWithCallback(UConverterToUnicodeArgs *pArgs, UErrorCode *err) {
         for(;;) {
             /* update offsets if we write any */
             if(offsets!=nullptr) {
-                int32_t length = static_cast<int32_t>(pArgs->target - t);
+                int32_t length=(int32_t)(pArgs->target-t);
                 if(length>0) {
                     _updateOffsets(offsets, length, sourceIndex, errorInputLength);
 
@@ -1401,7 +1401,7 @@ _toUnicodeWithCallback(UConverterToUnicodeArgs *pArgs, UErrorCode *err) {
                 }
 
                 if(sourceIndex>=0) {
-                    sourceIndex += static_cast<int32_t>(pArgs->source - s);
+                    sourceIndex+=(int32_t)(pArgs->source-s);
                 }
             }
 
@@ -1513,10 +1513,10 @@ _toUnicodeWithCallback(UConverterToUnicodeArgs *pArgs, UErrorCode *err) {
 
                         U_ASSERT(cnv->preToULength==0);
 
-                        length = static_cast<int32_t>(pArgs->sourceLimit - pArgs->source);
+                        length=(int32_t)(pArgs->sourceLimit-pArgs->source);
                         if(length>0) {
                             uprv_memcpy(cnv->preToU, pArgs->source, length);
-                            cnv->preToULength = static_cast<int8_t>(-length);
+                            cnv->preToULength=(int8_t)-length;
                         }
 
                         pArgs->source=realSource;
@@ -1592,7 +1592,7 @@ ucnv_outputOverflowToUnicode(UConverter *cnv,
                 overflow[j++]=overflow[i++];
             } while(i<length);
 
-            cnv->UCharErrorBufferLength = static_cast<int8_t>(j);
+            cnv->UCharErrorBufferLength=(int8_t)j;
             *target=t;
             if(offsets!=nullptr) {
                 *pOffsets=offsets;
@@ -1752,24 +1752,20 @@ ucnv_fromUChars(UConverter *cnv,
         destLimit=dest+destCapacity;
 
         /* perform the conversion */
-        UErrorCode bufferStatus = U_ZERO_ERROR;
-        ucnv_fromUnicode(cnv, &dest, destLimit, &src, srcLimit, nullptr, true, &bufferStatus);
+        ucnv_fromUnicode(cnv, &dest, destLimit, &src, srcLimit, nullptr, true, pErrorCode);
         destLength=(int32_t)(dest-originalDest);
 
         /* if an overflow occurs, then get the preflighting length */
-        if(bufferStatus==U_BUFFER_OVERFLOW_ERROR) {
+        if(*pErrorCode==U_BUFFER_OVERFLOW_ERROR) {
             char buffer[1024];
 
             destLimit=buffer+sizeof(buffer);
             do {
                 dest=buffer;
-                bufferStatus=U_ZERO_ERROR;
-                ucnv_fromUnicode(cnv, &dest, destLimit, &src, srcLimit, nullptr, true, &bufferStatus);
+                *pErrorCode=U_ZERO_ERROR;
+                ucnv_fromUnicode(cnv, &dest, destLimit, &src, srcLimit, nullptr, true, pErrorCode);
                 destLength+=(int32_t)(dest-buffer);
-            } while(bufferStatus==U_BUFFER_OVERFLOW_ERROR);
-        }
-        if (U_FAILURE(bufferStatus)) {
-            *pErrorCode = bufferStatus;
+            } while(*pErrorCode==U_BUFFER_OVERFLOW_ERROR);
         }
     } else {
         destLength=0;
@@ -1812,26 +1808,22 @@ ucnv_toUChars(UConverter *cnv,
         destLimit=dest+destCapacity;
 
         /* perform the conversion */
-        UErrorCode bufferStatus = U_ZERO_ERROR;
-        ucnv_toUnicode(cnv, &dest, destLimit, &src, srcLimit, nullptr, true, &bufferStatus);
+        ucnv_toUnicode(cnv, &dest, destLimit, &src, srcLimit, nullptr, true, pErrorCode);
         destLength=(int32_t)(dest-originalDest);
 
         /* if an overflow occurs, then get the preflighting length */
-        if(bufferStatus==U_BUFFER_OVERFLOW_ERROR)
+        if(*pErrorCode==U_BUFFER_OVERFLOW_ERROR)
         {
             char16_t buffer[1024];
 
             destLimit=buffer+UPRV_LENGTHOF(buffer);
             do {
                 dest=buffer;
-                bufferStatus=U_ZERO_ERROR;
-                ucnv_toUnicode(cnv, &dest, destLimit, &src, srcLimit, nullptr, true, &bufferStatus);
+                *pErrorCode=U_ZERO_ERROR;
+                ucnv_toUnicode(cnv, &dest, destLimit, &src, srcLimit, nullptr, true, pErrorCode);
                 destLength+=(int32_t)(dest-buffer);
             }
-            while(bufferStatus==U_BUFFER_OVERFLOW_ERROR);
-        }
-        if (U_FAILURE(bufferStatus)) {
-            *pErrorCode = bufferStatus;
+            while(*pErrorCode==U_BUFFER_OVERFLOW_ERROR);
         }
     } else {
         destLength=0;
@@ -2445,7 +2437,7 @@ ucnv_internalConvert(UConverter *outConverter, UConverter *inConverter,
                        false,
                        true,
                        pErrorCode);
-        targetLength = static_cast<int32_t>(myTarget - target);
+        targetLength=(int32_t)(myTarget-target);
     }
 
     /*
@@ -2468,7 +2460,7 @@ ucnv_internalConvert(UConverter *outConverter, UConverter *inConverter,
                            false,
                            true,
                            pErrorCode);
-            targetLength += static_cast<int32_t>(myTarget - targetBuffer);
+            targetLength+=(int32_t)(myTarget-targetBuffer);
         } while(*pErrorCode==U_BUFFER_OVERFLOW_ERROR);
 
         /* done with preflighting, set warnings and errors as appropriate */
@@ -2692,7 +2684,7 @@ ucnv_fixFileSeparator(const UConverter *cnv,
 
 U_CAPI UBool  U_EXPORT2
 ucnv_isAmbiguous(const UConverter *cnv) {
-    return ucnv_getAmbiguous(cnv)!=nullptr;
+    return (UBool)(ucnv_getAmbiguous(cnv)!=nullptr);
 }
 
 U_CAPI void  U_EXPORT2

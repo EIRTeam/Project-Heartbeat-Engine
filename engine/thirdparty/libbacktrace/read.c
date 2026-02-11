@@ -52,7 +52,14 @@ backtrace_get_view (struct backtrace_state *state, int descriptor,
 {
   uint64_t got;
   ssize_t r;
-  if (_lseeki64 (descriptor, offset, SEEK_SET) < 0)
+
+  if ((uint64_t) (size_t) size != size)
+    {
+      error_callback (data, "file size too large", 0);
+      return 0;
+    }
+
+  if (lseek (descriptor, offset, SEEK_SET) < 0)
     {
       error_callback (data, "lseek", errno);
       return 0;
@@ -65,13 +72,9 @@ backtrace_get_view (struct backtrace_state *state, int descriptor,
   view->len = size;
 
   got = 0;
-  void *ptr = view->base;
   while (got < size)
     {
-      uint64_t sz = size - got;
-      if (sz > INT_MAX)
-        sz = INT_MAX;
-      r = _read (descriptor, ptr, sz);
+      r = read (descriptor, view->base, size - got);
       if (r < 0)
 	{
 	  error_callback (data, "read", errno);
@@ -81,7 +84,6 @@ backtrace_get_view (struct backtrace_state *state, int descriptor,
       if (r == 0)
 	break;
       got += (uint64_t) r;
-      ptr += r;
     }
 
   if (got < size)

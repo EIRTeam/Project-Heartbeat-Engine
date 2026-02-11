@@ -28,9 +28,12 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef QUICK_HULL_H
+#define QUICK_HULL_H
 
+#include "core/math/aabb.h"
 #include "core/math/geometry_3d.h"
+#include "core/templates/hash_set.h"
 #include "core/templates/list.h"
 
 class QuickHull {
@@ -76,13 +79,17 @@ private:
 	struct FaceConnect {
 		List<Face>::Element *left = nullptr;
 		List<Face>::Element *right = nullptr;
+		FaceConnect() {}
 	};
 	struct RetFaceConnect {
 		List<Geometry3D::MeshData::Face>::Element *left = nullptr;
 		List<Geometry3D::MeshData::Face>::Element *right = nullptr;
+		RetFaceConnect() {}
 	};
 
 public:
 	static uint32_t debug_stop_after;
 	static Error build(const Vector<Vector3> &p_points, Geometry3D::MeshData &r_mesh);
 };
+
+#endif // QUICK_HULL_H

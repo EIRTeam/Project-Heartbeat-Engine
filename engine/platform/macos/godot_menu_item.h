@@ -28,9 +28,10 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef GODOT_MENU_ITEM_H
+#define GODOT_MENU_ITEM_H
 
-#include "servers/display/display_server.h"
+#include "servers/display_server.h"
 
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
@@ -50,13 +51,13 @@ enum GlobalMenuCheckType {
 	Callable key_callback;
 	Callable hover_callback;
 	Variant meta;
-	Key accel;
 	GlobalMenuCheckType checkable_type;
 	bool checked;
-	bool enabled;
 	int max_states;
 	int state;
 	Ref<Image> img;
 }
 
 @end
+
+#endif // GODOT_MENU_ITEM_H

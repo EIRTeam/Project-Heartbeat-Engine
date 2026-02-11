@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef PACKET_PEER_DTLS_H
+#define PACKET_PEER_DTLS_H
 
 #include "core/crypto/crypto.h"
 #include "core/io/packet_peer_udp.h"
@@ -37,10 +38,10 @@ class PacketPeerDTLS : public PacketPeer {
 	GDCLASS(PacketPeerDTLS, PacketPeer);
 
 protected:
-	static inline PacketPeerDTLS *(*_create)(bool p_notify_postinitialize) = nullptr;
+	static PacketPeerDTLS *(*_create)();
 	static void _bind_methods();
 
-	static inline bool available = false;
+	static bool available;
 
 public:
 	enum Status {
@@ -56,8 +57,12 @@ public:
 	virtual void disconnect_from_peer() = 0;
 	virtual Status get_status() const = 0;
 
-	static PacketPeerDTLS *create(bool p_notify_postinitialize = true);
+	static PacketPeerDTLS *create();
 	static bool is_available();
+
+	PacketPeerDTLS() {}
 };
 
 VARIANT_ENUM_CAST(PacketPeerDTLS::Status);
+
+#endif // PACKET_PEER_DTLS_H

@@ -28,25 +28,24 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef ANIMATION_BLEND_TREE_H
+#define ANIMATION_BLEND_TREE_H
 
 #include "scene/animation/animation_tree.h"
-#include "scene/resources/curve.h"
 
 class AnimationNodeAnimation : public AnimationRootNode {
 	GDCLASS(AnimationNodeAnimation, AnimationRootNode);
 
-	StringName backward = "backward"; // Only used by pingpong animation.
-
 	StringName animation;
-
-	bool advance_on_start = false;
 
 	bool use_custom_timeline = false;
 	double timeline_length = 1.0;
 	Animation::LoopMode loop_mode = Animation::LOOP_NONE;
 	bool stretch_time_scale = true;
 	double start_offset = 0.0;
+
+	uint64_t last_version = 0;
+	bool skip = false;
 
 public:
 	enum PlayMode {
@@ -55,7 +54,6 @@ public:
 	};
 
 	void get_parameter_list(List<PropertyInfo> *r_list) const override;
-	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
 
 	virtual NodeTimeInfo get_node_time_info() const override; // Wrapper of get_parameter().
 
@@ -74,16 +72,13 @@ public:
 	void set_backward(bool p_backward);
 	bool is_backward() const;
 
-	void set_advance_on_start(bool p_advance_on_start);
-	bool is_advance_on_start() const;
-
 	void set_use_custom_timeline(bool p_use_custom_timeline);
 	bool is_using_custom_timeline() const;
 
 	void set_timeline_length(double p_length);
 	double get_timeline_length() const;
 
-	void set_stretch_time_scale(bool p_stretch_time_scale);
+	void set_stretch_time_scale(bool p_strech_time_scale);
 	bool is_stretching_time_scale() const;
 
 	void set_start_offset(double p_offset);
@@ -100,6 +95,7 @@ protected:
 
 private:
 	PlayMode play_mode = PLAY_MODE_FORWARD;
+	bool backward = false; // Only used by pingpong animation.
 };
 
 VARIANT_ENUM_CAST(AnimationNodeAnimation::PlayMode)
@@ -146,7 +142,6 @@ private:
 	double auto_restart_random_delay = 0.0;
 	MixMode mix = MIX_MODE_BLEND;
 	bool break_loop_at_end = false;
-	bool abort_on_reset = false;
 
 	StringName request = PNAME("request");
 	StringName active = PNAME("active");
@@ -191,9 +186,6 @@ public:
 	void set_break_loop_at_end(bool p_enable);
 	bool is_loop_broken_at_end() const;
 
-	void set_abort_on_reset(bool p_enable);
-	bool is_aborted_on_reset() const;
-
 	virtual bool has_filter() const override;
 	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 
@@ -207,6 +199,9 @@ class AnimationNodeAdd2 : public AnimationNodeSync {
 	GDCLASS(AnimationNodeAdd2, AnimationNodeSync);
 
 	StringName add_amount = PNAME("add_amount");
+
+protected:
+	static void _bind_methods();
 
 public:
 	void get_parameter_list(List<PropertyInfo> *r_list) const override;
@@ -225,6 +220,9 @@ class AnimationNodeAdd3 : public AnimationNodeSync {
 
 	StringName add_amount = PNAME("add_amount");
 
+protected:
+	static void _bind_methods();
+
 public:
 	void get_parameter_list(List<PropertyInfo> *r_list) const override;
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
@@ -242,6 +240,9 @@ class AnimationNodeBlend2 : public AnimationNodeSync {
 
 	StringName blend_amount = PNAME("blend_amount");
 
+protected:
+	static void _bind_methods();
+
 public:
 	virtual void get_parameter_list(List<PropertyInfo> *r_list) const override;
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
@@ -258,6 +259,9 @@ class AnimationNodeBlend3 : public AnimationNodeSync {
 
 	StringName blend_amount = PNAME("blend_amount");
 
+protected:
+	static void _bind_methods();
+
 public:
 	virtual void get_parameter_list(List<PropertyInfo> *r_list) const override;
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
@@ -272,6 +276,9 @@ class AnimationNodeSub2 : public AnimationNodeSync {
 	GDCLASS(AnimationNodeSub2, AnimationNodeSync);
 
 	StringName sub_amount = PNAME("sub_amount");
+
+protected:
+	static void _bind_methods();
 
 public:
 	void get_parameter_list(List<PropertyInfo> *r_list) const override;
@@ -290,6 +297,9 @@ class AnimationNodeTimeScale : public AnimationNode {
 
 	StringName scale = PNAME("scale");
 
+protected:
+	static void _bind_methods();
+
 public:
 	virtual void get_parameter_list(List<PropertyInfo> *r_list) const override;
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
@@ -305,7 +315,6 @@ class AnimationNodeTimeSeek : public AnimationNode {
 	GDCLASS(AnimationNodeTimeSeek, AnimationNode);
 
 	StringName seek_pos_request = PNAME("seek_request");
-	bool explicit_elapse = true;
 
 protected:
 	static void _bind_methods();
@@ -318,9 +327,6 @@ public:
 
 	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 
-	void set_explicit_elapse(bool p_enable);
-	bool is_explicit_elapse() const;
-
 	AnimationNodeTimeSeek();
 };
 
@@ -332,13 +338,16 @@ class AnimationNodeTransition : public AnimationNodeSync {
 		bool break_loop_at_end = false;
 		bool reset = true;
 	};
-	LocalVector<InputData> input_data;
+	Vector<InputData> input_data;
 
 	StringName prev_xfading = "prev_xfading";
 	StringName prev_index = "prev_index";
 	StringName current_index = PNAME("current_index");
 	StringName current_state = PNAME("current_state");
 	StringName transition_request = PNAME("transition_request");
+
+	StringName prev_frame_current = "pf_current";
+	StringName prev_frame_current_idx = "pf_current_idx";
 
 	double xfade_time = 0.0;
 	Ref<Curve> xfade_curve;
@@ -408,7 +417,7 @@ class AnimationNodeBlendTree : public AnimationRootNode {
 		Vector<StringName> connections;
 	};
 
-	AHashMap<StringName, Node> nodes;
+	RBMap<StringName, Node, StringName::AlphCompare> nodes;
 
 	Vector2 graph_offset;
 
@@ -467,8 +476,7 @@ public:
 	virtual String get_caption() const override;
 	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 
-	LocalVector<StringName> get_node_list() const;
-	TypedArray<StringName> get_node_list_as_typed_array() const;
+	void get_node_list(List<StringName> *r_list);
 
 	void set_graph_offset(const Vector2 &p_graph_offset);
 	Vector2 get_graph_offset() const;
@@ -484,3 +492,5 @@ public:
 };
 
 VARIANT_ENUM_CAST(AnimationNodeBlendTree::ConnectionError)
+
+#endif // ANIMATION_BLEND_TREE_H

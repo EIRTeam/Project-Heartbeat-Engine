@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef LIGHT_OCCLUDER_2D_H
+#define LIGHT_OCCLUDER_2D_H
 
 #include "scene/2d/node_2d.h"
 
@@ -55,10 +56,11 @@ protected:
 	static void _bind_methods();
 
 public:
-#ifdef DEBUG_ENABLED
+#ifdef TOOLS_ENABLED
 	virtual Rect2 _edit_get_rect() const;
 	virtual bool _edit_is_selected_on_click(const Point2 &p_point, double p_tolerance) const;
-#endif // DEBUG_ENABLED
+#endif
+
 	void set_polygon(const Vector<Vector2> &p_polygon);
 	Vector<Vector2> get_polygon() const;
 
@@ -91,10 +93,10 @@ protected:
 	static void _bind_methods();
 
 public:
-#ifdef DEBUG_ENABLED
+#ifdef TOOLS_ENABLED
 	virtual Rect2 _edit_get_rect() const override;
 	virtual bool _edit_is_selected_on_click(const Point2 &p_point, double p_tolerance) const override;
-#endif // DEBUG_ENABLED
+#endif
 
 	void set_occluder_polygon(const Ref<OccluderPolygon2D> &p_polygon);
 	Ref<OccluderPolygon2D> get_occluder_polygon() const;
@@ -110,3 +112,5 @@ public:
 	LightOccluder2D();
 	~LightOccluder2D();
 };
+
+#endif // LIGHT_OCCLUDER_2D_H

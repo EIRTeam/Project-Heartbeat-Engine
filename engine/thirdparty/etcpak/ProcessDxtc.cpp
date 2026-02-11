@@ -807,7 +807,7 @@ static etcpak_force_inline uint64_t ProcessAlpha_SSE( __m128i px0, __m128i px1, 
 }
 #endif
 
-void CompressBc1( const uint32_t* src, uint64_t* dst, uint32_t blocks, size_t width )
+void CompressDxt1( const uint32_t* src, uint64_t* dst, uint32_t blocks, size_t width )
 {
 #ifdef __AVX2__
     if( width%8 == 0 )
@@ -867,7 +867,7 @@ void CompressBc1( const uint32_t* src, uint64_t* dst, uint32_t blocks, size_t wi
     }
 }
 
-void CompressBc1Dither( const uint32_t* src, uint64_t* dst, uint32_t blocks, size_t width )
+void CompressDxt1Dither( const uint32_t* src, uint64_t* dst, uint32_t blocks, size_t width )
 {
     uint32_t buf[4*4];
     int i = 0;
@@ -899,7 +899,7 @@ void CompressBc1Dither( const uint32_t* src, uint64_t* dst, uint32_t blocks, siz
     while( --blocks );
 }
 
-void CompressBc3( const uint32_t* src, uint64_t* dst, uint32_t blocks, size_t width )
+void CompressDxt5( const uint32_t* src, uint64_t* dst, uint32_t blocks, size_t width )
 {
     int i = 0;
     auto ptr = dst;

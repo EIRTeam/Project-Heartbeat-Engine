@@ -38,57 +38,41 @@ const GodotIME = {
 	$GodotIME: {
 		ime: null,
 		active: false,
-		focusTimerIntervalId: -1,
 
 		getModifiers: function (evt) {
 			return (evt.shiftKey + 0) + ((evt.altKey + 0) << 1) + ((evt.ctrlKey + 0) << 2) + ((evt.metaKey + 0) << 3);
 		},
 
 		ime_active: function (active) {
-			function clearFocusTimerInterval() {
-				clearInterval(GodotIME.focusTimerIntervalId);
-				GodotIME.focusTimerIntervalId = -1;
-			}
-
-			function focusTimer() {
-				if (GodotIME.ime == null) {
-					clearFocusTimerInterval();
-					return;
-				}
+			function focus_timer() {
+				GodotIME.active = true;
 				GodotIME.ime.focus();
 			}
 
-			if (GodotIME.focusTimerIntervalId > -1) {
-				clearFocusTimerInterval();
-			}
-
-			if (GodotIME.ime == null) {
-				return;
-			}
-
-			GodotIME.active = active;
-			if (active) {
-				GodotIME.ime.style.display = 'block';
-				GodotIME.focusTimerIntervalId = setInterval(focusTimer, 100);
-			} else {
-				GodotIME.ime.style.display = 'none';
-				GodotConfig.canvas.focus();
+			if (GodotIME.ime) {
+				if (active) {
+					GodotIME.ime.style.display = 'block';
+					setInterval(focus_timer, 100);
+				} else {
+					GodotIME.ime.style.display = 'none';
+					GodotConfig.canvas.focus();
+					GodotIME.active = false;
+				}
 			}
 		},
 
 		ime_position: function (x, y) {
-			if (GodotIME.ime == null) {
-				return;
-			}
-			const canvas = GodotConfig.canvas;
-			const rect = canvas.getBoundingClientRect();
-			const rw = canvas.width / rect.width;
-			const rh = canvas.height / rect.height;
-			const clx = (x / rw) + rect.x;
-			const cly = (y / rh) + rect.y;
+			if (GodotIME.ime) {
+				const canvas = GodotConfig.canvas;
+				const rect = canvas.getBoundingClientRect();
+				const rw = canvas.width / rect.width;
+				const rh = canvas.height / rect.height;
+				const clx = (x / rw) + rect.x;
+				const cly = (y / rh) + rect.y;
 
-			GodotIME.ime.style.left = `${clx}px`;
-			GodotIME.ime.style.top = `${cly}px`;
+				GodotIME.ime.style.left = `${clx}px`;
+				GodotIME.ime.style.top = `${cly}px`;
+			}
 		},
 
 		init: function (ime_cb, key_cb, code, key) {
@@ -100,27 +84,20 @@ const GodotIME = {
 				evt.preventDefault();
 			}
 			function ime_event_cb(event) {
-				if (GodotIME.ime == null) {
-					return;
-				}
-				switch (event.type) {
-				case 'compositionstart':
-					ime_cb(0, null);
-					GodotIME.ime.innerHTML = '';
-					break;
-				case 'compositionupdate': {
-					const ptr = GodotRuntime.allocString(event.data);
-					ime_cb(1, ptr);
-					GodotRuntime.free(ptr);
-				} break;
-				case 'compositionend': {
-					const ptr = GodotRuntime.allocString(event.data);
-					ime_cb(2, ptr);
-					GodotRuntime.free(ptr);
-					GodotIME.ime.innerHTML = '';
-				} break;
-				default:
-					// Do nothing.
+				if (GodotIME.ime) {
+					if (event.type === 'compositionstart') {
+						ime_cb(0, null);
+						GodotIME.ime.innerHTML = '';
+					} else if (event.type === 'compositionupdate') {
+						const ptr = GodotRuntime.allocString(event.data);
+						ime_cb(1, ptr);
+						GodotRuntime.free(ptr);
+					} else if (event.type === 'compositionend') {
+						const ptr = GodotRuntime.allocString(event.data);
+						ime_cb(2, ptr);
+						GodotRuntime.free(ptr);
+						GodotIME.ime.innerHTML = '';
+					}
 				}
 			}
 
@@ -156,15 +133,10 @@ const GodotIME = {
 		},
 
 		clear: function () {
-			if (GodotIME.ime == null) {
-				return;
+			if (GodotIME.ime) {
+				GodotIME.ime.remove();
+				GodotIME.ime = null;
 			}
-			if (GodotIME.focusTimerIntervalId > -1) {
-				clearInterval(GodotIME.focusTimerIntervalId);
-				GodotIME.focusTimerIntervalId = -1;
-			}
-			GodotIME.ime.remove();
-			GodotIME.ime = null;
 		},
 	},
 };
@@ -482,13 +454,9 @@ mergeInto(LibraryManager.library, GodotInputDragDrop);
 const GodotInput = {
 	$GodotInput__deps: ['$GodotRuntime', '$GodotConfig', '$GodotEventListeners', '$GodotInputGamepads', '$GodotInputDragDrop', '$GodotIME'],
 	$GodotInput: {
-		inputKeyCallback: null,
-		setInputKeyData: null,
-
 		getModifiers: function (evt) {
 			return (evt.shiftKey + 0) + ((evt.altKey + 0) << 1) + ((evt.ctrlKey + 0) << 2) + ((evt.metaKey + 0) << 3);
 		},
-
 		computePosition: function (evt, rect) {
 			const canvas = GodotConfig.canvas;
 			const rw = canvas.width / rect.width;
@@ -496,20 +464,6 @@ const GodotInput = {
 			const x = (evt.clientX - rect.x) * rw;
 			const y = (evt.clientY - rect.y) * rh;
 			return [x, y];
-		},
-
-		onKeyEvent: function (pIsPressed, pEvent) {
-			if (GodotInput.inputKeyCallback == null) {
-				throw new TypeError('GodotInput.onKeyEvent(): GodotInput.inputKeyCallback is null, cannot process key event.');
-			}
-			if (GodotInput.setInputKeyData == null) {
-				throw new TypeError('GodotInput.onKeyEvent(): GodotInput.setInputKeyData is null, cannot process key event.');
-			}
-
-			const modifiers = GodotInput.getModifiers(pEvent);
-			GodotInput.setInputKeyData(pEvent.code, pEvent.key);
-			GodotInput.inputKeyCallback(pIsPressed ? 1 : 0, pEvent.repeat, modifiers);
-			pEvent.preventDefault();
 		},
 	},
 
@@ -530,9 +484,9 @@ const GodotInput = {
 			const rel_pos_x = evt.movementX * rw;
 			const rel_pos_y = evt.movementY * rh;
 			const modifiers = GodotInput.getModifiers(evt);
-			func(pos[0], pos[1], rel_pos_x, rel_pos_y, modifiers, evt.pressure);
+			func(pos[0], pos[1], rel_pos_x, rel_pos_y, modifiers);
 		}
-		GodotEventListeners.add(window, 'pointermove', move_cb, false);
+		GodotEventListeners.add(window, 'mousemove', move_cb, false);
 	},
 
 	godot_js_input_mouse_wheel_cb__proxy: 'sync',
@@ -540,7 +494,7 @@ const GodotInput = {
 	godot_js_input_mouse_wheel_cb: function (callback) {
 		const func = GodotRuntime.get_func(callback);
 		function wheel_cb(evt) {
-			if (func(evt.deltaMode, evt.deltaX ?? 0, evt.deltaY ?? 0)) {
+			if (func(evt['deltaX'] || 0, evt['deltaY'] || 0)) {
 				evt.preventDefault();
 			}
 		}
@@ -608,14 +562,17 @@ const GodotInput = {
 	 */
 	godot_js_input_key_cb__proxy: 'sync',
 	godot_js_input_key_cb__sig: 'viii',
-	godot_js_input_key_cb: function (pCallback, pCodePtr, pKeyPtr) {
-		GodotInput.inputKeyCallback = GodotRuntime.get_func(pCallback);
-		GodotInput.setInputKeyData = (pCode, pKey) => {
-			GodotRuntime.stringToHeap(pCode, pCodePtr, 32);
-			GodotRuntime.stringToHeap(pKey, pKeyPtr, 32);
-		};
-		GodotEventListeners.add(GodotConfig.canvas, 'keydown', GodotInput.onKeyEvent.bind(null, true), false);
-		GodotEventListeners.add(GodotConfig.canvas, 'keyup', GodotInput.onKeyEvent.bind(null, false), false);
+	godot_js_input_key_cb: function (callback, code, key) {
+		const func = GodotRuntime.get_func(callback);
+		function key_cb(pressed, evt) {
+			const modifiers = GodotInput.getModifiers(evt);
+			GodotRuntime.stringToHeap(evt.code, code, 32);
+			GodotRuntime.stringToHeap(evt.key, key, 32);
+			func(pressed, evt.repeat, modifiers);
+			evt.preventDefault();
+		}
+		GodotEventListeners.add(GodotConfig.canvas, 'keydown', key_cb.bind(null, 1), false);
+		GodotEventListeners.add(GodotConfig.canvas, 'keyup', key_cb.bind(null, 0), false);
 	},
 
 	/*

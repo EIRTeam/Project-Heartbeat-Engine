@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef GDSCRIPT_COMPILER_H
+#define GDSCRIPT_COMPILER_H
 
 #include "gdscript.h"
 #include "gdscript_codegen.h"
@@ -101,6 +102,7 @@ class GDScriptCompiler {
 
 		GDScriptCodeGenerator::Address add_constant(const Variant &p_constant) {
 			GDScriptDataType type;
+			type.has_type = true;
 			type.kind = GDScriptDataType::BUILTIN;
 			type.builtin_type = p_constant.get_type();
 			if (type.builtin_type == Variant::OBJECT) {
@@ -184,3 +186,5 @@ public:
 
 	GDScriptCompiler();
 };
+
+#endif // GDSCRIPT_COMPILER_H

@@ -1,5 +1,4 @@
 def can_build(env, platform):
-    env.module_add_dependencies("gltf", ["csg", "gridmap"], True)
     return not env["disable_3d"]
 
 
@@ -21,7 +20,6 @@ def get_doc_classes():
         "GLTFLight",
         "GLTFMesh",
         "GLTFNode",
-        "GLTFObjectModelProperty",
         "GLTFPhysicsBody",
         "GLTFPhysicsShape",
         "GLTFSkeleton",

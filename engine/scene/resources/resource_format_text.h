@@ -28,27 +28,16 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef RESOURCE_FORMAT_TEXT_H
+#define RESOURCE_FORMAT_TEXT_H
 
 #include "core/io/file_access.h"
 #include "core/io/resource_loader.h"
 #include "core/io/resource_saver.h"
-#include "core/templates/rb_map.h"
 #include "core/variant/variant_parser.h"
 #include "scene/resources/packed_scene.h"
 
 class ResourceLoaderText {
-public:
-	enum {
-		// Version 2: Changed names for Basis, AABB, Vectors, etc.
-		// Version 3: New string ID for ext/subresources, breaks forward compat.
-		// Version 4: PackedByteArray can be base64 encoded, and PackedVector4Array was added.
-		FORMAT_VERSION = 4,
-		// For compat, save as version 3 if not using PackedVector4Array or no big PackedByteArray.
-		FORMAT_VERSION_COMPAT = 3,
-	};
-
-private:
 	bool translation_remapped = false;
 	String local_path;
 	String res_path;
@@ -75,7 +64,6 @@ private:
 
 	int resources_total = 0;
 	int resource_current = 0;
-
 	String resource_type;
 	String script_class;
 
@@ -98,7 +86,6 @@ private:
 
 	Error _parse_sub_resource(VariantParser::Stream *p_stream, Ref<Resource> &r_res, int &line, String &r_err_str);
 	Error _parse_ext_resource(VariantParser::Stream *p_stream, Ref<Resource> &r_res, int &line, String &r_err_str);
-	void _count_resources();
 
 	struct DummyReadData {
 		bool no_placeholders = false;
@@ -113,7 +100,6 @@ private:
 
 	static Error _parse_sub_resource_dummy(DummyReadData *p_data, VariantParser::Stream *p_stream, Ref<Resource> &r_res, int &line, String &r_err_str);
 	static Error _parse_ext_resource_dummy(DummyReadData *p_data, VariantParser::Stream *p_stream, Ref<Resource> &r_res, int &line, String &r_err_str);
-	void _printerr();
 
 	VariantParser::ResourceParser rp;
 
@@ -146,8 +132,6 @@ public:
 };
 
 class ResourceFormatLoaderText : public ResourceFormatLoader {
-	GDSOFTCLASS(ResourceFormatLoaderText, ResourceFormatLoader);
-
 public:
 	static ResourceFormatLoaderText *singleton;
 	virtual Ref<Resource> load(const String &p_path, const String &p_original_path = "", Error *r_error = nullptr, bool p_use_sub_threads = false, float *r_progress = nullptr, CacheMode p_cache_mode = CACHE_MODE_REUSE) override;
@@ -159,7 +143,6 @@ public:
 	virtual String get_resource_type(const String &p_path) const override;
 	virtual String get_resource_script_class(const String &p_path) const override;
 	virtual ResourceUID::ID get_resource_uid(const String &p_path) const override;
-	virtual bool has_custom_uid_support() const override;
 	virtual void get_dependencies(const String &p_path, List<String> *p_dependencies, bool p_add_types = false) override;
 	virtual Error rename_dependencies(const String &p_path, const HashMap<String, String> &p_map) override;
 
@@ -208,8 +191,6 @@ public:
 };
 
 class ResourceFormatSaverText : public ResourceFormatSaver {
-	GDSOFTCLASS(ResourceFormatSaverText, ResourceFormatSaver);
-
 public:
 	static ResourceFormatSaverText *singleton;
 	virtual Error save(const Ref<Resource> &p_resource, const String &p_path, uint32_t p_flags = 0) override;
@@ -219,3 +200,5 @@ public:
 
 	ResourceFormatSaverText();
 };
+
+#endif // RESOURCE_FORMAT_TEXT_H

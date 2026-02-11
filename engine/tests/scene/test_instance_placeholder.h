@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef TEST_INSTANCE_PLACEHOLDER_H
+#define TEST_INSTANCE_PLACEHOLDER_H
 
 #include "scene/main/instance_placeholder.h"
 #include "scene/resources/packed_scene.h"
@@ -110,7 +111,7 @@ TEST_CASE("[SceneTree][InstancePlaceholder] Instantiate from placeholder with no
 		scene->set_int_property(12);
 
 		// Pack the scene.
-		Ref<PackedScene> packed_scene = memnew(PackedScene);
+		PackedScene *packed_scene = memnew(PackedScene);
 		const Error err = packed_scene->pack(scene);
 		REQUIRE(err == OK);
 
@@ -138,7 +139,7 @@ TEST_CASE("[SceneTree][InstancePlaceholder] Instantiate from placeholder with no
 		referenced->set_owner(scene);
 		scene->set_reference_property(referenced);
 		// Pack the scene.
-		Ref<PackedScene> packed_scene = memnew(PackedScene);
+		PackedScene *packed_scene = memnew(PackedScene);
 		const Error err = packed_scene->pack(scene);
 		REQUIRE(err == OK);
 
@@ -175,7 +176,7 @@ TEST_CASE("[SceneTree][InstancePlaceholder] Instantiate from placeholder with no
 		node_array.push_back(referenced2);
 		scene->set_reference_array_property(node_array);
 		// Pack the scene.
-		Ref<PackedScene> packed_scene = memnew(PackedScene);
+		PackedScene *packed_scene = memnew(PackedScene);
 		const Error err = packed_scene->pack(scene);
 		REQUIRE(err == OK);
 
@@ -219,7 +220,7 @@ TEST_CASE("[SceneTree][InstancePlaceholder] Instantiate from placeholder with ov
 		scene->set_int_property(12);
 
 		// Pack the scene.
-		Ref<PackedScene> packed_scene = memnew(PackedScene);
+		PackedScene *packed_scene = memnew(PackedScene);
 		packed_scene->pack(scene);
 
 		// Instantiate the scene.
@@ -248,7 +249,7 @@ TEST_CASE("[SceneTree][InstancePlaceholder] Instantiate from placeholder with ov
 		referenced->set_owner(scene);
 		scene->set_reference_property(referenced);
 		// Pack the scene.
-		Ref<PackedScene> packed_scene = memnew(PackedScene);
+		PackedScene *packed_scene = memnew(PackedScene);
 		const Error err = packed_scene->pack(scene);
 		REQUIRE(err == OK);
 
@@ -303,7 +304,7 @@ TEST_CASE("[SceneTree][InstancePlaceholder] Instantiate from placeholder with ov
 
 		scene->set_reference_array_property(referenced_array);
 		// Pack the scene.
-		Ref<PackedScene> packed_scene = memnew(PackedScene);
+		PackedScene *packed_scene = memnew(PackedScene);
 		const Error err = packed_scene->pack(scene);
 		REQUIRE(err == OK);
 
@@ -346,7 +347,7 @@ TEST_CASE("[SceneTree][InstancePlaceholder] Instance a PackedScene containing an
 	internal->set_reference_property(referenced);
 
 	// Pack the internal scene.
-	Ref<PackedScene> internal_scene = memnew(PackedScene);
+	PackedScene *internal_scene = memnew(PackedScene);
 	Error err = internal_scene->pack(internal);
 	REQUIRE(err == OK);
 
@@ -375,7 +376,7 @@ TEST_CASE("[SceneTree][InstancePlaceholder] Instance a PackedScene containing an
 	internal_created->set("reference_property", NodePath("OriginalReference"));
 
 	// Pack the main scene.
-	Ref<PackedScene> main_scene = memnew(PackedScene);
+	PackedScene *main_scene = memnew(PackedScene);
 	err = main_scene->pack(root);
 	REQUIRE(err == OK);
 
@@ -435,7 +436,7 @@ TEST_CASE("[SceneTree][InstancePlaceholder] Instance a PackedScene containing an
 	internal->set_reference_array_property(referenced_array);
 
 	// Pack the internal scene.
-	Ref<PackedScene> internal_scene = memnew(PackedScene);
+	PackedScene *internal_scene = memnew(PackedScene);
 	Error err = internal_scene->pack(internal);
 	REQUIRE(err == OK);
 
@@ -476,7 +477,7 @@ TEST_CASE("[SceneTree][InstancePlaceholder] Instance a PackedScene containing an
 	internal_created->set_reference_array_property(override_array);
 
 	// Pack the main scene.
-	Ref<PackedScene> main_scene = memnew(PackedScene);
+	PackedScene *main_scene = memnew(PackedScene);
 	err = main_scene->pack(root);
 	REQUIRE(err == OK);
 
@@ -502,11 +503,10 @@ TEST_CASE("[SceneTree][InstancePlaceholder] Instance a PackedScene containing an
 	REQUIRE(final_node->get_reference_property().identity_compare(instanced_main_node->get_child(1, true)));
 	Array final_array = final_node->get_reference_array_property();
 	REQUIRE(final_array.size() == 3);
-	Array wanted_node_array = {
-		instanced_main_node->get_child(2, true), // ExternalArrayMember
-		final_node->get_child(1, true), // ArrayRef1
-		final_node->get_child(2, true) // ArrayRef2
-	};
+	Array wanted_node_array;
+	wanted_node_array.push_back(instanced_main_node->get_child(2, true)); // ExternalArrayMember
+	wanted_node_array.push_back(final_node->get_child(1, true)); // ArrayRef1
+	wanted_node_array.push_back(final_node->get_child(2, true)); // ArrayRef2
 
 	// Iterate over all nodes, since the ordering is not guaranteed.
 	for (int i = 0; i < wanted_node_array.size(); i++) {
@@ -530,3 +530,5 @@ TEST_CASE("[SceneTree][InstancePlaceholder] Instance a PackedScene containing an
 #endif // TOOLS_ENABLED
 
 } //namespace TestInstancePlaceholder
+
+#endif // TEST_INSTANCE_PLACEHOLDER_H

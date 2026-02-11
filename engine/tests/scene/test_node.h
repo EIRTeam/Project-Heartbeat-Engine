@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef TEST_NODE_H
+#define TEST_NODE_H
 
 #include "core/object/class_db.h"
 #include "scene/main/node.h"
@@ -96,13 +97,6 @@ public:
 
 	void set_exported_nodes(const Array &p_nodes) { exported_nodes = p_nodes; }
 	Array get_exported_nodes() const { return exported_nodes; }
-
-	TestNode() {
-		Node *internal = memnew(Node);
-		add_child(internal, false, INTERNAL_MODE_FRONT);
-		internal = memnew(Node);
-		add_child(internal, false, INTERNAL_MODE_BACK);
-	}
 };
 
 TEST_CASE("[SceneTree][Node] Testing node operations with a very simple scene tree") {
@@ -160,15 +154,16 @@ TEST_CASE("[SceneTree][Node] Testing node operations with a very simple scene tr
 	}
 
 	SUBCASE("Node should be accessible via group") {
-		Vector<Node *> nodes = SceneTree::get_singleton()->get_nodes_in_group("nodes");
+		List<Node *> nodes;
+		SceneTree::get_singleton()->get_nodes_in_group("nodes", &nodes);
 		CHECK(nodes.is_empty());
 
 		node->add_to_group("nodes");
 
-		nodes = SceneTree::get_singleton()->get_nodes_in_group("nodes");
+		SceneTree::get_singleton()->get_nodes_in_group("nodes", &nodes);
 		CHECK_EQ(nodes.size(), 1);
-		Node *E = nodes.get(0);
-		CHECK_EQ(E, node);
+		List<Node *>::Element *E = nodes.front();
+		CHECK_EQ(E->get(), node);
 	}
 
 	SUBCASE("Node should be possible to find") {
@@ -393,10 +388,11 @@ TEST_CASE("[SceneTree][Node] Testing node operations with a more complex simple 
 	}
 
 	SUBCASE("Nodes should be accessible via their groups") {
-		Vector<Node *> nodes = SceneTree::get_singleton()->get_nodes_in_group("nodes");
+		List<Node *> nodes;
+		SceneTree::get_singleton()->get_nodes_in_group("nodes", &nodes);
 		CHECK(nodes.is_empty());
 
-		nodes = SceneTree::get_singleton()->get_nodes_in_group("other_nodes");
+		SceneTree::get_singleton()->get_nodes_in_group("other_nodes", &nodes);
 		CHECK(nodes.is_empty());
 
 		node1->add_to_group("nodes");
@@ -404,34 +400,34 @@ TEST_CASE("[SceneTree][Node] Testing node operations with a more complex simple 
 		node1_1->add_to_group("nodes");
 		node1_1->add_to_group("other_nodes");
 
-		nodes = SceneTree::get_singleton()->get_nodes_in_group("nodes");
+		SceneTree::get_singleton()->get_nodes_in_group("nodes", &nodes);
 		CHECK_EQ(nodes.size(), 2);
 
-		Node *E = nodes.get(0);
-		CHECK_EQ(E, node1);
-		E = nodes.get(1);
-		CHECK_EQ(E, node1_1);
+		List<Node *>::Element *E = nodes.front();
+		CHECK_EQ(E->get(), node1);
+		E = E->next();
+		CHECK_EQ(E->get(), node1_1);
 
 		// Clear and try again with the other group.
 		nodes.clear();
 
-		nodes = SceneTree::get_singleton()->get_nodes_in_group("other_nodes");
+		SceneTree::get_singleton()->get_nodes_in_group("other_nodes", &nodes);
 		CHECK_EQ(nodes.size(), 2);
 
-		E = nodes.get(0);
-		CHECK_EQ(E, node1_1);
-		E = nodes.get(1);
-		CHECK_EQ(E, node2);
+		E = nodes.front();
+		CHECK_EQ(E->get(), node1_1);
+		E = E->next();
+		CHECK_EQ(E->get(), node2);
 
 		// Clear and try again with the other group and one node removed.
 		nodes.clear();
 
 		node1->remove_from_group("nodes");
-		nodes = SceneTree::get_singleton()->get_nodes_in_group("nodes");
+		SceneTree::get_singleton()->get_nodes_in_group("nodes", &nodes);
 		CHECK_EQ(nodes.size(), 1);
 
-		E = nodes.get(0);
-		CHECK_EQ(E, node1_1);
+		E = nodes.front();
+		CHECK_EQ(E->get(), node1_1);
 	}
 
 	SUBCASE("Nodes added as siblings of another node should be right next to it") {
@@ -470,11 +466,12 @@ TEST_CASE("[SceneTree][Node] Testing node operations with a more complex simple 
 		node1->add_to_group("nodes");
 		node1->replace_by(node2, true);
 
-		Vector<Node *> nodes = SceneTree::get_singleton()->get_nodes_in_group("nodes");
+		List<Node *> nodes;
+		SceneTree::get_singleton()->get_nodes_in_group("nodes", &nodes);
 		CHECK_EQ(nodes.size(), 1);
 
-		Node *E = nodes.get(0);
-		CHECK_EQ(E, node2);
+		List<Node *>::Element *E = nodes.front();
+		CHECK_EQ(E->get(), node2);
 	}
 
 	SUBCASE("Duplicating a node should also duplicate the children") {
@@ -502,24 +499,6 @@ TEST_CASE("[SceneTree][Node] Testing node operations with a more complex simple 
 	memdelete(node2);
 }
 
-TEST_CASE("[SceneTree][Node] Duplicating node with internal children") {
-	GDREGISTER_CLASS(TestNode);
-
-	TestNode *node = memnew(TestNode);
-	Node *child = memnew(Node);
-	child->set_name("Child");
-	node->add_child(child);
-
-	int child_count = node->get_child_count();
-
-	Node *dup = node->duplicate();
-	CHECK(dup->get_child_count() == child_count);
-	CHECK(dup->has_node(String("Child")));
-
-	memdelete(node);
-	memdelete(dup);
-}
-
 TEST_CASE("[SceneTree][Node]Exported node checks") {
 	TestNode *node = memnew(TestNode);
 	SceneTree::get_singleton()->get_root()->add_child(node);
@@ -545,7 +524,7 @@ TEST_CASE("[SceneTree][Node]Exported node checks") {
 
 		TestNode *dup = Object::cast_to<TestNode>(node->duplicate());
 		Node *new_exported = Object::cast_to<Node>(dup->get("exported_node"));
-		CHECK(new_exported == dup->get_child(0, false));
+		CHECK(new_exported == dup->get_child(0));
 
 		memdelete(dup);
 	}
@@ -600,10 +579,10 @@ TEST_CASE("[SceneTree][Node]Exported node checks") {
 		root->add_child(sub_child);
 		sub_child->set_owner(root);
 
-		sub_child->set("exported_node", sub_child->get_child(1, false));
+		sub_child->set("exported_node", sub_child->get_child(1));
 
 		children = Array();
-		children.append(sub_child->get_child(1, false));
+		children.append(sub_child->get_child(1));
 		sub_child->set("exported_nodes", children);
 
 		Ref<PackedScene> ps2;
@@ -914,3 +893,5 @@ TEST_CASE("[SceneTree][Node] Test the process priority") {
 }
 
 } // namespace TestNode
+
+#endif // TEST_NODE_H

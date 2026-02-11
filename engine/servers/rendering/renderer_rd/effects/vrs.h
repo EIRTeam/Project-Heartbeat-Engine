@@ -28,10 +28,14 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef VRS_RD_H
+#define VRS_RD_H
 
 #include "servers/rendering/renderer_rd/pipeline_cache_rd.h"
 #include "servers/rendering/renderer_rd/shaders/effects/vrs.glsl.gen.h"
+#include "servers/rendering/renderer_scene_render.h"
+
+#include "servers/rendering_server.h"
 
 namespace RendererRD {
 
@@ -40,8 +44,6 @@ private:
 	enum VRSMode {
 		VRS_DEFAULT,
 		VRS_MULTIVIEW,
-		VRS_RG,
-		VRS_RG_MULTIVIEW,
 		VRS_MAX,
 	};
 
@@ -70,3 +72,5 @@ public:
 };
 
 } // namespace RendererRD
+
+#endif // VRS_RD_H

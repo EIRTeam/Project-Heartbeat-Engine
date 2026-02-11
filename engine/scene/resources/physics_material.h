@@ -28,10 +28,11 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef PHYSICS_MATERIAL_H
+#define PHYSICS_MATERIAL_H
 
-#if !defined(PHYSICS_2D_DISABLED) || !defined(PHYSICS_3D_DISABLED)
 #include "core/io/resource.h"
+#include "servers/physics_server_3d.h"
 
 class PhysicsMaterial : public Resource {
 	GDCLASS(PhysicsMaterial, Resource);
@@ -66,5 +67,8 @@ public:
 	_FORCE_INLINE_ real_t computed_bounce() const {
 		return absorbent ? -bounce : bounce;
 	}
+
+	PhysicsMaterial() {}
 };
-#endif // !defined(PHYSICS_2D_DISABLED) || !defined(PHYSICS_3D_DISABLED)
+
+#endif // PHYSICS_MATERIAL_H

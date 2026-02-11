@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "debug_effects.h"
+#include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
@@ -66,7 +67,7 @@ DebugEffects::DebugEffects() {
 void DebugEffects::_create_frustum_arrays() {
 	if (frustum.vertex_buffer.is_null()) {
 		// Create vertex buffer, but don't put data in it yet
-		frustum.vertex_buffer = RD::get_singleton()->vertex_buffer_create(8 * sizeof(float) * 3, Vector<uint8_t>());
+		frustum.vertex_buffer = RD::get_singleton()->vertex_buffer_create(8 * sizeof(float) * 3, Vector<uint8_t>(), false);
 
 		Vector<RD::VertexAttribute> attributes;
 		Vector<RID> buffers;
@@ -102,7 +103,7 @@ void DebugEffects::_create_frustum_arrays() {
 			2, 6, 4, // FRT, NRT, NLT
 			// Bottom
 			5, 7, 1, // NLB, NRB, FLB,
-			7, 3, 1 // NRB, FRB, FLB
+			7, 3, 1, // NRB, FRB, FLB
 		};
 
 		// Create our index_array
@@ -136,7 +137,7 @@ void DebugEffects::_create_frustum_arrays() {
 			0, 4, // FLT - NLT
 			1, 5, // FLB - NLB
 			2, 6, // FRT - NRT
-			3, 7 // FRB - NRB
+			3, 7, // FRB - NRB
 		};
 
 		// Create our lines_array
@@ -161,17 +162,17 @@ DebugEffects::~DebugEffects() {
 
 	// Destroy vertex buffer and array.
 	if (frustum.vertex_buffer.is_valid()) {
-		RD::get_singleton()->free_rid(frustum.vertex_buffer); // Array gets freed as dependency.
+		RD::get_singleton()->free(frustum.vertex_buffer); // Array gets freed as dependency.
 	}
 
 	// Destroy index buffer and array,
 	if (frustum.index_buffer.is_valid()) {
-		RD::get_singleton()->free_rid(frustum.index_buffer); // Array gets freed as dependency.
+		RD::get_singleton()->free(frustum.index_buffer); // Array gets freed as dependency.
 	}
 
 	// Destroy lines buffer and array.
 	if (frustum.lines_buffer.is_valid()) {
-		RD::get_singleton()->free_rid(frustum.lines_buffer); // Array gets freed as dependency.
+		RD::get_singleton()->free(frustum.lines_buffer); // Array gets freed as dependency.
 	}
 
 	motion_vectors.shader.version_free(motion_vectors.shader_version);
@@ -281,7 +282,7 @@ void DebugEffects::draw_shadow_frustum(RID p_light, const Projection &p_cam_proj
 		// And draw our frustum.
 		RD::FramebufferFormatID fb_format_id = RD::get_singleton()->framebuffer_get_format(p_dest_fb);
 
-		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dest_fb, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 1.0f, 0, rect);
+		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dest_fb, RD::INITIAL_ACTION_LOAD, RD::FINAL_ACTION_STORE, RD::INITIAL_ACTION_LOAD, RD::FINAL_ACTION_DISCARD, Vector<Color>(), 0.0, 0, rect);
 
 		RID pipeline = shadow_frustum.pipelines[SFP_TRANSPARENT].get_render_pipeline(frustum.vertex_format, fb_format_id);
 		RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, pipeline);
@@ -325,7 +326,7 @@ void DebugEffects::draw_shadow_frustum(RID p_light, const Projection &p_cam_proj
 			rect.size.x *= atlas_rect_norm.size.x;
 			rect.size.y *= atlas_rect_norm.size.y;
 
-			draw_list = RD::get_singleton()->draw_list_begin(p_dest_fb, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 1.0f, 0, rect);
+			draw_list = RD::get_singleton()->draw_list_begin(p_dest_fb, RD::INITIAL_ACTION_LOAD, RD::FINAL_ACTION_STORE, RD::INITIAL_ACTION_LOAD, RD::FINAL_ACTION_DISCARD, Vector<Color>(), 0.0, 0, rect);
 
 			pipeline = shadow_frustum.pipelines[SFP_TRANSPARENT].get_render_pipeline(frustum.vertex_format, fb_format_id);
 			RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, pipeline);
@@ -350,7 +351,7 @@ void DebugEffects::draw_motion_vectors(RID p_velocity, RID p_depth, RID p_dest_f
 	RD::Uniform u_source_velocity(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, p_velocity }));
 	RD::Uniform u_source_depth(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ default_sampler, p_depth }));
 
-	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dest_fb);
+	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dest_fb, RD::INITIAL_ACTION_LOAD, RD::FINAL_ACTION_STORE, RD::INITIAL_ACTION_DISCARD, RD::FINAL_ACTION_DISCARD);
 	RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, motion_vectors.pipeline.get_render_pipeline(RD::INVALID_ID, RD::get_singleton()->framebuffer_get_format(p_dest_fb), false, RD::get_singleton()->draw_list_get_current_pass()));
 
 	Projection correction;

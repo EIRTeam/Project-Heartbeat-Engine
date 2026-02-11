@@ -20,25 +20,7 @@
  * SOFTWARE.
  */
 
-#include <cstdarg>
 #include "tvgScene.h"
-
-/************************************************************************/
-/* Internal Class Implementation                                        */
-/************************************************************************/
-
-Result Scene::Impl::resetEffects()
-{
-    if (effects) {
-        for (auto e = effects->begin(); e < effects->end(); ++e) {
-            delete(*e);
-        }
-        delete(effects);
-        effects = nullptr;
-    }
-    return Result::Success;
-}
-
 
 /************************************************************************/
 /* External Class Implementation                                        */
@@ -46,6 +28,7 @@ Result Scene::Impl::resetEffects()
 
 Scene::Scene() : pImpl(new Impl(this))
 {
+    Paint::pImpl->id = TVG_CLASS_ID_SCENE;
 }
 
 
@@ -61,15 +44,9 @@ unique_ptr<Scene> Scene::gen() noexcept
 }
 
 
-TVG_DEPRECATED uint32_t Scene::identifier() noexcept
+uint32_t Scene::identifier() noexcept
 {
-    return (uint32_t) Type::Scene;
-}
-
-
-Type Scene::type() const noexcept
-{
-    return Type::Scene;
+    return TVG_CLASS_ID_SCENE;
 }
 
 
@@ -77,11 +54,7 @@ Result Scene::push(unique_ptr<Paint> paint) noexcept
 {
     auto p = paint.release();
     if (!p) return Result::MemoryCorruption;
-    P(p)->ref();
-
-    //Relocated the paint to the current scene space
-    P(p)->renderFlag |= RenderUpdateFlag::Transform;
-
+    PP(p)->ref();
     pImpl->paints.push_back(p);
 
     return Result::Success;
@@ -105,47 +78,4 @@ Result Scene::clear(bool free) noexcept
 list<Paint*>& Scene::paints() noexcept
 {
     return pImpl->paints;
-}
-
-
-Result Scene::push(SceneEffect effect, ...) noexcept
-{
-    if (effect == SceneEffect::ClearAll) return pImpl->resetEffects();
-
-    if (!pImpl->effects) pImpl->effects = new Array<RenderEffect*>;
-
-    va_list args;
-    va_start(args, effect);
-
-    RenderEffect* re = nullptr;
-
-    switch (effect) {
-        case SceneEffect::GaussianBlur: {
-            re = RenderEffectGaussianBlur::gen(args);
-            break;
-        }
-        case SceneEffect::DropShadow: {
-            re = RenderEffectDropShadow::gen(args);
-            break;
-        }
-        case SceneEffect::Fill: {
-            re = RenderEffectFill::gen(args);
-            break;
-        }
-        case SceneEffect::Tint: {
-            re = RenderEffectTint::gen(args);
-            break;
-        }
-        case SceneEffect::Tritone: {
-            re = RenderEffectTritone::gen(args);
-            break;
-        }
-        default: break;
-    }
-
-    if (!re) return Result::InvalidArguments;
-
-    pImpl->effects->push(re);
-
-    return Result::Success;
 }

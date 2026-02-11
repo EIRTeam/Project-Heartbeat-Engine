@@ -28,9 +28,10 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef RENDERER_GI_H
+#define RENDERER_GI_H
 
-#include "servers/rendering/rendering_server.h"
+#include "servers/rendering_server.h"
 
 class RendererGI {
 public:
@@ -81,3 +82,5 @@ public:
 
 	virtual void sdfgi_reset() = 0;
 };
+
+#endif // RENDERER_GI_H

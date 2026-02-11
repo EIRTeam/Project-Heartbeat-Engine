@@ -28,10 +28,11 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef AUDIO_STREAM_PLAYER_2D_H
+#define AUDIO_STREAM_PLAYER_2D_H
 
 #include "scene/2d/node_2d.h"
-#include "servers/audio/audio_server.h"
+#include "servers/audio_server.h"
 
 struct AudioFrame;
 class AudioStream;
@@ -46,6 +47,12 @@ private:
 		MAX_OUTPUTS = 8,
 		MAX_INTERSECT_AREAS = 32
 
+	};
+
+	struct Output {
+		AudioFrame vol;
+		int bus_index = 0;
+		Viewport *viewport = nullptr; //pointer only used for reference to previous mix
 	};
 
 	AudioStreamPlayerInternal *internal = nullptr;
@@ -97,9 +104,6 @@ public:
 	void set_volume_db(float p_volume);
 	float get_volume_db() const;
 
-	void set_volume_linear(float p_volume);
-	float get_volume_linear() const;
-
 	void set_pitch_scale(float p_pitch_scale);
 	float get_pitch_scale() const;
 
@@ -142,3 +146,5 @@ public:
 	AudioStreamPlayer2D();
 	~AudioStreamPlayer2D();
 };
+
+#endif // AUDIO_STREAM_PLAYER_2D_H

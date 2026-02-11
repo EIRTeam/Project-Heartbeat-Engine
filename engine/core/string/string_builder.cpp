@@ -30,6 +30,8 @@
 
 #include "string_builder.h"
 
+#include <string.h>
+
 StringBuilder &StringBuilder::append(const String &p_string) {
 	if (p_string.is_empty()) {
 		return *this;
@@ -59,19 +61,15 @@ String StringBuilder::as_string() const {
 		return "";
 	}
 
-	String string;
-	string.resize_uninitialized(string_length + 1);
-	char32_t *buffer = string.ptrw();
+	char32_t *buffer = memnew_arr(char32_t, string_length);
 
 	int current_position = 0;
 
 	int godot_string_elem = 0;
 	int c_string_elem = 0;
 
-	for (uint32_t i = 0; i < appended_strings.size(); i++) {
-		const int32_t str_len = appended_strings[i];
-
-		if (str_len == -1) {
+	for (int i = 0; i < appended_strings.size(); i++) {
+		if (appended_strings[i] == -1) {
 			// Godot string
 			const String &s = strings[godot_string_elem];
 
@@ -83,16 +81,19 @@ String StringBuilder::as_string() const {
 		} else {
 			const char *s = c_strings[c_string_elem];
 
-			for (int32_t j = 0; j < str_len; j++) {
+			for (int32_t j = 0; j < appended_strings[i]; j++) {
 				buffer[current_position + j] = s[j];
 			}
 
-			current_position += str_len;
+			current_position += appended_strings[i];
 
 			c_string_elem++;
 		}
 	}
-	buffer[current_position] = 0;
 
-	return string;
+	String final_string = String(buffer, string_length);
+
+	memdelete_arr(buffer);
+
+	return final_string;
 }

@@ -28,7 +28,12 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef REVERB_FILTER_H
+#define REVERB_FILTER_H
+
+#include "core/math/audio_frame.h"
+#include "core/os/memory.h"
+#include "core/typedefs.h"
 
 class Reverb {
 public:
@@ -113,3 +118,5 @@ public:
 
 	~Reverb();
 };
+
+#endif // REVERB_FILTER_H

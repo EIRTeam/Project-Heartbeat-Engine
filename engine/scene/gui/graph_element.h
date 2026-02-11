@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef GRAPH_ELEMENT_H
+#define GRAPH_ELEMENT_H
 
 #include "scene/gui/container.h"
 
@@ -47,8 +48,6 @@ protected:
 	Vector2 resizing_from_size;
 
 	Vector2 position_offset;
-
-	bool scaling_menus = false;
 
 	struct ThemeCache {
 		Ref<Texture2D> resizer;
@@ -86,12 +85,13 @@ public:
 	void set_selectable(bool p_selectable);
 	bool is_selectable();
 
-	void set_scaling_menus(bool p_scaling_menus);
-	bool is_scaling_menus() const;
-
 	virtual Size2 get_minimum_size() const override;
 
 	bool is_resizing() const {
 		return resizing;
 	}
+
+	GraphElement() {}
 };
+
+#endif // GRAPH_ELEMENT_H

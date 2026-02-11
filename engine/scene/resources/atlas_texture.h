@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef ATLAS_TEXTURE_H
+#define ATLAS_TEXTURE_H
 
 #include "scene/resources/texture.h"
 
@@ -40,8 +41,7 @@ class AtlasTexture : public Texture2D {
 
 protected:
 	Ref<Texture2D> atlas;
-	Rect2 region; // Only for property value.
-	Rect2 rounded_region; // Region with rounded size (image size is always integer).
+	Rect2 region;
 	Rect2 margin;
 	bool filter_clip = false;
 
@@ -74,4 +74,8 @@ public:
 	bool is_pixel_opaque(int p_x, int p_y) const override;
 
 	virtual Ref<Image> get_image() const override;
+
+	AtlasTexture();
 };
+
+#endif // ATLAS_TEXTURE_H

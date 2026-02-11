@@ -22,7 +22,6 @@
 
 #include "config.h"
 #include <cmath>
-#include <cstdlib>
 #include <cstring>
 #include <memory.h>
 #include "tvgMath.h"
@@ -184,7 +183,7 @@ float strToFloat(const char *nPtr, char **endPtr)
         auto scale = 1.0f;
 
         while (exponentPart >= 8U) {
-            scale *= 1E8f;
+            scale *= 1E8;
             exponentPart -= 8U;
         }
         while (exponentPart > 0U) {
@@ -208,6 +207,16 @@ error:
     return 0.0f;
 }
 
+
+int str2int(const char* str, size_t n)
+{
+    int ret = 0;
+    for(size_t i = 0; i < n; ++i) {
+        ret = ret * 10 + (str[i] - '0');
+    }
+    return ret;
+}
+
 char* strDuplicate(const char *str, size_t n)
 {
     auto len = strlen(str);
@@ -220,22 +229,13 @@ char* strDuplicate(const char *str, size_t n)
     return (char *) memcpy(ret, str, n);
 }
 
-char* strAppend(char* lhs, const char* rhs, size_t n)
-{
-    if (!rhs) return lhs;
-    if (!lhs) return strDuplicate(rhs, n);
-    lhs = (char*)realloc(lhs, strlen(lhs) + n + 1);
-    return strncat(lhs, rhs, n);
-}
-
 char* strDirname(const char* path)
 {
-    auto ptr = strrchr(path, '/');
+    const char *ptr = strrchr(path, '/');
 #ifdef _WIN32
-    auto ptr2 = strrchr(ptr ? ptr : path, '\\');
-    if (ptr2) ptr = ptr2;
+    if (ptr) ptr = strrchr(ptr + 1, '\\');
 #endif
-    auto len = ptr ? size_t(ptr - path + 1) : SIZE_MAX;
+    int len = int(ptr + 1 - path);  // +1 to include '/'
     return strDuplicate(path, len);
 }
 

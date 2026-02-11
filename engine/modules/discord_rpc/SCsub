@@ -1,0 +1,45 @@
+# SCsub
+
+Import("env")
+import methods
+
+sources = [
+    "register_types.cpp",
+]
+
+thirdparty_sources = [
+    "src/discord_rpc.cpp",
+    "src/rpc_connection.cpp",
+    "src/serialization.cpp",
+]
+
+if env["platform"] == "windows":
+    thirdparty_sources.append("src/connection_win.cpp")
+    thirdparty_sources.append("src/discord_register_win.cpp")
+elif env["platform"] == "linuxbsd":
+    thirdparty_sources.append("src/discord_register_linux.cpp")
+    thirdparty_sources.append("src/connection_unix.cpp")
+
+thirdparty_dir = "thirdparty/discord_rpc/"
+
+thirdparty_sources = [thirdparty_dir + file for file in thirdparty_sources]
+
+env_discord_rpc = env.Clone()
+
+thirdparty_obj = []
+
+env_thirdparty = env_discord_rpc.Clone()
+env_thirdparty.disable_warnings()
+env_thirdparty.Append(CPPPATH="thirdparty/discord_rpc/include")
+env_thirdparty.Append(CPPPATH="thirdparty/rapidjson/include")
+env_thirdparty.add_source_files(thirdparty_obj, thirdparty_sources)
+
+env.modules_sources += thirdparty_obj
+
+module_obj = []
+
+env_discord_rpc.add_source_files(module_obj, "*.cpp")
+env.modules_sources += module_obj
+
+# Needed to force rebuilding the module files when the thirdparty library is updated.
+env.Depends(module_obj, thirdparty_obj)

@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef CRASH_HANDLER_MACOS_H
+#define CRASH_HANDLER_MACOS_H
 
 class CrashHandler {
 	bool disabled;
@@ -37,8 +38,10 @@ public:
 	void initialize();
 
 	void disable();
-	bool is_disabled() const { return disabled; }
+	bool is_disabled() const { return disabled; };
 
 	CrashHandler();
 	~CrashHandler();
 };
+
+#endif // CRASH_HANDLER_MACOS_H

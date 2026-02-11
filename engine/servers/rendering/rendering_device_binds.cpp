@@ -30,14 +30,9 @@
 
 #include "rendering_device_binds.h"
 
-#include "modules/modules_enabled.gen.h" // For glslang.
-#ifdef MODULE_GLSLANG_ENABLED
-#include "modules/glslang/shader_compile.h"
-#endif
-
-#include "shader_include_db.h"
-
 Error RDShaderFile::parse_versions_from_text(const String &p_text, const String p_defines, OpenIncludeFunction p_include_func, void *p_include_func_userdata) {
+	ERR_FAIL_NULL_V(RenderingDevice::get_singleton(), ERR_UNAVAILABLE);
+
 	Vector<String> lines = p_text.split("\n");
 
 	bool reading_versions = false;
@@ -106,18 +101,18 @@ Error RDShaderFile::parse_versions_from_text(const String &p_text, const String 
 		if (reading_versions) {
 			String l = line.strip_edges();
 			if (!l.is_empty()) {
-				if (!l.contains_char('=')) {
+				if (!l.contains("=")) {
 					base_error = "Missing `=` in '" + l + "'. Version syntax is `version = \"<defines with C escaping>\";`.";
 					break;
 				}
-				if (!l.contains_char(';')) {
+				if (!l.contains(";")) {
 					// We don't require a semicolon per se, but it's needed for clang-format to handle things properly.
 					base_error = "Missing `;` in '" + l + "'. Version syntax is `version = \"<defines with C escaping>\";`.";
 					break;
 				}
-				Vector<String> slices = l.get_slicec(';', 0).split("=");
+				Vector<String> slices = l.get_slice(";", 0).split("=");
 				String version = slices[0].strip_edges();
-				if (!version.is_valid_ascii_identifier()) {
+				if (!version.is_valid_identifier()) {
 					base_error = "Version names must be valid identifiers, found '" + version + "' instead.";
 					break;
 				}
@@ -146,17 +141,11 @@ Error RDShaderFile::parse_versions_from_text(const String &p_text, const String 
 							break;
 						}
 						include = include.substr(1, include.length() - 2).strip_edges();
-
-						String include_code = ShaderIncludeDB::get_built_in_include_file(include);
-						if (!include_code.is_empty()) {
-							stage_code[stage] += "\n" + include_code + "\n";
+						String include_text = p_include_func(include, p_include_func_userdata);
+						if (!include_text.is_empty()) {
+							stage_code[stage] += "\n" + include_text + "\n";
 						} else {
-							String include_text = p_include_func(include, p_include_func_userdata);
-							if (!include_text.is_empty()) {
-								stage_code[stage] += "\n" + include_text + "\n";
-							} else {
-								base_error = "#include failed for file '" + include + "'.";
-							}
+							base_error = "#include failed for file '" + include + "'";
 						}
 					} else {
 						base_error = "#include used, but no include function provided.";
@@ -192,12 +181,8 @@ Error RDShaderFile::parse_versions_from_text(const String &p_text, const String 
 				}
 				code = code.replace("VERSION_DEFINES", E.value);
 				String error;
-#ifdef MODULE_GLSLANG_ENABLED
-				Vector<uint8_t> spirv = compile_glslang_shader(RD::ShaderStage(i), ShaderIncludeDB::parse_include_files(code), RD::SHADER_LANGUAGE_VULKAN_VERSION_1_1, RD::SHADER_SPIRV_VERSION_1_3, &error);
+				Vector<uint8_t> spirv = RenderingDevice::get_singleton()->shader_compile_spirv_from_source(RD::ShaderStage(i), code, RD::SHADER_LANGUAGE_GLSL, &error, false);
 				bytecode->set_stage_bytecode(RD::ShaderStage(i), spirv);
-#else
-				error = "Shader compilation is not supported because glslang was not enabled.";
-#endif
 				if (!error.is_empty()) {
 					error += String() + "\n\nStage '" + stage_str[i] + "' source code: \n\n";
 					Vector<String> sclines = code.split("\n");

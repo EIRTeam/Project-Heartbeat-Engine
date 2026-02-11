@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef VOXEL_GI_H
+#define VOXEL_GI_H
 
 #include "scene/3d/visual_instance_3d.h"
 
@@ -107,8 +108,8 @@ public:
 
 	};
 
-	typedef void (*BakeBeginFunc)();
-	typedef bool (*BakeStepFunc)(int, const String &);
+	typedef void (*BakeBeginFunc)(int);
+	typedef void (*BakeStepFunc)(int, const String &);
 	typedef void (*BakeEndFunc)();
 
 private:
@@ -169,3 +170,5 @@ public:
 };
 
 VARIANT_ENUM_CAST(VoxelGI::Subdiv)
+
+#endif // VOXEL_GI_H

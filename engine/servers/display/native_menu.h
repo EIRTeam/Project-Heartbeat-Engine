@@ -28,9 +28,12 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef NATIVE_MENU_H
+#define NATIVE_MENU_H
 
 #include "core/input/input.h"
+#include "core/io/resource.h"
+#include "core/os/os.h"
 #include "core/variant/callable.h"
 
 class Texture2D;
@@ -70,9 +73,6 @@ public:
 	virtual bool has_system_menu(SystemMenus p_menu_id) const;
 	virtual RID get_system_menu(SystemMenus p_menu_id) const;
 	virtual String get_system_menu_name(SystemMenus p_menu_id) const;
-
-	virtual String get_system_menu_text(SystemMenus p_menu_id) const;
-	virtual void set_system_menu_text(SystemMenus p_menu_id, const String &p_name);
 
 	virtual RID create_menu();
 	virtual bool has_menu(const RID &p_rid) const;
@@ -158,3 +158,5 @@ public:
 
 VARIANT_ENUM_CAST(NativeMenu::Feature);
 VARIANT_ENUM_CAST(NativeMenu::SystemMenus);
+
+#endif // NATIVE_MENU_H

@@ -28,7 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
+#ifndef STYLE_BOX_FLAT_H
+#define STYLE_BOX_FLAT_H
 
 #include "scene/resources/style_box.h"
 
@@ -49,6 +50,7 @@ class StyleBoxFlat : public StyleBox {
 	bool anti_aliased = true;
 
 	int corner_detail = 8;
+	bool shadow_draw_center = true;
 	int shadow_size = 0;
 	Point2 shadow_offset;
 	real_t aa_size = 1;
@@ -93,6 +95,9 @@ public:
 	void set_skew(Vector2 p_skew);
 	Vector2 get_skew() const;
 
+	bool get_shadow_draw_center() const;
+	void set_shadow_draw_center(bool p_shadow_draw_center);
+
 	void set_shadow_color(const Color &p_color);
 	Color get_shadow_color() const;
 
@@ -109,4 +114,9 @@ public:
 
 	virtual Rect2 get_draw_rect(const Rect2 &p_rect) const override;
 	virtual void draw(RID p_canvas_item, const Rect2 &p_rect) const override;
+
+	StyleBoxFlat();
+	~StyleBoxFlat();
 };
+
+#endif // STYLE_BOX_FLAT_H
