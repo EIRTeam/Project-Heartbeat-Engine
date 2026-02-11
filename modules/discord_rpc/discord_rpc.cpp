@@ -48,12 +48,12 @@ void DiscordRPC::update_presence(const Dictionary &p_presence_info) {
 
 	DiscordRichPresence discordPresence;
 	memset(&discordPresence, 0, sizeof(discordPresence));
-	discordPresence.details = details;
+	discordPresence.details = details.get_data();
 	discordPresence.startTimestamp = start_timestamp;
-	discordPresence.largeImageKey = large_image_key;
-	discordPresence.smallImageKey = small_image_key;
-	discordPresence.largeImageText = large_image_tooltip;
-	discordPresence.state = state;
+	discordPresence.largeImageKey = large_image_key.get_data();
+	discordPresence.smallImageKey = small_image_key.get_data();
+	discordPresence.largeImageText = large_image_tooltip.get_data();
+	discordPresence.state = state.get_data();
 	Discord_UpdatePresence(&discordPresence);
 }
 

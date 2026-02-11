@@ -7,7 +7,7 @@ void HBSteamUserStats::_bind_methods() {
 }
 
 bool HBSteamUserStats::set_achievement(const String &p_achivement) const {
-	return SteamAPI_ISteamUserStats_SetAchievement(steam_user_stats, p_achivement.utf8());
+	return SteamAPI_ISteamUserStats_SetAchievement(steam_user_stats, p_achivement.utf8().get_data());
 }
 
 bool HBSteamUserStats::store_stats() const {

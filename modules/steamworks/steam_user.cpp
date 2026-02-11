@@ -62,7 +62,7 @@ void HBSteamUser::_bind_methods() {
 }
 
 Ref<HBAuthTicketForWebAPI> HBSteamUser::get_auth_ticket_for_web_api(const String &p_identity) const {
-	HAuthTicket ticket = SteamAPI_ISteamUser_GetAuthTicketForWebApi(steam_user, p_identity.utf8());
+	HAuthTicket ticket = SteamAPI_ISteamUser_GetAuthTicketForWebApi(steam_user, p_identity.utf8().get_data());
 	if (ticket == k_HAuthTicketInvalid) {
 		return Ref<HBAuthTicketForWebAPI>();
 	}

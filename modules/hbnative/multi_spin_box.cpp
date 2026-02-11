@@ -2,6 +2,7 @@
 #include "core/input/input.h"
 #include "core/math/expression.h"
 #include "core/os/keyboard.h"
+#include "scene/main/timer.h"
 
 #include "modules/modules_enabled.gen.h" // For csg, gridmap, regex.
 

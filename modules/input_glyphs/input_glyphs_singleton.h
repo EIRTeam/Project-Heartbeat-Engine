@@ -34,6 +34,7 @@
 #include "core/input/input_event.h"
 #include "core/object/class_db.h"
 #include "core/object/object.h"
+#include "core/object/worker_thread_pool.h"
 
 #include "input_glyphs_source.h"
 
@@ -114,7 +115,7 @@ public:
 	InputGlyphsConstants::InputType get_visible_input_type() const;
 	static InputGlyphsSingleton *get_singleton();
 	String input_type_to_localized_string(InputGlyphsConstants::InputType p_origin) const;
-	List<StringName> get_game_actions() const;
+	TypedArray<StringName> get_game_actions() const;
 	String get_event_display_string(const Ref<InputEvent> p_event) const;
 
 	InputGlyphsSingleton();

@@ -656,7 +656,7 @@ HBSteamUGCQueryPageResult::~HBSteamUGCQueryPageResult() {
 	}
 }
 
-HashMap<SWC::PublishedFileId_t, HBSteamUGCItem*> HBSteamUGCItem::item_cache = HashMap<SWC::PublishedFileId_t, HBSteamUGCItem*>();
+HashMap<SWC::PublishedFileId_t, HBSteamUGCItem *> HBSteamUGCItem::item_cache = HashMap<SWC::PublishedFileId_t, HBSteamUGCItem *>();
 
 void HBSteamUGCItem::_on_get_user_item_vote(Ref<SteamworksCallbackData> p_callback, bool p_io_failure) {
 	const GetUserItemVoteResult_t *result = p_callback->get_data<GetUserItemVoteResult_t>();
@@ -938,31 +938,31 @@ void HBSteamUGCEditor::_submit_update() {
 
 	if (kv_tags_to_add.size() > 0) {
 		for (KeyValue<String, String> kv : kv_tags_to_add) {
-			SteamAPI_ISteamUGC_AddItemKeyValueTag(iugc, update_handle, kv.key.utf8(), kv.value.utf8());
+			SteamAPI_ISteamUGC_AddItemKeyValueTag(iugc, update_handle, kv.key.utf8().get_data(), kv.value.utf8().get_data());
 		}
 	}
 	if (kv_tags_to_remove.size() > 0) {
 		for (String key : kv_tags_to_remove) {
-			SteamAPI_ISteamUGC_RemoveItemKeyValueTags(iugc, update_handle, key.utf8());
+			SteamAPI_ISteamUGC_RemoveItemKeyValueTags(iugc, update_handle, key.utf8().get_data());
 		}
 	}
 	if (has_content) {
-		SteamAPI_ISteamUGC_SetItemContent(iugc, update_handle, content.utf8());
+		SteamAPI_ISteamUGC_SetItemContent(iugc, update_handle, content.utf8().get_data());
 	}
 	if (has_description) {
-		SteamAPI_ISteamUGC_SetItemDescription(iugc, update_handle, description.utf8());
+		SteamAPI_ISteamUGC_SetItemDescription(iugc, update_handle, description.utf8().get_data());
 	}
 	if (has_visiblity) {
 		SteamAPI_ISteamUGC_SetItemVisibility(iugc, update_handle, (ERemoteStoragePublishedFileVisibility)visibility);
 	}
 	if (has_metadata) {
-		SteamAPI_ISteamUGC_SetItemMetadata(iugc, update_handle, metadata.utf8());
+		SteamAPI_ISteamUGC_SetItemMetadata(iugc, update_handle, metadata.utf8().get_data());
 	}
 	if (has_preview_file) {
-		SteamAPI_ISteamUGC_SetItemPreview(iugc, update_handle, preview_file.utf8());
+		SteamAPI_ISteamUGC_SetItemPreview(iugc, update_handle, preview_file.utf8().get_data());
 	}
 	if (has_preview_video_id) {
-		SteamAPI_ISteamUGC_AddItemPreviewVideo(iugc, update_handle, preview_video_id.utf8());
+		SteamAPI_ISteamUGC_AddItemPreviewVideo(iugc, update_handle, preview_video_id.utf8().get_data());
 	}
 	if (has_tags) {
 		SteamParamStringArray_t steam_tags;
@@ -973,20 +973,20 @@ void HBSteamUGCEditor::_submit_update() {
 		for (int i = 0; i < tags.size(); i++) {
 			CharString cs = tags[i].utf8();
 			strings.push_back(cs);
-			steam_tags.m_ppStrings[i] = cs;
+			steam_tags.m_ppStrings[i] = cs.get_data();
 		}
 		SteamAPI_ISteamUGC_SetItemTags(iugc, update_handle, &steam_tags);
 		memdelete_arr(steam_tags.m_ppStrings);
 	}
 	if (has_title) {
-		SteamAPI_ISteamUGC_SetItemTitle(iugc, update_handle, title.utf8());
+		SteamAPI_ISteamUGC_SetItemTitle(iugc, update_handle, title.utf8().get_data());
 	}
 
 	SteamAPICall_t api_call;
 	if (!has_changelog) {
 		api_call = SteamAPI_ISteamUGC_SubmitItemUpdate(iugc, update_handle, nullptr);
 	} else {
-		api_call = SteamAPI_ISteamUGC_SubmitItemUpdate(iugc, update_handle, changelog.utf8());
+		api_call = SteamAPI_ISteamUGC_SubmitItemUpdate(iugc, update_handle, changelog.utf8().get_data());
 	}
 	if (api_call == k_uAPICallInvalid) {
 		emit_signal("file_submitted", SWC::Result::RESULT_FAIL, false);

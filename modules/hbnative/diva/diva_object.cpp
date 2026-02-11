@@ -8,11 +8,11 @@ void DIVAObjectSet::read_submesh_indices(DIVASubmesh *p_submesh, uint32_t p_inde
 			if (tri_strip) {
 				for (uint32_t i = 0; i < p_index_count; i++) {
 					uint8_t idx = p_spb->get_u8();
-					p_submesh->index_array[i] = idx == 0xFF ? 0xFFFFFFFF : idx;
+					p_submesh->index_array.set(i, idx == 0xFF ? 0xFFFFFFFF : idx);
 				}
 			} else {
 				for (uint32_t i = 0; i < p_index_count; i++) {
-					p_submesh->index_array[i] = p_spb->get_u8();
+					p_submesh->index_array.set(i, p_spb->get_u8());
 				}
 			}
 		} break;
@@ -20,17 +20,17 @@ void DIVAObjectSet::read_submesh_indices(DIVASubmesh *p_submesh, uint32_t p_inde
 			if (tri_strip) {
 				for (uint32_t i = 0; i < p_index_count; i++) {
 					uint16_t idx = p_spb->get_u16();
-					p_submesh->index_array[i] = idx == 0xFFFF ? 0xFFFFFFFF : idx;
+					p_submesh->index_array.set(i, idx == 0xFFFF ? 0xFFFFFFFF : idx);
 				}
 			} else {
 				for (uint32_t i = 0; i < p_index_count; i++) {
-					p_submesh->index_array[i] = p_spb->get_u16();
+					p_submesh->index_array.set(i, p_spb->get_u16());
 				}
 			}
 		} break;
 		case OBJ_INDEX_U32: {
 			for (uint32_t i = 0; i < p_index_count; i++) {
-				p_submesh->index_array[i] = p_spb->get_u32();
+				p_submesh->index_array.set(i, p_spb->get_u32());
 			}
 		} break;
 	}

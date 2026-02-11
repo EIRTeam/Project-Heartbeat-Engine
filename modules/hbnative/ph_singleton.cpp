@@ -4,6 +4,9 @@
 #include "drivers/sdl/joypad_sdl.h"
 #endif
 
+#include "core/io/file_access.h"
+#include "servers/rendering/rendering_device.h"
+
 PHNative *PHNative::singleton = NULL;
 
 Ref<Process> PHNative::create_process(const String &p_path, const Vector<String> &p_arguments, const String &p_working_dir, bool p_open_stdin) {
@@ -203,7 +206,7 @@ Array PHNative::get_string_from_utf8_checked(const PackedByteArray &p_arr) const
 	bool conversion_ok = true;
 	if (p_arr.size() > 0) {
 		const uint8_t *r = p_arr.ptr();
-		conversion_ok = s.parse_utf8((const char *)r, p_arr.size()) == OK;
+		conversion_ok = s.append_utf8((const char *)r, p_arr.size()) == OK;
 	}
 
 	Array a;

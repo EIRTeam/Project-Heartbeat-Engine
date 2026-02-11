@@ -30,6 +30,7 @@
 
 #include "input_glyphs_source.h"
 #include "controller_list.h"
+#include "core/input/input.h"
 #include "input_glyph_svg_decode.h"
 #include "modules/input_glyphs/glyphs.gen.h"
 #include "scene/resources/image_texture.h"
@@ -65,14 +66,14 @@ Ref<Image> InputGlyphsSourceBuiltin::get_input_glyph(const InputGlyphsConstants:
 	}
 
 	if (p_input_origin == InputGlyphsConstants::INPUT_ORIGIN_INVALID) {
-		Ref<PlaceholderTexture2D> placeholder = memnew(PlaceholderTexture2D);
-		placeholder->set_size(size);
+		Ref<Image> placeholder = Image::create_empty(size.x, size.y, false, Image::FORMAT_R8);
+		placeholder->fill(Color(1.0f, 0.0f, 1.0f));
 		return placeholder;
 	}
 
 	if (theme > 2) {
-		Ref<PlaceholderTexture2D> placeholder = memnew(PlaceholderTexture2D);
-		placeholder->set_size(size);
+		Ref<Image> placeholder = Image::create_empty(size.x, size.y, false, Image::FORMAT_R8);
+		placeholder->fill(Color(1.0f, 0.0f, 1.0f));
 		ERR_FAIL_V_MSG(placeholder, vformat("Invalid theme index: %d", theme));
 	}
 
@@ -85,8 +86,8 @@ Ref<Image> InputGlyphsSourceBuiltin::get_input_glyph(const InputGlyphsConstants:
 	}
 
 	if (svg_index == -1) {
-		Ref<PlaceholderTexture2D> placeholder = memnew(PlaceholderTexture2D);
-		placeholder->set_size(size);
+		Ref<Image> placeholder = Image::create_empty(size.x, size.y, false, Image::FORMAT_R8);
+		placeholder->fill(Color(1.0f, 0.0f, 1.0f));
 		return placeholder;
 	}
 
@@ -98,6 +99,7 @@ Ref<Image> InputGlyphsSourceBuiltin::get_input_glyph(const InputGlyphsConstants:
 	PackedByteArray pba = String(svg_data).to_utf8_buffer();
 	if (InputGlyphSVGDecode::render_svg(out_image, pba, size) != OK) {
 		Ref<Image> placeholder = Image::create_empty(size.x, size.y, false, Image::FORMAT_R8);
+		placeholder->fill(Color(1.0f, 0.0f, 1.0f));
 		return placeholder;
 	}
 	return out_image;

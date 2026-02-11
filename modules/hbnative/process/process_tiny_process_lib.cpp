@@ -37,13 +37,13 @@ void ProcessTinyProcessLibrary::make_default() {
 
 void ProcessTinyProcessLibrary::_on_stdout(const char *bytes, size_t size) {
 	String line;
-	line.parse_utf8(bytes, size);
+	line.append_utf8(bytes, size);
 	_push_stdout_line(line);
 }
 
 void ProcessTinyProcessLibrary::_on_stderr(const char *bytes, size_t size) {
 	String line;
-	line.parse_utf8(bytes, size);
+	line.append_utf8(bytes, size);
 	_push_stderr_line(line);
 }
 

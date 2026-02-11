@@ -36,6 +36,7 @@
 struct CallbackMsg_t;
 
 class SteamworksCallbackData : public RefCounted {
+	GDCLASS(SteamworksCallbackData, RefCounted);
 	void *callback_data = nullptr;
 	int callback_type;
 

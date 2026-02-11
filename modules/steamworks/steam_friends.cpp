@@ -69,7 +69,7 @@ void HBSteamFriends::activate_game_overlay_to_web_page(const String &p_web_page,
 	if (p_modal) {
 		mode = EActivateGameOverlayToWebPageMode::k_EActivateGameOverlayToWebPageMode_Modal;
 	}
-	SteamAPI_ISteamFriends_ActivateGameOverlayToWebPage(steam_friends, p_web_page.utf8(), mode);
+	SteamAPI_ISteamFriends_ActivateGameOverlayToWebPage(steam_friends, p_web_page.utf8().get_data(), mode);
 }
 
 void HBSteamFriends::activate_game_overlay_to_store(const int64_t p_app_id, bool p_add_to_cart) const {

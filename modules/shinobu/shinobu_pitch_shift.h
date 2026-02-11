@@ -1,5 +1,6 @@
 #ifndef SHINOBU_PITCH_SHIFT_H
 #define SHINOBU_PITCH_SHIFT_H
+#include "core/math/math_defs.h"
 #include "miniaudio/miniaudio.h"
 
 #define SPS_PI 3.14159265358979323846
@@ -139,7 +140,7 @@ static void PitchShift(SMBPitchShift *smbPitchShift, float pitchShift, long numS
 	fftFrameSize2 = fftFrameSize/2;
 	stepSize = fftFrameSize/osamp;
 	freqPerBin = sampleRate/(double)fftFrameSize;
-	expct = 2.*Math_PI*(double)stepSize/(double)fftFrameSize;
+	expct = 2.*Math::PI*(double)stepSize/(double)fftFrameSize;
 	inFifoLatency = fftFrameSize-stepSize;
 	if (smbPitchShift->gRover == 0) { smbPitchShift->gRover = inFifoLatency;
 }
@@ -159,7 +160,7 @@ static void PitchShift(SMBPitchShift *smbPitchShift, float pitchShift, long numS
 
 			/* do windowing and re,im interleave */
 			for (k = 0; k < fftFrameSize;k++) {
-				window = -.5*cos(2.*Math_PI*(double)k/(double)fftFrameSize)+.5;
+				window = -.5*cos(2.*Math::PI*(double)k/(double)fftFrameSize)+.5;
 				smbPitchShift->gFFTworksp[2*k] = smbPitchShift->gInFIFO[k] * window;
 				smbPitchShift->gFFTworksp[2*k+1] = 0.;
 			}
@@ -187,14 +188,14 @@ static void PitchShift(SMBPitchShift *smbPitchShift, float pitchShift, long numS
 				tmp -= (double)k*expct;
 
 				/* map delta phase into +/- Pi interval */
-				qpd = tmp/Math_PI;
+				qpd = tmp/Math::PI;
 				if (qpd >= 0) { qpd += qpd&1;
 				} else { qpd -= qpd&1;
 }
-				tmp -= Math_PI*(double)qpd;
+				tmp -= Math::PI*(double)qpd;
 
 				/* get deviation from bin frequency from the +/- Pi interval */
-				tmp = osamp*tmp/(2.*Math_PI);
+				tmp = osamp*tmp/(2.*Math::PI);
 
 				/* compute the k-th partials' true frequency */
 				tmp = (double)k*freqPerBin + tmp*freqPerBin;
@@ -231,7 +232,7 @@ static void PitchShift(SMBPitchShift *smbPitchShift, float pitchShift, long numS
 				tmp /= freqPerBin;
 
 				/* take osamp into account */
-				tmp = 2.*Math_PI*tmp/osamp;
+				tmp = 2.*Math::PI*tmp/osamp;
 
 				/* add the overlap phase advance back in */
 				tmp += (double)k*expct;
@@ -254,7 +255,7 @@ static void PitchShift(SMBPitchShift *smbPitchShift, float pitchShift, long numS
 
 			/* do windowing and add to output accumulator */
 			for(k=0; k < fftFrameSize; k++) {
-				window = -.5*cos(2.*Math_PI*(double)k/(double)fftFrameSize)+.5;
+				window = -.5*cos(2.*Math::PI*(double)k/(double)fftFrameSize)+.5;
 				smbPitchShift->gOutputAccum[k] += 2.*window*smbPitchShift->gFFTworksp[2*k]/(fftFrameSize2*osamp);
 			}
 			for (k = 0; k < stepSize; k++) { smbPitchShift->gOutFIFO[k] = smbPitchShift->gOutputAccum[k];

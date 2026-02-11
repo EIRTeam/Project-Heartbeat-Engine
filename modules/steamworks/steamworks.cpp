@@ -105,7 +105,7 @@ void Steamworks::_run_callbacks() {
 }
 
 bool Steamworks::get_ticket_for_web_api(const String &p_identity) const {
-	return SteamAPI_ISteamUser_GetAuthTicketForWebApi(SteamAPI_SteamUser(), p_identity.utf8()) != k_HAuthTicketInvalid;
+	return SteamAPI_ISteamUser_GetAuthTicketForWebApi(SteamAPI_SteamUser(), p_identity.utf8().get_data()) != k_HAuthTicketInvalid;
 }
 
 void Steamworks::_bind_methods() {

@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "steam_input.h"
+#include "core/input/input.h"
 #include "input_glyphs_steamworks.h"
 #include "steam/steam_api_flat.h"
 #include "steamworks.h"

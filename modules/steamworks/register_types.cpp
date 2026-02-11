@@ -34,6 +34,8 @@
 #include "steamworks.h"
 #include "steamworks_constants.gen.h"
 
+#include "engine/core/config/engine.h"
+
 Steamworks *steamworks_singleton;
 void initialize_steamworks_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_CORE) {

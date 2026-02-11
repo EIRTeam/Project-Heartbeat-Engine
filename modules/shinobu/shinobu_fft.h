@@ -1,6 +1,8 @@
 #ifndef SHINOBU_FFT_H
 #define SHINOBU_FFT_H
 
+#include "core/math/math_defs.h"
+
 /* Thirdparty code, so disable clang-format with Godot style */
 /* clang-format off */
 static void smbFft(float *fftBuffer, long fftFrameSize, long sign)
@@ -38,7 +40,7 @@ static void smbFft(float *fftBuffer, long fftFrameSize, long sign)
 		le2 = le>>1;
 		ur = 1.0;
 		ui = 0.0;
-		arg = Math_PI / (le2>>1);
+		arg = Math::PI / (le2>>1);
 		wr = cos(arg);
 		wi = sign*sin(arg);
 		for (j = 0; j < le2; j += 2) {

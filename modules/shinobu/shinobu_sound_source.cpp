@@ -1,4 +1,5 @@
 #include "shinobu_sound_source.h"
+#include "core/os/os.h"
 #include "shinobu.h"
 #include "shinobu_macros.h"
 #include "thirdparty/ebur128/ebur128.h"
@@ -47,7 +48,7 @@ uint32_t ShinobuSoundSource::get_channel_count() const {
 	uint32_t channel_count;
 	// data sources cannot be reused, so this is the best we can do
 	ma_resource_manager_data_source source;
-	ma_resource_manager_data_source_init(ma_engine_get_resource_manager(Shinobu::get_singleton()->get_engine()), name.utf8(), 0, nullptr, &source);
+	ma_resource_manager_data_source_init(ma_engine_get_resource_manager(Shinobu::get_singleton()->get_engine()), name.utf8().get_data(), 0, nullptr, &source);
 	ma_resource_manager_data_source_get_data_format(&source, nullptr, &channel_count, nullptr, nullptr, 0);
 	ma_resource_manager_data_source_uninit(&source);
 	return channel_count;
@@ -94,10 +95,10 @@ ShinobuSoundSourceMemory::ShinobuSoundSourceMemory(String m_name, PackedByteArra
 	data = m_in_data;
 	ma_engine *engine = Shinobu::get_singleton()->get_engine();
 	name = vformat("%s_%d", name, Shinobu::get_singleton()->get_inc_sound_source_uid());
-	result = ma_resource_manager_register_encoded_data(ma_engine_get_resource_manager(engine), name.utf8(), (void *)data.ptr(), data.size());
+	result = ma_resource_manager_register_encoded_data(ma_engine_get_resource_manager(engine), name.utf8().get_data(), (void *)data.ptr(), data.size());
 }
 
 ShinobuSoundSourceMemory::~ShinobuSoundSourceMemory() {
 	ma_engine *engine = Shinobu::get_singleton()->get_engine();
-	ma_resource_manager_unregister_data(ma_engine_get_resource_manager(engine), name.utf8());
+	ma_resource_manager_unregister_data(ma_engine_get_resource_manager(engine), name.utf8().get_data());
 }

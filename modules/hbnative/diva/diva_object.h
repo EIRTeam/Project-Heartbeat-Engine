@@ -89,7 +89,7 @@ class DIVAObjectSet : public RefCounted {
 		uint32_t material;
 		uint8_t uv_indices[8];
 		LocalVector<uint16_t> bone_index_array;
-		LocalVector<int32_t> index_array;
+		PackedInt32Array index_array;
 	};
 
 	struct DIVAMesh {

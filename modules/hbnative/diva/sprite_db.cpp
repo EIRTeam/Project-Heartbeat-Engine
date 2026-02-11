@@ -1,5 +1,7 @@
 #include "sprite_db.h"
 
+#include "core/io/file_access.h"
+
 void DIVASpriteDB::read_classic(Ref<StreamPeerBuffer> p_stream) {
 	uint32_t sprite_sets_count = p_stream->get_u32();
 	uint32_t sprite_sets_offset = p_stream->get_u32();

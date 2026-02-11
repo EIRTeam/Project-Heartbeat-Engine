@@ -33,6 +33,7 @@
 
 #include "core/object/ref_counted.h"
 #include "core/os/thread.h"
+#include "engine/core/templates/rb_map.h"
 #include "scene/main/node.h"
 #include "servers/audio/audio_stream.h"
 

@@ -62,11 +62,11 @@ Vector<uint8_t> HBSteamRemoteStorage::file_read(const String &p_file_name) const
 }
 
 bool HBSteamRemoteStorage::file_write(const String &p_file_name, Vector<uint8_t> p_data) const {
-	return SteamAPI_ISteamRemoteStorage_FileWrite(remote_storage, p_file_name.utf8(), p_data.ptr(), p_data.size());
+	return SteamAPI_ISteamRemoteStorage_FileWrite(remote_storage, p_file_name.utf8().get_data(), p_data.ptr(), p_data.size());
 }
 
 bool HBSteamRemoteStorage::file_exists(const String &p_file_name) const {
-	return SteamAPI_ISteamRemoteStorage_FileExists(remote_storage, p_file_name.utf8());
+	return SteamAPI_ISteamRemoteStorage_FileExists(remote_storage, p_file_name.utf8().get_data());
 }
 
 uint64_t HBSteamRemoteStorage::get_file_size(const String &p_file_name) const {

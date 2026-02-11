@@ -4,6 +4,8 @@
 #include "scene/gui/button.h"
 #include "scene/gui/panel_container.h"
 
+class ShaderMaterial;
+
 class HBStyleboxBlurDrawer : public Control {
 	GDCLASS(HBStyleboxBlurDrawer, Control);
 	Ref<StyleBox> stylebox;

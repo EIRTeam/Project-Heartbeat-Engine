@@ -34,8 +34,6 @@
 
 #include "core/object/class_db.h"
 
-using namespace godot;
-
 // Helpers to handle the difference between core Object::get_indexed and the bindings version,
 // and in this class we only care about subnames.
 static NodePath nodepath_from_subnames(const Vector<StringName> &p_subnames) {

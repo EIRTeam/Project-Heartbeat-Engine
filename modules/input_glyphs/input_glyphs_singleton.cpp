@@ -382,8 +382,8 @@ String InputGlyphsSingleton::input_type_to_localized_string(InputGlyphsConstants
 	return ret;
 }
 
-List<StringName> InputGlyphsSingleton::get_game_actions() const {
-	List<StringName> actions;
+TypedArray<StringName> InputGlyphsSingleton::get_game_actions() const {
+	TypedArray<StringName> actions;
 	if (Engine::get_singleton()->is_editor_hint()) {
 		List<PropertyInfo> pinfo_l;
 		ProjectSettings::get_singleton()->get_property_list(&pinfo_l);

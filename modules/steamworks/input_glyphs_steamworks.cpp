@@ -31,6 +31,7 @@
 #include "input_glyphs_steamworks.h"
 #include "core/error/error_macros.h"
 #include "core/io/dir_access.h"
+#include "core/io/file_access.h"
 #include "core/io/image.h"
 #include "core/io/json.h"
 #include "scene/resources/image_texture.h"
@@ -150,16 +151,16 @@ Ref<Image> HBSteamworksInputGlyphsSource::get_input_glyph(const InputGlyphsConst
 	}
 
 	if (glyph_path.is_empty()) {
-		Ref<PlaceholderTexture2D> placeholder = memnew(PlaceholderTexture2D);
-		placeholder->set_size(size);
+		Ref<Image> placeholder = Image::create_empty(size.x, size.y, false, Image::FORMAT_R8);
+		placeholder->fill(Color(1.0f, 0.0f, 1.0f));
 		return placeholder;
 	}
 
 	Error err;
 	Ref<FileAccess> file = FileAccess::open(glyph_path, FileAccess::ModeFlags::READ, &err);
 	if (glyph_path.is_empty() || err != OK) {
-		Ref<PlaceholderTexture2D> placeholder = memnew(PlaceholderTexture2D);
-		placeholder->set_size(size);
+		Ref<Image> placeholder = Image::create_empty(size.x, size.y, false, Image::FORMAT_R8);
+		placeholder->fill(Color(1.0f, 0.0f, 1.0f));
 		return placeholder;
 	}
 
@@ -168,14 +169,13 @@ Ref<Image> HBSteamworksInputGlyphsSource::get_input_glyph(const InputGlyphsConst
 	String svg_str = file->get_as_utf8_string();
 	PackedByteArray pba = svg_str.to_utf8_buffer();
 	if (InputGlyphSVGDecode::render_svg(out_image, pba, size) != OK) {
-		Ref<PlaceholderTexture2D> placeholder = memnew(PlaceholderTexture2D);
-		placeholder->set_size(size);
+		Ref<Image> placeholder = Image::create_empty(size.x, size.y, false, Image::FORMAT_R8);
+		placeholder->fill(Color(1.0f, 0.0f, 1.0f));
 		return placeholder;
 	}
 
-	Ref<Texture2D> tex = ImageTexture::create_from_image(out_image);
-	tex->set_meta("glyph_path", glyph_path);
-	return tex;
+	out_image->set_meta("glyph_path", glyph_path);
+	return out_image;
 }
 
 InputGlyphsConstants::InputType HBSteamworksInputGlyphsSource::identify_joy(int p_device) const {

@@ -37,10 +37,10 @@
 #include <godot_cpp/classes/mutex.hpp>
 #include <godot_cpp/classes/semaphore.hpp>
 
-namespace core_bind {
+namespace CoreBind {
 using Mutex = godot::Mutex;
 using Semaphore = godot::Semaphore;
-}; //namespace core_bind
+}; //namespace CoreBind
 
 #else
 

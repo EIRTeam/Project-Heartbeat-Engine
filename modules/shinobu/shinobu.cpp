@@ -5,6 +5,7 @@
 
 #define MA_NO_VORBIS /* Disable the built-in Vorbis decoder to ensure the libvorbis decoder is picked. */
 #define MA_NO_OPUS /* Disable the (not yet implemented) built-in Opus decoder to ensure the libopus decoder is picked. */
+#define MA_NO_MP3
 #define MINIAUDIO_IMPLEMENTATION
 #define MA_DEBUG_OUTPUT
 
