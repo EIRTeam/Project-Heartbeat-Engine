@@ -94,6 +94,10 @@ Error JoypadSDL::initialize() {
 	return OK;
 }
 
+uint64_t nsec_to_usec(uint64_t p_nsec) {
+	return p_nsec / 1000;
+}
+
 void JoypadSDL::process_events() {
 	// Update rumble first for it to be applied when we handle SDL events
 	for (int i = 0; i < Input::JOYPADS_MAX; i++) {
@@ -216,7 +220,7 @@ void JoypadSDL::process_events() {
 					Input::get_singleton()->joy_axis(
 							joy_id,
 							static_cast<JoyAxis>(sdl_event.jaxis.axis), // Godot joy axis constants are already intentionally the same as SDL's
-							((sdl_event.jaxis.value - SDL_JOYSTICK_AXIS_MIN) / (float)(SDL_JOYSTICK_AXIS_MAX - SDL_JOYSTICK_AXIS_MIN) - 0.5f) * 2.0f, sdl_event.jaxis.timestamp);
+							((sdl_event.jaxis.value - SDL_JOYSTICK_AXIS_MIN) / (float)(SDL_JOYSTICK_AXIS_MAX - SDL_JOYSTICK_AXIS_MIN) - 0.5f) * 2.0f, nsec_to_usec(sdl_event.jaxis.timestamp));
 					break;
 
 				case SDL_EVENT_JOYSTICK_BUTTON_UP:
@@ -232,7 +236,7 @@ void JoypadSDL::process_events() {
 					Input::get_singleton()->joy_button(
 							joy_id,
 							static_cast<JoyButton>(sdl_event.jbutton.button), // Godot button constants are intentionally the same as SDL's, so we can just straight up use them
-							sdl_event.jbutton.down, sdl_event.jbutton.timestamp);
+							sdl_event.jbutton.down, nsec_to_usec(sdl_event.common.timestamp));
 					break;
 
 				case SDL_EVENT_JOYSTICK_HAT_MOTION:
@@ -241,7 +245,7 @@ void JoypadSDL::process_events() {
 					Input::get_singleton()->joy_hat(
 							joy_id,
 							(HatMask)sdl_event.jhat.value, // Godot hat masks are identical to SDL hat masks, so we can just use them as-is.
-							sdl_event.jhat.timestamp);
+							nsec_to_usec(sdl_event.common.timestamp));
 					break;
 
 				case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
@@ -260,7 +264,7 @@ void JoypadSDL::process_events() {
 							joy_id,
 							static_cast<JoyAxis>(sdl_event.gaxis.axis), // Godot joy axis constants are already intentionally the same as SDL's
 							axis_value,
-							sdl_event.gaxis.timestamp);
+							nsec_to_usec(sdl_event.common.timestamp));
 				} break;
 
 				// Do note SDL gamepads do not have separate events for the dpad
@@ -270,7 +274,7 @@ void JoypadSDL::process_events() {
 							joy_id,
 							static_cast<JoyButton>(sdl_event.gbutton.button), // Godot button constants are intentionally the same as SDL's, so we can just straight up use them
 							sdl_event.gbutton.down,
-							sdl_event.gbutton.timestamp);
+							nsec_to_usec(sdl_event.common.timestamp));
 					break;
 			}
 		}

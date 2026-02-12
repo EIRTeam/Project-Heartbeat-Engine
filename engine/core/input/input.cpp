@@ -1330,7 +1330,7 @@ void Input::set_event_dispatch_function(EventDispatchFunc p_function) {
 	event_dispatch_function = p_function;
 }
 
-void Input::joy_button(int p_device, JoyButton p_button, bool p_pressed, uint64_t p_timestamp) {
+void Input::joy_button(int p_device, JoyButton p_button, bool p_pressed, int64_t p_timestamp) {
 	_THREAD_SAFE_METHOD_;
 	Joypad &joy = joy_names[p_device];
 	ERR_FAIL_INDEX((int)p_button, (int)JoyButton::MAX);
@@ -1357,7 +1357,7 @@ void Input::joy_button(int p_device, JoyButton p_button, bool p_pressed, uint64_
 	// no event?
 }
 
-void Input::joy_axis(int p_device, JoyAxis p_axis, float p_value, uint64_t p_timestamp) {
+void Input::joy_axis(int p_device, JoyAxis p_axis, float p_value, int64_t p_timestamp) {
 	_THREAD_SAFE_METHOD_;
 
 	ERR_FAIL_INDEX((int)p_axis, (int)JoyAxis::MAX);
@@ -1427,7 +1427,7 @@ void Input::joy_axis(int p_device, JoyAxis p_axis, float p_value, uint64_t p_tim
 	}
 }
 
-void Input::joy_hat(int p_device, BitField<HatMask> p_val, uint64_t p_timestamp) {
+void Input::joy_hat(int p_device, BitField<HatMask> p_val, int64_t p_timestamp) {
 	_THREAD_SAFE_METHOD_;
 	const Joypad &joy = joy_names[p_device];
 
@@ -1469,24 +1469,24 @@ void Input::joy_hat(int p_device, BitField<HatMask> p_val, uint64_t p_timestamp)
 	joy_names[p_device].hat_current = (int)p_val;
 }
 
-void Input::_button_event(int p_device, JoyButton p_index, bool p_pressed, uint64_t p_timestamp) {
+void Input::_button_event(int p_device, JoyButton p_index, bool p_pressed, int64_t p_timestamp) {
 	Ref<InputEventJoypadButton> ievent;
 	ievent.instantiate();
 	ievent->set_device(p_device);
 	ievent->set_button_index(p_index);
 	ievent->set_pressed(p_pressed);
-	ievent->set_timestamp(p_timestamp);
+	ievent->set_timestamp_usec(p_timestamp);
 
 	parse_input_event(ievent);
 }
 
-void Input::_axis_event(int p_device, JoyAxis p_axis, float p_value, uint64_t p_timestamp) {
+void Input::_axis_event(int p_device, JoyAxis p_axis, float p_value, int64_t p_timestamp) {
 	Ref<InputEventJoypadMotion> ievent;
 	ievent.instantiate();
 	ievent->set_device(p_device);
 	ievent->set_axis(p_axis);
 	ievent->set_axis_value(p_value);
-	ievent->set_timestamp(p_timestamp);
+	ievent->set_timestamp_usec(p_timestamp);
 
 	parse_input_event(ievent);
 }

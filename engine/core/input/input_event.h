@@ -53,7 +53,7 @@ class InputEvent : public Resource {
 	GDCLASS(InputEvent, Resource);
 
 	int device = 0;
-	uint64_t timestamp = -1;
+	int64_t timestamp_usec = -1;
 
 protected:
 	bool canceled = false;
@@ -93,11 +93,11 @@ public:
 	virtual InputEventType get_type() const { return InputEventType::INVALID; }
 	InputEvent() {}
 
-	int64_t get_timestamp() const {
-		return timestamp;
+	int64_t get_timestamp_usec() const {
+		return timestamp_usec;
 	}
-	void set_timestamp(const uint64_t &p_timestamp) {
-		timestamp = p_timestamp;
+	void set_timestamp_usec(const int64_t &p_timestamp) {
+		timestamp_usec = p_timestamp;
 	}
 };
 
