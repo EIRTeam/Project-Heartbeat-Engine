@@ -40,7 +40,6 @@ void Shinobu::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "desired_buffer_size_msec"), "set_desired_buffer_size_msec", "get_desired_buffer_size_msec");
 	ClassDB::bind_method(D_METHOD("set_master_volume", "linear_volume"), &Shinobu::set_master_volume);
 	ClassDB::bind_method(D_METHOD("get_master_volume"), &Shinobu::get_master_volume);
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "master_volume"), "set_master_volume", "get_master_volume");
 	ClassDB::bind_method(D_METHOD("set_dsp_time", "new_time"), &Shinobu::set_dsp_time);
 	ClassDB::bind_method(D_METHOD("get_dsp_time"), &Shinobu::get_dsp_time);
 	ClassDB::bind_method(D_METHOD("get_actual_buffer_size"), &Shinobu::get_actual_buffer_size);
@@ -333,6 +332,9 @@ Error Shinobu::set_master_volume(float m_linear_volume) {
 
 float Shinobu::get_master_volume() {
 	ma_node *endpoint = ma_engine_get_endpoint(&engine);
+	if (!endpoint) {
+		return 0.0f;
+	}
 	return ma_node_get_output_bus_volume(endpoint, 0);
 }
 

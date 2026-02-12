@@ -5,6 +5,7 @@
 #endif
 
 #include "core/io/file_access.h"
+#include "core/os/time.h"
 #include "servers/rendering/rendering_device.h"
 
 PHNative *PHNative::singleton = NULL;
@@ -162,14 +163,22 @@ bool PHNative::is_sdl_device_game_controller(int p_joy_device_idx) {
 #endif
 }
 
+uint64_t PHNative::get_clock_time_usec() {
+#ifdef SDL_ENABLED
+	if (JoypadSDL *sdl = JoypadSDL::get_singleton(); sdl) {
+		return sdl->get_sdl_time_nsec() / 1000;
+	}
+#endif
+	return Time::get_singleton()->get_ticks_usec();
+}
+
 String PHNative::get_sdl_device_guid(int p_joy_device_idx) {
 #ifdef SDL_ENABLED
 	if (JoypadSDL *sdl = JoypadSDL::get_singleton(); sdl) {
 		return sdl->get_device_guid(p_joy_device_idx);
 	}
-#else
-	return "";
 #endif
+	return "";
 }
 
 void PHNative::_bind_methods() {
@@ -179,6 +188,7 @@ void PHNative::_bind_methods() {
 	ClassDB::bind_static_method("PHNative", D_METHOD("get_rendering_api_name"), &PHNative::get_rendering_api_name);
 	ClassDB::bind_static_method("PHNative", D_METHOD("is_sdl_device_game_controller"), &PHNative::is_sdl_device_game_controller);
 	ClassDB::bind_static_method("PHNative", D_METHOD("get_sdl_device_guid"), &PHNative::get_sdl_device_guid);
+	ClassDB::bind_static_method("PHNative", D_METHOD("get_clock_time_usec"), &PHNative::get_clock_time_usec);
 
 	ClassDB::bind_method(D_METHOD("get_blur_controls_enabled"), &PHNative::get_blur_controls_enabled);
 	ClassDB::bind_method(D_METHOD("set_blur_controls_enabled", "blur_controls_enabled"), &PHNative::set_blur_controls_enabled);
