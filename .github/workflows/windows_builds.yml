@@ -62,6 +62,12 @@ jobs:
         run: |
           ./get_deps.ps1
 
+      - name: Download DX12 deps
+        run: |
+          cd engine
+          python misc\scripts\install_d3d12_sdk_windows.py
+          cd ..
+
       - name: Compilation
         uses: ./.github/actions/godot-build
         with:
