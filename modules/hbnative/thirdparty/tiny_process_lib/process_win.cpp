@@ -1,4 +1,3 @@
-#include "core/string/print_string.h"
 #include "process.hpp"
 // clang-format off
 #include <windows.h>
@@ -342,9 +341,6 @@ void Process::close_fds() noexcept {
 }
 
 bool Process::write(const char *bytes, size_t n) {
-  if(!open_stdin)
-	print_line("COCK");
-
   std::lock_guard<std::mutex> lock(stdin_mutex);
   if(stdin_fd) {
     DWORD written;
