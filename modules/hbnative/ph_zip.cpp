@@ -28,6 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#include "thirdparty/minizip/ioapi.h"
 #ifdef MINIZIP_ENABLED
 
 #include "ph_zip.h"
@@ -40,12 +41,12 @@ struct ZipData {
 	Ref<FileAccess> f;
 };
 
-static void *phzip_godot_open(voidpf opaque, const char *p_fname, int mode) {
+static void *phzip_godot_open(voidpf opaque, const void *p_fname, int mode) {
 	if (mode & ZLIB_FILEFUNC_MODE_WRITE) {
 		return nullptr;
 	}
 
-	Ref<FileAccess> f = FileAccess::open(String::utf8(p_fname), FileAccess::READ);
+	Ref<FileAccess> f = FileAccess::open(String::utf8((const char*)p_fname), FileAccess::READ);
 	ERR_FAIL_COND_V(f.is_null(), nullptr);
 
 	ZipData *zd = memnew(ZipData);
@@ -63,12 +64,12 @@ static uLong phzip_godot_write(voidpf opaque, voidpf stream, const void *buf, uL
 	return 0;
 }
 
-static long phzip_godot_tell(voidpf opaque, voidpf stream) {
+static ZPOS64_T phzip_godot_tell(voidpf opaque, voidpf stream) {
 	ZipData *zd = (ZipData *)stream;
 	return zd->f->get_position();
 }
 
-static long phzip_godot_seek(voidpf opaque, voidpf stream, uLong offset, int origin) {
+static long phzip_godot_seek(voidpf opaque, voidpf stream, ZPOS64_T offset, int origin) {
 	ZipData *zd = (ZipData *)stream;
 
 	uint64_t pos = offset;
@@ -123,25 +124,25 @@ unzFile PHZipArchive::get_file_handle(const String &p_file) const {
 	ERR_FAIL_COND_V_MSG(!file_exists(p_file), nullptr, vformat("File '%s' doesn't exist.", p_file));
 	File file = files[p_file];
 
-	zlib_filefunc_def io;
+	zlib_filefunc64_def_s io;
 	memset(&io, 0, sizeof(io));
 
 	io.opaque = nullptr;
-	io.zopen_file = phzip_godot_open;
+	io.zopen64_file = phzip_godot_open;
 	io.zread_file = phzip_godot_read;
 	io.zwrite_file = phzip_godot_write;
 
-	io.ztell_file = phzip_godot_tell;
-	io.zseek_file = phzip_godot_seek;
+	io.ztell64_file = phzip_godot_tell;
+	io.zseek64_file = phzip_godot_seek;
 	io.zclose_file = phzip_godot_close;
 	io.zerror_file = phzip_godot_testerror;
 
 	io.alloc_mem = phzip_godot_alloc;
 	io.free_mem = phzip_godot_free;
 
-	unzFile pkg = unzOpen2(packages[file.package].filename.utf8().get_data(), &io);
+	unzFile pkg = unzOpen2_64(packages[file.package].filename.utf8().get_data(), &io);
 	ERR_FAIL_NULL_V_MSG(pkg, nullptr, vformat("Cannot open file '%s'.", packages[file.package].filename));
-	int unz_err = unzGoToFilePos(pkg, &file.file_pos);
+	int unz_err = unzGoToFilePos64(pkg, &file.file_pos);
 	if (unz_err != UNZ_OK || unzOpenCurrentFile(pkg) != UNZ_OK) {
 		unzClose(pkg);
 		ERR_FAIL_V(nullptr);
@@ -154,20 +155,20 @@ bool PHZipArchive::try_open_pack(const String &p_path, bool p_replace_files, uin
 	// load with offset feature only supported for PCK files
 	ERR_FAIL_COND_V_MSG(p_offset != 0, false, "Invalid PCK data. Note that loading files with a non-zero offset isn't supported with ZIP archives.");
 
-	zlib_filefunc_def io;
+	zlib_filefunc64_def io;
 	memset(&io, 0, sizeof(io));
 
 	io.opaque = nullptr;
-	io.zopen_file = phzip_godot_open;
+	io.zopen64_file = phzip_godot_open;
 	io.zread_file = phzip_godot_read;
 	io.zwrite_file = phzip_godot_write;
 
-	io.ztell_file = phzip_godot_tell;
-	io.zseek_file = phzip_godot_seek;
+	io.ztell64_file = phzip_godot_tell;
+	io.zseek64_file = phzip_godot_seek;
 	io.zclose_file = phzip_godot_close;
 	io.zerror_file = phzip_godot_testerror;
 
-	unzFile zfile = unzOpen2(p_path.utf8().get_data(), &io);
+	unzFile zfile = unzOpen2_64(p_path.utf8().get_data(), &io);
 	ERR_FAIL_NULL_V(zfile, false);
 
 	unz_global_info64 gi;
@@ -189,7 +190,7 @@ bool PHZipArchive::try_open_pack(const String &p_path, bool p_replace_files, uin
 
 		File f;
 		f.package = pkg_num;
-		unzGetFilePos(zfile, &f.file_pos);
+		unzGetFilePos64(zfile, &f.file_pos);
 
 		String fname = String::utf8(filename_inzip);
 		files[fname] = f;
