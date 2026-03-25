@@ -35,6 +35,8 @@ class RmlUiSingleton : public Object {
     static inline RmlUiSingleton *singleton = nullptr;
     Rml::Context *context = nullptr;
     RID canvas_item;
+
+    bool initialized = false;
 public:
     static RmlUiSingleton *get_singleton();
     RID create_document_from_path(const String &p_path);

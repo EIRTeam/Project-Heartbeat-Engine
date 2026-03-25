@@ -111,6 +111,9 @@ RmlUiSingleton::RmlUiSingleton() {
 }
 
 RmlUiSingleton::~RmlUiSingleton() {
+    if (!initialized) {
+        return;
+    }
     if (canvas_item.is_valid()) {
         RS::get_singleton()->free_rid(canvas_item);
     }
