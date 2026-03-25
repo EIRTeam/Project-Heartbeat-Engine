@@ -56,6 +56,7 @@ void FFmpegStreamInfo::_bind_methods() {
 
 	BIND_ENUM_CONSTANT(AUDIO_CODEC_VORBIS);
 	BIND_ENUM_CONSTANT(AUDIO_CODEC_AAC);
+	BIND_ENUM_CONSTANT(AUDIO_CODEC_OPUS);
 	BIND_ENUM_CONSTANT(AUDIO_CODEC_UNKNOWN);
 }
 
@@ -98,6 +99,9 @@ FFmpegStreamInfo::VideoCodec _ffmpeg_to_video_codec(AVCodecID p_codec) {
 FFmpegStreamInfo::AudioCodec _ffmpeg_to_audio_codec(AVCodecID p_codec) {
 	FFmpegStreamInfo::AudioCodec audio_codec = FFmpegStreamInfo::AUDIO_CODEC_UNKNOWN;
 	switch (p_codec) {
+		case AV_CODEC_ID_OPUS: {
+			audio_codec = FFmpegStreamInfo::AUDIO_CODEC_OPUS;
+		} break;
 		case AV_CODEC_ID_AAC: {
 			audio_codec = FFmpegStreamInfo::AUDIO_CODEC_AAC;
 		} break;
@@ -196,6 +200,9 @@ String FFmpegStreamInfo::audio_codec_to_string(AudioCodec p_codec) {
 	String codec = "Invalid";
 
 	switch (p_codec) {
+		case AUDIO_CODEC_OPUS: {
+			codec = "Opus";
+		} break;
 		case AUDIO_CODEC_VORBIS: {
 			codec = "Vorbis";
 		} break;
