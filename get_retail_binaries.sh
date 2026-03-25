@@ -7,15 +7,16 @@ mkdir -p retail_bin
 cd retail_bin
 
 wget -N https://github.com/EIRTeam/Project-Heartbeat-Engine/releases/download/latest/windows-engine-debug.zip
-unzip windows-engine-debug
+unzip -o windows-engine-debug
 wget -N https://github.com/EIRTeam/Project-Heartbeat-Engine/releases/download/latest/windows-editor.zip
-unzip windows-editor
+unzip -o windows-editor
 wget -N https://github.com/EIRTeam/Project-Heartbeat-Engine/releases/download/latest/windows-engine.zip
-unzip windows-engine
+unzip -o windows-engine
 wget -N https://github.com/EIRTeam/Project-Heartbeat-Engine/releases/download/latest/linux-engine.zip
-unzip linux-engine
+unzip -o linux-engine
 wget -N https://github.com/EIRTeam/Project-Heartbeat-Engine/releases/download/latest/android-engine.zip
-unzip android-engine
+unzip -o android-engine
 wget -N https://github.com/EIRTeam/Project-Heartbeat-Engine/releases/download/latest/linux-editor.zip
-unzip linux-editor
+unzip -o linux-editor
 wget -N https://github.com/EIRTeam/Project-Heartbeat-Engine/releases/download/latest/godot.linuxbsd.template_release.x86_64.syms
+chmod +x *.x86_64
