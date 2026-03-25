@@ -6,6 +6,7 @@
 #include "core/object/class_db.h"
 #include "diva/bone_db.h"
 #include "diva/diva_object.h"
+#include "hbnative/ph_zip_packer.h"
 #include "interval_tree.h"
 #include "modules/hbnative/ph_blur_controls.h"
 #include "multi_spin_box.h"
@@ -83,6 +84,7 @@ void initialize_hbnative_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(DIVASkeleton);
 	GDREGISTER_CLASS(DIVAObjectSet);
 	GDREGISTER_CLASS(PHZipArchive);
+	GDREGISTER_CLASS(PHZIPPacker);
 	GDREGISTER_ABSTRACT_CLASS(HBRectPack);
 	GDREGISTER_ABSTRACT_CLASS(PHZipFFmpegVideoStream);
 	Engine::get_singleton()->add_singleton(Engine::Singleton("PHAudioStreamPreviewGenerator", PHAudioStreamPreviewGenerator::get_singleton()));

@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "thirdparty/minizip/ioapi.h"
+#include "thirdparty/minizip/unzip.h"
 #ifdef MINIZIP_ENABLED
 
 #include "ph_zip.h"
@@ -143,7 +144,14 @@ unzFile PHZipArchive::get_file_handle(const String &p_file) const {
 	unzFile pkg = unzOpen2_64(packages[file.package].filename.utf8().get_data(), &io);
 	ERR_FAIL_NULL_V_MSG(pkg, nullptr, vformat("Cannot open file '%s'.", packages[file.package].filename));
 	int unz_err = unzGoToFilePos64(pkg, &file.file_pos);
-	if (unz_err != UNZ_OK || unzOpenCurrentFile(pkg) != UNZ_OK) {
+	if (unz_err != UNZ_OK) {
+		unzClose(pkg);
+		ERR_FAIL_V(nullptr);
+	}
+
+	int open_err = unzOpenCurrentFile(pkg);
+
+	if (open_err != UNZ_OK) {
 		unzClose(pkg);
 		ERR_FAIL_V(nullptr);
 	}
