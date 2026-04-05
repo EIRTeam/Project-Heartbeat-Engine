@@ -21,10 +21,11 @@ void RmlUiSingleton::_bind_methods() {
     ClassDB::bind_method(D_METHOD("end_frame"), &RmlUiSingleton::end_frame);
 }
 void RmlUiSingleton::init() {
+    initialized = true;
     Rml::SetFileInterface(&file_interface);
     Rml::SetSystemInterface(&system_interface);
     render_interface = memnew(RenderInterface_Godot_RD);
-    render_interface->Initialize();
+    render_interface->initialize();
     Rml::SetRenderInterface(render_interface);
     Rml::SetFontEngineInterface(&font_interface);
 
@@ -55,7 +56,7 @@ void RmlUiSingleton::begin_frame() {
     Projection proj = Projection::create_orthogonal(0.0, window_size.x, 0, window_size.y, -100.0f, 100.0f);
     render_interface->set_projection(proj);
 
-    render_interface->BeginFrame();
+    render_interface->begin_frame();
     context->Render();
 }
 
@@ -73,7 +74,7 @@ void RmlUiSingleton::end_frame() {
 }
 
 void RmlUiSingleton::_end_frame() {
-    render_interface->EndFrame();
+    render_interface->end_frame();
 }
 
 RmlUiSingleton *RmlUiSingleton::get_singleton()

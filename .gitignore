@@ -26,3 +26,5 @@ venv
 __pycache__/
 *.pyc
 buildeps/
+
+*.gen.h
