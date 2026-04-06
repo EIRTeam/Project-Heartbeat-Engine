@@ -96,7 +96,7 @@ void ElementFormControlTextArea::SetCompositionRange(int range_start, int range_
 bool ElementFormControlTextArea::GetIntrinsicDimensions(Vector2f& dimensions, float& /*ratio*/)
 {
 	dimensions.x = (float)(GetNumColumns() * ElementUtilities::GetStringWidth(this, "m"));
-	dimensions.y = (float)GetNumRows() * Math::Round(GetLineHeight());
+	dimensions.y = GetNumRows() * GetLineHeight();
 
 	return true;
 }

@@ -52,8 +52,9 @@ void ElementProgress::SetValue(float in_value)
 
 bool ElementProgress::GetIntrinsicDimensions(Vector2f& dimensions, float& /*ratio*/)
 {
-	dimensions.x = 256;
-	dimensions.y = 16;
+	dimensions.x = 256 * ElementUtilities::GetDensityIndependentPixelRatio(this);
+	dimensions.y = GetLineHeight();
+
 	return true;
 }
 

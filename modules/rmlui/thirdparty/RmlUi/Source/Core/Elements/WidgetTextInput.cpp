@@ -1006,7 +1006,7 @@ void WidgetTextInput::ExpandSelection()
 const String& WidgetTextInput::GetValue() const
 {
 	static const String empty_value;
-	if (parent->IsPseudoClassSet(":placeholder"))
+	if (parent->IsPseudoClassSet("placeholder-shown"))
 		return empty_value;
 
 	return text_element->GetText();
@@ -1021,7 +1021,7 @@ void WidgetTextInput::SetValueOrPlaceholder(const String& value, const String& p
 		UpdateSelection(false);
 	}
 
-	parent->SetPseudoClass(":placeholder", showing_placeholder);
+	parent->SetPseudoClass("placeholder-shown", showing_placeholder);
 	text_element->SetText(showing_placeholder ? placeholder : value);
 
 	ForceFormattingOnNextLayout();
@@ -1472,7 +1472,7 @@ void WidgetTextInput::UpdateCursorPosition(bool update_ideal_cursor_position)
 	};
 
 	float alignment_offset;
-	if (parent->IsPseudoClassSet(":placeholder"))
+	if (parent->IsPseudoClassSet("placeholder-shown"))
 		alignment_offset = AlignmentOffsetForPlaceholder();
 	else
 		alignment_offset = GetAlignmentSpecificTextOffset(line);

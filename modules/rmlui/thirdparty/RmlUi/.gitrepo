@@ -6,7 +6,7 @@
 [subrepo]
 	remote = https://github.com/mikke89/RmlUi.git
 	branch = master
-	commit = 588874489295b5dcd13d9eaa002ea2d73b8addbf
-	parent = ee2affa83e5a7549d238ff3ed1af71fa566c97e7
+	commit = f367514252b59b888c379beed4f3f08ba20d0031
+	parent = 3d5fb57dcd8ee286124b02e56916e1d7072eb6df
 	method = merge
 	cmdver = 0.4.9

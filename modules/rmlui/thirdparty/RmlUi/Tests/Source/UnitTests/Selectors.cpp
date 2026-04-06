@@ -537,7 +537,8 @@ TEST_CASE("Selectors.placeholder")
 )";
 
 	ElementDocument* document = context->LoadDocumentFromMemory(document_rml);
-	document->GetElementById("D")->SetPseudoClass("placeholder", true);
+	// The following sets "::placeholder-shown" rather than ":placeholder-shown", which should be recognized as two different pseudo-classes.
+	document->GetElementById("D")->SetPseudoClass(":placeholder-shown", true);
 	document->Show();
 
 	auto CheckSelector = [document](const String& selector, const String& expected_ids) {
@@ -546,27 +547,27 @@ TEST_CASE("Selectors.placeholder")
 		CHECK_MESSAGE(ElementListToIds(elements) == expected_ids, "Selector: ", selector);
 	};
 
-	CheckSelector("::placeholder", "A");
-	CheckSelector(":placeholder", "D");
-	CheckSelector("div:placeholder", "D");
+	CheckSelector(":placeholder-shown", "A");
+	CheckSelector("::placeholder-shown", "D");
+	CheckSelector("div::placeholder-shown", "D");
 
-	CheckSelector("input::placeholder", "A");
-	CheckSelector("input.text::placeholder", "A");
-	CheckSelector("input[type=text]::placeholder", "A");
-	CheckSelector("input[type=password]::placeholder", "");
+	CheckSelector("input:placeholder-shown", "A");
+	CheckSelector("input.text:placeholder-shown", "A");
+	CheckSelector("input[type=text]:placeholder-shown", "A");
+	CheckSelector("input[type=password]:placeholder-shown", "");
 	CheckSelector("input::other", "");
 
 	document->GetElementById("B")->SetAttribute("value", "");
 	TestsShell::RenderLoop();
-	CheckSelector("::placeholder", "A B");
+	CheckSelector(":placeholder-shown", "A B");
 
 	document->GetElementById("A")->SetAttribute("placeholder", "");
 	TestsShell::RenderLoop();
-	CheckSelector("::placeholder", "B");
+	CheckSelector(":placeholder-shown", "B");
 
 	document->GetElementById("B")->SetAttribute("value", "Some value again");
 	TestsShell::RenderLoop();
-	CheckSelector("::placeholder", "");
+	CheckSelector(":placeholder-shown", "");
 
 	context->UnloadDocument(document);
 	TestsShell::ShutdownShell();

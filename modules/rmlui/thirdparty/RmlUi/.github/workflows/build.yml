@@ -29,7 +29,7 @@ jobs:
           - cmake_options: -DRMLUI_BACKEND=GLFW_VK -DCMAKE_BUILD_TYPE=Debug -DRMLUI_VK_DEBUG=ON -DRMLUI_PRECOMPILED_HEADERS=OFF
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Install Dependencies
       run: |-
@@ -72,7 +72,7 @@ jobs:
           - cmake_options: -DRMLUI_BACKEND=native -DCMAKE_BUILD_TYPE=Debug -DRMLUI_VK_DEBUG=ON
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Dependencies
         run: |-
@@ -102,7 +102,7 @@ jobs:
           - cmake_options: -DRMLUI_BACKEND=GLFW_GL2
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Install Dependencies
       run: brew install lua sdl2 sdl2_image glfw
@@ -122,7 +122,7 @@ jobs:
     runs-on: windows-latest
 
     env:
-      BUILD_TYPE: Release
+      BUILD_TYPE: ${{ matrix.build_type || 'Release' }}
       VCPKG_DEFAULT_TRIPLET: x64-windows
 
     strategy:
@@ -131,13 +131,19 @@ jobs:
         include:
           - cmake_options: -DRMLUI_BACKEND=auto -DRMLUI_PRECOMPILED_HEADERS=OFF
           - cmake_options: -DRMLUI_BACKEND=Win32_VK -DRMLUI_VK_DEBUG=ON
+            build_type: Debug
           - cmake_options: -DRMLUI_BACKEND=SDL_VK -DRMLUI_LUA_BINDINGS_LIBRARY=luajit
+          - cmake_options: -DRMLUI_BACKEND=GLFW_VK
+          - cmake_options: -DRMLUI_BACKEND=Win32_DX12
+          - cmake_options: -DRMLUI_BACKEND=SDL_DX12
+          - cmake_options: -DRMLUI_BACKEND=GLFW_DX12 -DRMLUI_DX_DEBUG=ON
+            build_type: Debug
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Install Dependencies
-      run: C:\vcpkg\vcpkg install freetype[core] sdl2[core,vulkan] glfw3 lua[core] luajit
+      run: C:\vcpkg\vcpkg install freetype[core] sdl3[core,vulkan] sdl3-image[core] glfw3 lua[core] luajit
 
     - name: Configure CMake
       run: >-
@@ -157,7 +163,7 @@ jobs:
       MSYSTEM: MINGW64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Dependencies
         run: |-
@@ -181,7 +187,7 @@ jobs:
   Emscripten:
     runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Install Dependencies
       run: |-

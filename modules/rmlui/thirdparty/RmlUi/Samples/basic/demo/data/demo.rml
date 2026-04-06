@@ -523,7 +523,7 @@ progress {
 	background-color: #aca;
 	color: #999;
 }
-#controls textarea::placeholder
+#controls textarea:placeholder-shown
 {
 	font-effect: outline(2dp #aba);
 	color: #fafafa;
