@@ -1,10 +1,13 @@
+#include "RmlUi/Core/Dictionary.h"
 #include "core/error/error_macros.h"
 #include "core/io/image.h"
 #include "core/math/math_funcs.h"
+#include "core/os/memory.h"
 #include "core/string/print_string.h"
 #include "engine/core/io/resource_loader.h"
 #include "godot_conversion.h"
 #include "godot_render_interface.h"
+#include "rmlui/backend/godot_rmlui_layers.h"
 #include "rmlui/backend/godot_rmlui_shaders.h"
 #include "RmlUi/Core/Math.h"
 #include "RmlUi/Core/Mesh.h"
@@ -110,6 +113,37 @@ RD::FramebufferFormatID RenderInterface_Godot_RD::get_framebuffer_format() const
 	return layers.get_framebuffer_format();
 }
 
+void RenderInterface_Godot_RD::render_fullscreen_texture_quad(RID texture, Vector2 p_uv_scale, bool p_blend) {
+	if (p_uv_scale.is_zero_approx()) {
+        return;
+    }
+    RD *rd = RD::get_singleton();
+
+    GodotRmlUiShaders::RenderShaderVariant variant = p_blend ? GodotRmlUiShaders::SHADER_VARIANT_NORMAL : GodotRmlUiShaders::SHADER_VARIANT_NORMAL_NO_BLEND;
+    
+    rd->draw_list_bind_render_pipeline(render_state.draw_list, shaders.get_render_pipeline(GodotRmlUiShaders::RENDER_SHADER_PASSTHROUGH, variant, get_framebuffer_format(), vertex_format));
+    rd->draw_list_bind_uniform_set(render_state.draw_list, make_texture_uniform_set(texture, shaders.get_render_shader(GodotRmlUiShaders::RENDER_SHADER_PASSTHROUGH), 0), 0);
+    if (p_uv_scale == Vector2()) {
+        GeometryView *view = reinterpret_cast<GeometryView*>(fullscreen_quad_geometry);
+        rd->draw_list_bind_index_array(render_state.draw_list, view->index_array);
+        rd->draw_list_bind_vertex_array(render_state.draw_list, view->vertex_array);
+    } else {
+        Rml::Mesh mesh;
+        Rml::MeshUtilities::GenerateQuad(mesh, Rml::Vector2f(-1), Rml::Vector2f(2), {});
+        if (p_uv_scale != Vector2(1.0, 1.0) || p_uv_scale != Vector2(0.0, 0.0)) {
+            for (Rml::Vertex& vertex : mesh.vertices)
+                vertex.tex_coord = (vertex.tex_coord * Rml::Vector2f(p_uv_scale.x, p_uv_scale.y));
+        }
+
+        Rml::CompiledGeometryHandle geometry = CompileGeometry(mesh.vertices, mesh.indices);
+        GeometryView *view = reinterpret_cast<GeometryView*>(geometry);
+        rd->draw_list_bind_index_array(render_state.draw_list, view->index_array);
+        rd->draw_list_bind_vertex_array(render_state.draw_list, view->vertex_array);
+        ReleaseGeometry(geometry);
+    }
+    rd->draw_list_draw(render_state.draw_list, true);
+}
+
 RID RenderInterface_Godot_RD::get_final_framebuffer() const {
     RID viewport = SceneTree::get_singleton()->get_root()->get_viewport_rid();
     RID render_target = RS::get_singleton()->viewport_get_render_target(viewport);
@@ -142,11 +176,9 @@ void RenderInterface_Godot_RD::render() {
         }
 
         Rml::Mesh mesh;
-        Rml::MeshUtilities::GenerateQuad(mesh, Rml::Vector2f(0), Rml::Vector2f(current_fb_size.x, current_fb_size.y), Rml::ColourbPremultiplied(255, 255, 255));
+        Rml::MeshUtilities::GenerateQuad(mesh, Rml::Vector2f(-1), Rml::Vector2f(2), Rml::ColourbPremultiplied(255, 255, 255));
         fullscreen_quad_geometry = CompileGeometry(mesh.vertices, mesh.indices);
     }
-
-    rd->draw_command_begin_label("RmlUi", Color(0.0, 1.0,0.0));
 
     for (RenderCommand &command : render_commands) {
         std::visit([this](const auto &p_command) {
@@ -156,7 +188,6 @@ void RenderInterface_Godot_RD::render() {
     end_draw_pass();
     present();
     layers.pop_layer();
-    rd->draw_command_end_label();
 }
 
 void RenderInterface_Godot_RD::initialize() {
@@ -320,7 +351,7 @@ void RenderInterface_Godot_RD::flush_element_transforms_buffer() {
 }
 
 void RenderInterface_Godot_RD::execute_command(const RenderGeometryCommand &p_command) {
-    _ensure_in_draw_pass();
+    _ensure_in_draw_pass(get_framebuffer());
     RD *rd = RD::get_singleton();
     Texture *texture = reinterpret_cast<Texture*>(p_command.texture);
 
@@ -344,12 +375,12 @@ void RenderInterface_Godot_RD::execute_command(const RenderGeometryCommand &p_co
         currently_bound_pipeline = new_pipeline_id;
         switch(*currently_bound_shader) {
 			case BoundShader::COLOR: {
-                rd->draw_list_bind_render_pipeline(draw_list, shaders.get_render_pipeline(
+                rd->draw_list_bind_render_pipeline(render_state.draw_list, shaders.get_render_pipeline(
                     GodotRmlUiShaders::RENDER_SHADER_COLOR, new_variant, get_framebuffer_format(), get_vertex_format()));
                 shader = shaders.get_render_shader(GodotRmlUiShaders::RENDER_SHADER_COLOR);
             } break;
 			case BoundShader::TEXTURE: {
-                rd->draw_list_bind_render_pipeline(draw_list, shaders.get_render_pipeline(
+                rd->draw_list_bind_render_pipeline(render_state.draw_list, shaders.get_render_pipeline(
                     GodotRmlUiShaders::RENDER_SHADER_TEXTURE, new_variant, get_framebuffer_format(), get_vertex_format()));
                 shader = shaders.get_render_shader(GodotRmlUiShaders::RENDER_SHADER_TEXTURE);
             } break;
@@ -358,16 +389,16 @@ void RenderInterface_Godot_RD::execute_command(const RenderGeometryCommand &p_co
         rebind_shared_uniforms(shader);
         push_constant_dirty = true;
         if (render_state.clip_mask_state.enabled) {
-            rd->draw_list_set_stencil_reference(draw_list, render_state.clip_mask_state.stencil_test_value);
+            rd->draw_list_set_stencil_reference(render_state.draw_list, render_state.clip_mask_state.stencil_test_value);
         }
 	}
 
     if (*currently_bound_shader == BoundShader::TEXTURE) {
-        RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RenderingServer::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RenderingServer::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
+        RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RenderingServer::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RenderingServer::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
         RID texture_rid = RS::get_singleton()->texture_get_rd_texture(texture->texture_ref->get_rid());
         RD::Uniform texture_uniform = RD::Uniform(RenderingDeviceCommons::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, texture_rid}));
         RID uniform_set = uniform_cache->get_cache(shaders.get_render_shader(GodotRmlUiShaders::RENDER_SHADER_TEXTURE), TEXTURE_SHADER_UNIFORM_SET_IDX, texture_uniform); 
-        rd->draw_list_bind_uniform_set(draw_list, uniform_set, TEXTURE_SHADER_UNIFORM_SET_IDX);
+        rd->draw_list_bind_uniform_set(render_state.draw_list, uniform_set, TEXTURE_SHADER_UNIFORM_SET_IDX);
     }
 
     render_geometry(p_command.geometry, Vector2(p_command.translation.x, p_command.translation.y));
@@ -380,7 +411,7 @@ void RenderInterface_Godot_RD::execute_command(const SetTransformIndexCommand &p
 
 void RenderInterface_Godot_RD::execute_command(const ScissorEnableCommand &p_command) {
     if (!p_command.enabled && is_in_draw_pass()) {
-        RD::get_singleton()->draw_list_disable_scissor(draw_list);
+        RD::get_singleton()->draw_list_disable_scissor(render_state.draw_list);
     }
 
 	render_state.scissor_state.enabled = p_command.enabled;
@@ -390,7 +421,7 @@ void RenderInterface_Godot_RD::execute_command(const ScissorSetRegionCommand &p_
 	render_state.scissor_state.region = p_command.region;
     if (is_in_draw_pass()) {
         if (!render_state.scissor_state.enabled && render_state.scissor_state.region.has_value()) {
-            RD::get_singleton()->draw_list_enable_scissor(draw_list, *render_state.scissor_state.region);
+            RD::get_singleton()->draw_list_enable_scissor(render_state.draw_list, *render_state.scissor_state.region);
         }
     }
 }
@@ -433,8 +464,7 @@ void RenderInterface_Godot_RD::execute_command(const SaveLayerAsTextureCommand &
     };
     
     RID out_texture = rd->texture_create(resolve_format, texture_view);
-    rd->draw_command_begin_label(vformat("Blit layer %d -> SavedTexture (%d x %d)", layers.get_current_layer(), scissor_region.size.x, scissor_region.size.y).utf8(), Color(1.0, 1.0, 0.0));
-    execute_blit(blit_source, out_texture, scissor_region.position, scissor_region.size);
+    execute_blit(blit_source, out_texture, scissor_region.position, scissor_region.size, Vector2i());
     rd->draw_command_end_label();
     Ref<Texture2DRD> tex;
     tex.instantiate();
@@ -444,7 +474,7 @@ void RenderInterface_Godot_RD::execute_command(const SaveLayerAsTextureCommand &
 }
 
 void RenderInterface_Godot_RD::execute_command(const RenderToClipMaskCommand &p_command) {
-    _ensure_in_draw_pass();
+    _ensure_in_draw_pass(get_framebuffer());
     RD *rd = RD::get_singleton();
 
     GodotRmlUiShaders::RenderShaderVariant render_shader_variant;
@@ -469,21 +499,59 @@ void RenderInterface_Godot_RD::execute_command(const RenderToClipMaskCommand &p_
     currently_bound_pipeline = shaders.get_pipeline_id(GodotRmlUiShaders::RENDER_SHADER_COLOR, render_shader_variant, get_framebuffer_format(), vertex_format);
     currently_bound_shader = BoundShader::COLOR;
 
-	rd->draw_list_bind_render_pipeline(draw_list, shaders.get_render_pipeline(GodotRmlUiShaders::RENDER_SHADER_COLOR, render_shader_variant, get_framebuffer_format(), vertex_format));
+	rd->draw_list_bind_render_pipeline(render_state.draw_list, shaders.get_render_pipeline(GodotRmlUiShaders::RENDER_SHADER_COLOR, render_shader_variant, get_framebuffer_format(), vertex_format));
     push_constant_data.transform_index = -1;
     push_constant_dirty = true;
     rebind_shared_uniforms(shaders.get_render_shader(GodotRmlUiShaders::RENDER_SHADER_COLOR));
 
     if (p_command.operation == Rml::ClipMaskOperation::SetInverse) {
-        rd->draw_list_set_stencil_reference(draw_list, 1);
+        rd->draw_list_set_stencil_reference(render_state.draw_list, 1);
         render_geometry(fullscreen_quad_geometry, Vector2());
     }
-    rd->draw_list_set_stencil_reference(draw_list, render_state.clip_mask_state.stencil_write_value);
+    rd->draw_list_set_stencil_reference(render_state.draw_list, render_state.clip_mask_state.stencil_write_value);
     render_geometry(p_command.geometry_handle, p_command.translation);
 }
 
 void RenderInterface_Godot_RD::execute_command(const SetClipMaskEnabledCommand &p_command) {
 	render_state.clip_mask_state.enabled = p_command.enabled;
+}
+
+void RenderInterface_Godot_RD::execute_command(const CompositeLayersCommand &p_command) {
+    RD *rd = RD::get_singleton();
+
+    int layer_to_read_from = layers.layer_get_idx(p_command.source);
+    RID fb_to_write_to = layers.get_layer_framebuffer(layers.layer_get_idx(p_command.destination));
+
+    bool use_backbuffer_as_source = p_command.source == p_command.destination || !p_command.filters.is_empty();
+
+    if (use_backbuffer_as_source) {
+        end_draw_pass();
+        rd->texture_copy(layers.get_layer_color_texture(layer_to_read_from), layers.backbuffer_get_color_texture(0), Vector3(), Vector3(), Vector3(current_fb_size.x, current_fb_size.y, 0.0), 0, 0, 0, 0);
+    }
+
+    // Apply effects
+    for (const Rml::CompiledFilterHandle &_filter : p_command.filters) {
+        CompiledFilter *filter = reinterpret_cast<CompiledFilter*>(_filter);
+        std::visit([this](const auto &p_command) {
+            execute_filter(p_command);
+        }, *filter);
+    }
+    
+    rd->draw_command_begin_label(vformat("Composite layer %d -> %d", layer_to_read_from, layers.layer_get_idx(p_command.destination)).utf8());
+    _ensure_in_draw_pass(fb_to_write_to);
+
+    render_fullscreen_texture_quad(use_backbuffer_as_source ? layers.backbuffer_get_color_texture(0) : layers.get_layer_color_texture(layer_to_read_from), Vector2(1.0f, 1.0f), p_command.blend_mode == Rml::BlendMode::Blend);
+
+    rd->draw_command_end_label();
+
+}
+
+void RenderInterface_Godot_RD::execute_filter(const BlurFilter &p_filter) {
+	render_blur(
+        p_filter.sigma,
+        0,
+        1,
+        render_state.scissor_state.enabled ? *render_state.scissor_state.region : Rect2i(Vector2(), current_fb_size));
 }
 
 void RenderInterface_Godot_RD::render_geometry(const Rml::CompiledGeometryHandle p_geometry, const Vector2 &p_translation) {
@@ -492,20 +560,20 @@ void RenderInterface_Godot_RD::render_geometry(const Rml::CompiledGeometryHandle
 
     if (push_constant_dirty) {
         push_constant_data.translation = p_translation;
-        rd->draw_list_set_push_constant(draw_list, &push_constant_data, sizeof(push_constant_data));
+        rd->draw_list_set_push_constant(render_state.draw_list, &push_constant_data, sizeof(push_constant_data));
         push_constant_dirty = false;
     }
     GeometryView *geometry = reinterpret_cast<GeometryView*>(p_geometry);
-    rd->draw_list_bind_vertex_array(draw_list, geometry->vertex_array);
-    rd->draw_list_bind_index_array(draw_list, geometry->index_array);
-    rd->draw_list_draw(draw_list, true);
+    rd->draw_list_bind_vertex_array(render_state.draw_list, geometry->vertex_array);
+    rd->draw_list_bind_index_array(render_state.draw_list, geometry->index_array);
+    rd->draw_list_draw(render_state.draw_list, true);
 }
 
 bool RenderInterface_Godot_RD::is_in_draw_pass() {
-	return draw_list != 0;
+	return render_state.draw_list != 0;
 }
 
-void RenderInterface_Godot_RD::execute_blit(RID p_from, RID p_to, const Vector2i &p_source, const Vector2i &p_size, bool p_flip_y) {
+void RenderInterface_Godot_RD::execute_blit(RID p_from, RID p_to, const Vector2i &p_source, const Vector2i &p_size, const Vector2i &p_dest, bool p_flip_y) {
     RD *rd = RD::get_singleton();
     RD::ComputeListID compute_list = rd->compute_list_begin();
     rd->compute_list_bind_compute_pipeline(compute_list, shaders.get_compute_pipeline(GodotRmlUiShaders::COMPUTE_SHADER_BLIT));
@@ -546,32 +614,90 @@ void RenderInterface_Godot_RD::execute_blit(RID p_from, RID p_to, const Vector2i
     rd->compute_list_end();
 }
 
+void RenderInterface_Godot_RD::execute_blit_texture(RID p_from, RID p_to, const Rect2i &p_source, const Rect2i &p_dest, bool p_flip_y)
+{
+    RD *rd = RD::get_singleton();
+    rd->draw_command_begin_label("Texture blit", Color(1.0, 1.0, 0.0));
+    RD::ComputeListID compute_list = rd->compute_list_begin();
+    rd->compute_list_bind_compute_pipeline(compute_list, shaders.get_compute_pipeline(GodotRmlUiShaders::COMPUTE_SHADER_BLIT_TEXTURE));
+    
+    RID sampler =  RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RenderingServer::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RenderingServer::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
+    RD::Uniform u_src(
+        RenderingDeviceCommons::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE,
+        0,
+        { sampler, p_from }
+    );
+    RD::Uniform u_dest(
+        RenderingDeviceCommons::UNIFORM_TYPE_IMAGE,
+        1,
+        p_to
+    );
+
+    RID uniform_set = UniformSetCacheRD::get_singleton()->get_cache(shaders.get_compute_shader(GodotRmlUiShaders::COMPUTE_SHADER_BLIT_TEXTURE), 0, u_src, u_dest);
+    struct __attribute__((packed)) BlitPushConstant {
+        int32_t src[2];
+        int32_t src_size[2];
+        int32_t dst[2];
+        int32_t dst_size[2];
+        uint8_t flip_vertical;
+        uint8_t padding[15];
+    } push_c;
+
+    push_c = {
+        .src = {p_source.position.coord[0], p_source.position.coord[1]},
+        .src_size = { p_source.size[0], p_source.size[1] },
+        .dst = { p_dest.position[0], p_dest.position[1] },
+        .dst_size = { p_dest.size[0], p_dest.size[1] },
+        .flip_vertical = p_flip_y ? (uint8_t)1 : (uint8_t)0
+    };
+
+
+    rd->compute_list_bind_uniform_set(compute_list, uniform_set, 0);
+    rd->compute_list_set_push_constant(compute_list, &push_c, sizeof(BlitPushConstant));
+
+    rd->compute_list_dispatch(compute_list, Math::division_round_up(p_dest.size.x, 8), Math::division_round_up(p_dest.size.y, 8), 1);
+    rd->compute_list_end();
+    rd->draw_command_end_label();
+}
+
 void RenderInterface_Godot_RD::end_draw_pass() {
 	RD *rd = RD::get_singleton();
-	if (draw_list != 0) {
-        draw_list = 0;
+	if (render_state.draw_list != 0) {
+        render_state.draw_list = 0;
         rd->draw_list_end();
-        rd->draw_command_end_label();
     }
     currently_bound_shader.reset();
     currently_bound_pipeline = 0;
 }
 
-void RenderInterface_Godot_RD::begin_draw_pass(bool p_clear) {
-    DEV_ASSERT(draw_list == 0);
+RID RenderInterface_Godot_RD::make_texture_uniform_set(RID p_texture, RID p_shader, int p_set_idx) const {
+	UniformSetCacheRD *cache = UniformSetCacheRD::get_singleton();
+
+    RD::Uniform texture_uniform;
+    texture_uniform.uniform_type = RenderingDeviceCommons::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+    texture_uniform.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RenderingServer::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RenderingServer::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED));
+    texture_uniform.append_id(p_texture);
+    texture_uniform.binding = 0;
+
+    return cache->get_cache(p_shader, p_set_idx, texture_uniform);
+}
+
+void RenderInterface_Godot_RD::begin_draw_pass(RID p_frame_buffer, bool p_clear) {
+    render_state.current_framebuffer = p_frame_buffer;
+    DEV_ASSERT(render_state.draw_list == 0);
     RD *rd = RD::get_singleton();
-    const int top_layer = layers.get_current_layer();
-    const String layer_name = vformat("RmlUi Layer %d", top_layer);
-    rd->draw_command_begin_label(layer_name.utf8(), Color(1.0, 0.0,0.0));
-    draw_list = rd->draw_list_begin(get_framebuffer(), p_clear ? RenderingDevice::DRAW_CLEAR_COLOR_0 | RenderingDevice::DRAW_CLEAR_DEPTH : RenderingDevice::DRAW_DEFAULT_ALL);
+    render_state.draw_list = rd->draw_list_begin(p_frame_buffer, p_clear ? RenderingDevice::DRAW_CLEAR_COLOR_0 | RenderingDevice::DRAW_CLEAR_DEPTH : RenderingDevice::DRAW_DEFAULT_ALL);
     if (render_state.scissor_state.enabled && render_state.scissor_state.region.has_value()) {
-        rd->draw_list_enable_scissor(draw_list, Rect2(*render_state.scissor_state.region));
+        rd->draw_list_enable_scissor(render_state.draw_list, Rect2(*render_state.scissor_state.region));
     }
 }
 
-void RenderInterface_Godot_RD::_ensure_in_draw_pass() {
-	if (draw_list == 0) {
-        begin_draw_pass();
+void RenderInterface_Godot_RD::_ensure_in_draw_pass(RID p_frame_buffer) {
+	if (render_state.draw_list == 0 || p_frame_buffer != render_state.current_framebuffer) {
+        if (is_in_draw_pass()) {
+            end_draw_pass();
+        }
+        begin_draw_pass(p_frame_buffer);
     }
 }
 
@@ -586,7 +712,7 @@ void RenderInterface_Godot_RD::rebind_shared_uniforms(RID p_shader) {
     UniformSetCacheRD *uniform_cache = UniformSetCacheRD::get_singleton();
     RD::Uniform context_data_uniform = RD::Uniform(RenderingDeviceCommons::UNIFORM_TYPE_STORAGE_BUFFER, 0, context_data_buffer);
     RD::Uniform element_transform_uniform = RD::Uniform(RenderingDeviceCommons::UNIFORM_TYPE_STORAGE_BUFFER, 1, element_transform_buffer);
-    rd->draw_list_bind_uniform_set(draw_list, uniform_cache->get_cache(p_shader, SHARED_UNIFORM_SET_IDX, context_data_uniform, element_transform_uniform), SHARED_UNIFORM_SET_IDX);
+    rd->draw_list_bind_uniform_set(render_state.draw_list, uniform_cache->get_cache(p_shader, SHARED_UNIFORM_SET_IDX, context_data_uniform, element_transform_uniform), SHARED_UNIFORM_SET_IDX);
 }
 
 void RenderInterface_Godot_RD::EnableClipMask(bool enable) {
@@ -595,26 +721,47 @@ void RenderInterface_Godot_RD::EnableClipMask(bool enable) {
     });
 }
 
+void RenderInterface_Godot_RD::CompositeLayers(Rml::LayerHandle p_source, Rml::LayerHandle p_destination, Rml::BlendMode blend_mode, Rml::Span<const Rml::CompiledFilterHandle> filters) {
+	
+    CompositeLayersCommand command = {
+        .source = p_source,
+        .destination = p_destination,
+        .blend_mode = blend_mode
+    };
+
+    command.filters.reserve(filters.size());
+
+    for (size_t i = 0; i < filters.size(); i++) {
+        command.filters.push_back(filters[i]);
+    }
+
+    render_commands.push_back(command);    
+}
+
+Rml::CompiledFilterHandle RenderInterface_Godot_RD::CompileFilter(const Rml::String& p_name, const Rml::Dictionary& parameters) {
+	CompiledFilter *compiled_filter = memnew(CompiledFilter);
+    if (p_name == "blur") {
+        BlurFilter filter = {
+            .sigma = Rml::Get(parameters, "sigma", 1.0f)
+        };
+        *compiled_filter = filter;
+    }
+
+    return reinterpret_cast<Rml::CompiledFilterHandle>(compiled_filter);
+}
+
+void RenderInterface_Godot_RD::ReleaseFilter(Rml::CompiledFilterHandle p_filter) {
+	memdelete(reinterpret_cast<CompiledFilter*>(p_filter));
+}
+
 void RenderInterface_Godot_RD::present() {
 	RD *rd = RD::get_singleton();
     rd->draw_command_begin_label("Present", Color(0.0, 1.0, 0.0));
-    draw_list = rd->draw_list_begin(get_final_framebuffer());
-    rd->draw_list_bind_render_pipeline(draw_list, shaders.get_render_pipeline(GodotRmlUiShaders::RENDER_SHADER_TEXTURE, GodotRmlUiShaders::SHADER_VARIANT_NORMAL, get_final_framebuffer_format(), vertex_format));
-    
-    rebind_shared_uniforms(shaders.get_render_shader(GodotRmlUiShaders::RENDER_SHADER_TEXTURE));
-    push_constant_data.transform_index = -1;
-    push_constant_data.translation = Vector2();
-    push_constant_dirty = true;
-
-    RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RenderingServer::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RenderingServer::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
-    RD::Uniform texture_uniform = RD::Uniform(RenderingDeviceCommons::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, layers.get_layer_color_texture(0)}));
-    UniformSetCacheRD *uniform_cache = UniformSetCacheRD::get_singleton();
-    RID uniform_set = uniform_cache->get_cache(shaders.get_render_shader(GodotRmlUiShaders::RENDER_SHADER_TEXTURE), TEXTURE_SHADER_UNIFORM_SET_IDX, texture_uniform); 
-    rd->draw_list_bind_uniform_set(draw_list, uniform_set, TEXTURE_SHADER_UNIFORM_SET_IDX);
-    render_geometry(fullscreen_quad_geometry, Vector2());
-    rd->draw_list_end();
+    _ensure_in_draw_pass(get_final_framebuffer());
+    render_fullscreen_texture_quad(layers.get_layer_color_texture(0));
     rd->draw_command_end_label();
-    draw_list = 0;
+    end_draw_pass();
+    render_state.draw_list = 0;
 }
 
 RenderInterface_Godot_RD::RenderInterface_Godot_RD() {
@@ -658,4 +805,100 @@ void RenderInterface_Godot_RD::flush_resource_deletion_queue() {
 
     geometry_deletion_queue.clear();
     texture_deletion_queue.clear();
+}
+
+void RenderInterface_Godot_RD::render_blur(float p_sigma, const int p_backbuffer_source_destination, const int p_backbuffer_temp, const Rect2i &p_window_dimensions) {
+    RD *rd = RD::get_singleton();
+
+	int pass_level = 0;
+    _sigma_to_parameters(p_sigma, pass_level, p_sigma);
+
+    const State::ScissorState old_scissor_state = render_state.scissor_state;
+
+    Rect2i scissor = p_window_dimensions;
+
+    render_state.scissor_state.enabled = true;
+
+    const RID source_destination_color = layers.backbuffer_get_color_texture(p_backbuffer_source_destination);
+    const RID source_destination_framebuffer = layers.backbuffer_get_framebuffer(p_backbuffer_source_destination);
+    const RID temp_color = layers.backbuffer_get_color_texture(p_backbuffer_temp);
+    const RID temp_framebuffer = layers.backbuffer_get_framebuffer(p_backbuffer_temp);
+
+	// Scale UVs if we have even dimensions, such that texture fetches align perfectly between texels, thereby producing a 50% blend of
+	// neighboring texels.
+    const Vector2i source_destination_size = current_fb_size;
+	const Vector2 uv_scaling = {(source_destination_size.width % 2 == 1) ? (1.f - 1.f / float(source_destination_size.width)) : 1.f,
+		(source_destination_size.height % 2 == 1) ? (1.f - 1.f / float(source_destination_size.height)) : 1.f};
+
+
+	for (int i = 0; i < pass_level; i++)
+	{
+        rd->draw_command_begin_label(vformat("Blur copy pass %d", i).utf8(), Color(0.0f, 0.0f, 1.0f));
+        Rml::Rectanglei scissor_tmp = Rml::Rectanglei::FromPositionSize({ scissor.position.x, scissor.position.y }, { scissor.size.x, scissor.size.y });
+		scissor_tmp.p0 = (scissor_tmp.p0 + Rml::Vector2i(1)) / 2;
+		scissor_tmp.p1 = Rml::Math::Max(scissor_tmp.p1 / 2, scissor_tmp.p0);
+
+        scissor = Rect2i({scissor_tmp.p0.x, scissor_tmp.p0.y}, {scissor_tmp.Size().x, scissor_tmp.Size().y});
+
+		const bool from_source = (i % 2 == 0);
+
+        _ensure_in_draw_pass((from_source ? temp_framebuffer : source_destination_framebuffer));
+
+        rd->draw_list_enable_scissor(render_state.draw_list, scissor);
+        rd->draw_list_set_viewport(render_state.draw_list, Rect2i(Vector2(), source_destination_size / 2));
+
+        render_fullscreen_texture_quad(from_source ? source_destination_color : temp_color, uv_scaling);
+        rd->draw_command_end_label();
+	}
+
+	const bool transfer_to_temp_buffer = (pass_level % 2 == 0);
+    if (transfer_to_temp_buffer) {
+        end_draw_pass();
+        _ensure_in_draw_pass(temp_framebuffer);
+        rd->draw_list_enable_scissor(render_state.draw_list, scissor);
+        render_fullscreen_texture_quad(source_destination_color);
+    }
+
+    GodotRmlUiShaders::BlurPushConstant blur_push_constant;
+    GodotRmlUiShaders::set_blur_weights(blur_push_constant, p_sigma);
+    GodotRmlUiShaders::set_blur_tex_coord_limits(blur_push_constant, scissor, source_destination_size);
+
+    auto blur_pass = [&](bool p_vertical) {
+        const char *label = (p_vertical ? "Blur vertical" : "Blur horizontal");
+        rd->draw_command_begin_label(String(label).utf8());
+        _ensure_in_draw_pass(p_vertical ? source_destination_framebuffer : temp_framebuffer);
+        
+        rd->draw_list_bind_render_pipeline(render_state.draw_list, shaders.get_render_pipeline(GodotRmlUiShaders::RENDER_SHADER_BLUR, GodotRmlUiShaders::SHADER_VARIANT_NORMAL_NO_BLEND, get_framebuffer_format(), vertex_format));
+        rd->draw_list_bind_uniform_set(render_state.draw_list, make_texture_uniform_set(p_vertical ? temp_color : source_destination_color, shaders.get_render_shader(GodotRmlUiShaders::RENDER_SHADER_BLUR), 0), 0);
+        blur_push_constant.texel_offset = (p_vertical ? Vector2(0.0f, 1.0f) : Vector2(1.0f, 0.0f)) * (1.0f / float(current_fb_size.y));
+        
+        rd->draw_list_enable_scissor(render_state.draw_list, scissor);
+        rd->draw_list_set_push_constant(render_state.draw_list, &blur_push_constant, sizeof(GodotRmlUiShaders::BlurPushConstant));
+
+        GeometryView *geo = reinterpret_cast<GeometryView*>(fullscreen_quad_geometry);
+
+        rd->draw_list_bind_index_array(render_state.draw_list, geo->index_array);
+        rd->draw_list_bind_vertex_array(render_state.draw_list, geo->vertex_array);
+
+        rd->draw_list_draw(render_state.draw_list, true);
+
+        rd->draw_command_end_label();
+        end_draw_pass();
+    };
+
+    blur_pass(true);
+    blur_pass(false);
+
+    execute_blit_texture(temp_color, source_destination_color, scissor, p_window_dimensions, false);
+
+    render_state.scissor_state = old_scissor_state;
+    end_draw_pass();
+}
+
+void RenderInterface_Godot_RD::_sigma_to_parameters(const float p_desired_sigma, int &r_pass_level, float &r_sigma) const {
+    constexpr int max_num_passes = 10;
+	static_assert(max_num_passes < 31, "");
+	constexpr float max_single_pass_sigma = 3.0f;
+	r_pass_level = Rml::Math::Clamp(Rml::Math::Log2(int(p_desired_sigma * (2.f / max_single_pass_sigma))), 0, max_num_passes);
+	r_sigma = Rml::Math::Clamp(p_desired_sigma / float(1 << r_pass_level), 0.0f, max_single_pass_sigma);
 }

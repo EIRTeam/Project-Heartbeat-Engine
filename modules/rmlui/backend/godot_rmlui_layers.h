@@ -3,6 +3,7 @@
 #include "RmlUi/Core/Types.h"
 #include "core/templates/rid.h"
 #include "servers/rendering/rendering_device.h"
+#include <optional>
 
 class GodotRmlUiLayers {
     RID framebuffer;
@@ -10,15 +11,21 @@ class GodotRmlUiLayers {
     RID resolve_intermediary_buffer;
     RD::FramebufferFormatID out_fb_format;
     RD::FramebufferFormatID internal_fb_format = 0;
-    struct Layer {
+public:
+    struct AllocatedFramebuffer {
         RID framebuffer;
-        RID color;
-        bool allocated = false;
+        RID color_texture;
+    };
+private:
+    struct Layer {
+        std::optional<AllocatedFramebuffer> framebuffer;
+        int idx = 0;
     };
     Vector<Layer*> allocated_layers;
-    Vector<Layer*> idle_layers;
     Vector<Layer*> layer_stack;
-    Layer *create_layer();
+    
+    static constexpr int BACKBUFFER_COUNT = 2;
+    Layer backbuffers[BACKBUFFER_COUNT];
     static void _fb_invalidation(void *p_userdata);
 
     // Data used for preprocessing the frame, we only do allocations
@@ -43,6 +50,11 @@ public:
     RID get_layer_framebuffer(int p_layer) const;
     int get_current_layer() const;
     RID get_resolve_buffer() const;
+    int layer_get_idx(Rml::LayerHandle p_layer) const;
     RD::FramebufferFormatID get_framebuffer_format() const;
+    AllocatedFramebuffer allocate_framebuffer(const String &p_hint_name) const;
+
+    RID backbuffer_get_framebuffer(int p_idx) const;
+    RID backbuffer_get_color_texture(int p_idx) const;
     ~GodotRmlUiLayers();
 };

@@ -1,11 +1,15 @@
 #include "godot_rmlui_shaders.h"
+#include "RmlUi/Core/Math.h"
 #include "core/error/error_macros.h"
 #include "core/templates/hashfuncs.h"
 #include "rmlui/backend/shaders/color.glsl.gen.h"
-#include "servers/rendering/renderer_rd/pipeline_cache_rd.h"
+#include "rmlui/backend/shaders/passthrough.glsl.gen.h"
+#include "rmlui/backend/shaders/rmlui_blur.glsl.gen.h"
+#include "rmlui/backend/shaders/rmlui_blit_texture.glsl.gen.h"
 
 const char *GodotRmlUiShaders::render_shader_variant_2_str[] = {
     "normal",
+    "normal no blend",
     "stencil compare",
     "stencil replace",
     "stencil increase"
@@ -13,7 +17,9 @@ const char *GodotRmlUiShaders::render_shader_variant_2_str[] = {
 
 const char *GodotRmlUiShaders::render_shader_2_str[] = {
     "color",
-    "texture"
+    "texture",
+    "passthrough",
+    "blur"
 };
 
 void GodotRmlUiShaders::initialize(RD::FramebufferFormatID p_fb_format, RD::VertexFormatID p_vertex_format) {
@@ -34,6 +40,9 @@ void GodotRmlUiShaders::initialize(RD::FramebufferFormatID p_fb_format, RD::Vert
         switch ((AvailableComputeShaderTypes)i) {
 			case COMPUTE_SHADER_BLIT: {
                 init_compute_shader(memnew(RmluiBlitShaderRD), compute_shaders[i]);
+            } break;
+			case COMPUTE_SHADER_BLIT_TEXTURE: {
+                init_compute_shader(memnew(RmluiBlitTextureShaderRD), compute_shaders[i]);
             } break;
 			case COMPUTE_SHADER_MAX:
                 DEV_ASSERT(false);
@@ -58,7 +67,7 @@ void GodotRmlUiShaders::initialize(RD::FramebufferFormatID p_fb_format, RD::Vert
             bool enable_stencil_writes = i > RenderShaderVariant::SHADER_VARIANT_STENCIL_COMPARE;
             bool enable_stencil_test = i == RenderShaderVariant::SHADER_VARIANT_STENCIL_COMPARE;
             int dynamic_state_flags = 0;
-            RD::PipelineColorBlendState blend_state = enable_stencil_writes ? RD::PipelineColorBlendState::create_disabled() : RD::PipelineColorBlendState::create_blend(1);
+            RD::PipelineColorBlendState blend_state = enable_stencil_writes || i == SHADER_VARIANT_NORMAL_NO_BLEND ? RD::PipelineColorBlendState::create_disabled() : RD::PipelineColorBlendState::create_blend(1);
 
             bool color_write_enabled = true;
 
@@ -110,6 +119,12 @@ void GodotRmlUiShaders::initialize(RD::FramebufferFormatID p_fb_format, RD::Vert
 			case RENDER_SHADER_TEXTURE: {
                 init_render_shader(memnew(TextureShaderRD), shader_type, render_shaders[i]);
             } break;
+			case RENDER_SHADER_PASSTHROUGH: {
+                init_render_shader(memnew(PassthroughShaderRD), shader_type, render_shaders[i]);
+            } break;
+			case RENDER_SHADER_BLUR: {
+                init_render_shader(memnew(RmluiBlurShaderRD), shader_type, render_shaders[i]);
+            } break;
 			case RENDER_SHADER_MAX:
                 DEV_ASSERT(false);
 				break;
@@ -146,6 +161,31 @@ GodotRmlUiShaders::RmluiPipelineID GodotRmlUiShaders::get_pipeline_id(const Avai
     h = hash_murmur3_one_64(p_fb_format, h);
     h = hash_murmur3_one_64(p_vertex_format, h);
     return hash_fmix32(h);
+}
+
+void GodotRmlUiShaders::set_blur_weights(BlurPushConstant &r_blur, float p_sigma)
+{
+    constexpr int num_weights = BLUR_NUM_WEIGHTS;
+	float normalization = 0.0f;
+	for (int i = 0; i < num_weights; i++)
+	{
+		if (Rml::Math::Absolute(p_sigma) < 0.1f)
+			r_blur.weights[i] = float(i == 0);
+		else
+			r_blur.weights[i] = Rml::Math::Exp(-float(i * i) / (2.0f * p_sigma * p_sigma)) / (Rml::Math::SquareRoot(2.f * Rml::Math::RMLUI_PI) * p_sigma);
+
+		normalization += (i == 0 ? 1.f : 2.0f) * r_blur.weights[i];
+	}
+	for (int i = 0; i < num_weights; i++)
+		r_blur.weights[i] /= normalization;
+}
+
+void GodotRmlUiShaders::set_blur_tex_coord_limits(BlurPushConstant &r_blur, const Rect2i &p_rect, const Vector2 &p_framebuffer_size) {
+    const Vector2 min = (Vector2(p_rect.position) + Vector2(0.5f, 0.5f)) / p_framebuffer_size;
+	const Vector2 max = (Vector2(p_rect.get_end()) - Vector2(0.5f, 0.5f)) / p_framebuffer_size;
+
+    r_blur.tex_coord_min = min;
+    r_blur.tex_coord_max = max;
 }
 
 GodotRmlUiShaders::~GodotRmlUiShaders() {

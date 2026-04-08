@@ -4,10 +4,6 @@
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
 #include "servers/rendering/rendering_device_commons.h"
 
-GodotRmlUiLayers::Layer *GodotRmlUiLayers::create_layer() {
-
-}
-
 void GodotRmlUiLayers::_fb_invalidation(void *p_userdata) {
     GodotRmlUiLayers *layers = static_cast<GodotRmlUiLayers*>(p_userdata);
     layers->clear_layers();
@@ -55,13 +51,20 @@ void GodotRmlUiLayers::clear_layers() {
         resolve_intermediary_buffer = RID();
     }
     for (Layer * layer : allocated_layers) {
-        if (!layer->allocated) {
+        if (!layer->framebuffer.has_value()) {
             continue;
         }
-        rd->free_rid(layer->color);
-        layer->allocated = false;
+        rd->free_rid(layer->framebuffer->color_texture);
+        layer->framebuffer.reset();
     }
-    idle_layers.clear();
+
+    for (Layer &layer : backbuffers) {
+        if (!layer.framebuffer.has_value()) {
+            continue;
+        }
+        rd->free_rid(layer.framebuffer->color_texture);
+        layer.framebuffer.reset();
+    }
 }
 
 void GodotRmlUiLayers::frame_start(RID p_out_framebuffer_id) {
@@ -76,7 +79,7 @@ void GodotRmlUiLayers::frame_start(RID p_out_framebuffer_id) {
         RD::AttachmentFormat color_attachment_format;
         color_attachment_format.format = RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
         color_attachment_format.samples = RenderingDeviceCommons::TEXTURE_SAMPLES_1;
-        color_attachment_format.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
+        color_attachment_format.usage_flags = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
 
         const RD::DataFormat depth_data_format = RenderSceneBuffersRD::get_depth_format(false, false, true);
         RD::AttachmentFormat depth_attachment_format;
@@ -100,61 +103,45 @@ void GodotRmlUiLayers::frame_start(RID p_out_framebuffer_id) {
 void GodotRmlUiLayers::render_start() {
     DEV_ASSERT(layer_stack.is_empty());
 
-    RD *rd = RD::get_singleton();
-
     if (!shared_stencil_buffer.is_valid()) {
         recreate_shared_textures();
     }
 
+    for (int i = 0; i < BACKBUFFER_COUNT; i++) {
+        if (backbuffers[i].framebuffer.has_value()) {
+            continue;
+        }
+        backbuffers[i].framebuffer = allocate_framebuffer(vformat("RmlUi Backbuffer %d", i));
+    }
+
     for (int i = 0; i < allocated_layers.size(); i++) {
         Layer *layer = allocated_layers[i];
-        if (layer->allocated) {
+        if (layer->framebuffer.has_value()) {
             continue;
         }
 
-        const Vector2i size = rd->framebuffer_get_size(framebuffer);
-        const RD::DataFormat color_data_format = RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
 
-        RD::TextureFormat color_format = {
-            .format = color_data_format,
-            .width = static_cast<uint32_t>(size.x),
-            .height = static_cast<uint32_t>(size.y),
-            .usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | RD::TEXTURE_USAGE_STORAGE_BIT
-        };
-
-        RD::TextureView texture_view = {};
-
-        RID color_texture = rd->texture_create(color_format, texture_view);
-
-        DEV_ASSERT(color_texture.is_valid());
-
-        RID fb = rd->framebuffer_create({ color_texture, shared_stencil_buffer }, internal_fb_format);
         *layer = Layer {
-            .framebuffer = fb,
-            .color = color_texture,
-            .allocated = true
+            .framebuffer = allocate_framebuffer(vformat("Layer %d", i)),
+            .idx = i
         };
-
-        rd->set_resource_name(color_texture, vformat("Layer %d texture", i));
-
-        idle_layers.push_back(layer);
     }
 }
 
 void GodotRmlUiLayers::push_layer() {
-    
     RD *rd = RD::get_singleton();
-    DEV_ASSERT(!idle_layers.is_empty());
-    const int last_idx = idle_layers.size()-1;
-    rd->texture_clear(idle_layers[last_idx]->color, Color(0.0f, 0.0f, 0.0f, 0.0f), 0, 1, 0, 1);
-    layer_stack.push_back(idle_layers[last_idx]);
-    idle_layers.remove_at(last_idx);
+    const int last_idx = layer_stack.size();
+    layer_stack.push_back(allocated_layers[last_idx]);
+    DEV_ASSERT(layer_stack[last_idx]->idx == last_idx);
+    rd->texture_clear(layer_stack[last_idx]->framebuffer->color_texture, Color(0.0f, 0.0f, 0.0f, 0.0f), 0, 1, 0, 1);
 }
 
 GodotRmlUiLayers::Layer *GodotRmlUiLayers::prepush_layer() {
     preprocess.current_preprocess_layer++;
     if (preprocess.current_preprocess_layer >= allocated_layers.size()) {
-        allocated_layers.push_back(memnew(Layer));
+        Layer *layer = memnew(Layer);
+        layer->idx = allocated_layers.size();
+        allocated_layers.push_back(layer);
     }
 
     preprocess.max_depth = MAX(preprocess.current_preprocess_layer+1, preprocess.max_depth);
@@ -168,7 +155,6 @@ void GodotRmlUiLayers::prepop_layer() {
 
 void GodotRmlUiLayers::pop_layer() {
     DEV_ASSERT(!layer_stack.is_empty());
-    idle_layers.push_back(layer_stack[layer_stack.size()-1]);
     layer_stack.remove_at(layer_stack.size()-1);
 }
 
@@ -179,12 +165,13 @@ Rml::LayerHandle GodotRmlUiLayers::get_layer(int p_layer) const {
 
 RID GodotRmlUiLayers::get_layer_color_texture(int p_layer) const {
     ERR_FAIL_INDEX_V(p_layer, layer_stack.size(), RID());
-    return layer_stack[p_layer]->color;
+    DEV_ASSERT(layer_stack[p_layer]->idx == p_layer);
+    return layer_stack[p_layer]->framebuffer->color_texture;
 }
 
 RID GodotRmlUiLayers::get_layer_framebuffer(int p_layer) const {
     ERR_FAIL_INDEX_V(p_layer, layer_stack.size(), RID());
-    return layer_stack[p_layer]->framebuffer;
+    return layer_stack[p_layer]->framebuffer->framebuffer;
 }
 
 int GodotRmlUiLayers::get_current_layer() const {
@@ -196,8 +183,57 @@ RID GodotRmlUiLayers::get_resolve_buffer() const {
     return resolve_intermediary_buffer;
 }
 
+int GodotRmlUiLayers::layer_get_idx(Rml::LayerHandle p_layer) const {
+    Layer *layer = reinterpret_cast<Layer*>(p_layer);
+    if (layer == nullptr) {
+        layer = allocated_layers[0];
+    }
+    int idx = layer_stack.find(layer);
+    ERR_FAIL_COND_V(idx == -1, -1);
+    return idx;
+}
+
 RD::FramebufferFormatID GodotRmlUiLayers::get_framebuffer_format() const {
     return internal_fb_format;
+}
+
+GodotRmlUiLayers::AllocatedFramebuffer GodotRmlUiLayers::allocate_framebuffer(const String &p_hint_name) const {
+    RD *rd = RD::get_singleton();
+    const Vector2i size = rd->framebuffer_get_size(framebuffer);
+    const RD::DataFormat color_data_format = RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
+
+    RD::TextureFormat color_format = {
+        .format = color_data_format,
+        .width = static_cast<uint32_t>(size.x),
+        .height = static_cast<uint32_t>(size.y),
+        .usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT
+    };
+
+    RD::TextureView texture_view = {};
+
+    RID color_texture = rd->texture_create(color_format, texture_view);
+    rd->set_resource_name(color_texture, vformat("%s framebuffer color texture", p_hint_name));
+
+    DEV_ASSERT(color_texture.is_valid());
+
+    RID fb = rd->framebuffer_create({ color_texture, shared_stencil_buffer }, internal_fb_format);
+    
+    rd->set_resource_name(fb, vformat("%s framebuffer", p_hint_name));
+
+    return {
+        .framebuffer = fb,
+        .color_texture = color_texture
+    };
+}
+
+RID GodotRmlUiLayers::backbuffer_get_framebuffer(int p_idx) const {
+    ERR_FAIL_INDEX_V(p_idx, BACKBUFFER_COUNT, RID());
+    return backbuffers[p_idx].framebuffer->framebuffer;
+}
+
+RID GodotRmlUiLayers::backbuffer_get_color_texture(int p_idx) const {
+    ERR_FAIL_INDEX_V(p_idx, BACKBUFFER_COUNT, RID());
+    return backbuffers[p_idx].framebuffer->color_texture;
 }
 
 GodotRmlUiLayers::~GodotRmlUiLayers() {
