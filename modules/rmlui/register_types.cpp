@@ -26,8 +26,10 @@ void initialize_rmlui_module(ModuleInitializationLevel p_level) {
     GDREGISTER_CLASS(RmlUiSpriteSheet);
     GDREGISTER_CLASS(RmlUiSpriteSheetTexture);
     GDREGISTER_ABSTRACT_CLASS(RmlUiSingleton);
+#ifdef TOOLS_ENABLED
     GDREGISTER_CLASS(RmlUiEditorPlugin);
     GDREGISTER_CLASS(RmlUiInspectorPlugin);
+#endif
     Engine::get_singleton()->add_singleton(Engine::Singleton("RmlUi", singleton));
 }
 
