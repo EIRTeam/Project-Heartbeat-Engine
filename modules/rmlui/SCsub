@@ -3,6 +3,8 @@ from misc.utility.scons_hints import *
 
 Import("env")
 
+env.Prepend(CPPDEFINES=["RMLUI_STATIC_LIB"])
+
 env_rmlui = env.Clone()
 
 module_obj = []

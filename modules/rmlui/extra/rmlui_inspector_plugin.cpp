@@ -1,3 +1,4 @@
+#ifdef TOOLS_ENABLED
 #include "rmlui_inspector_plugin.h"
 #include "rmlui/extra/packer.h"
 #include "rmlui/extra/rmlui_sprite_sheet.h"
@@ -38,3 +39,4 @@ void RmlUiEditorPlugin::_notification(int p_what) {
 }
 
 
+#endif

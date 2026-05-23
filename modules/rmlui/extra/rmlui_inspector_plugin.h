@@ -1,8 +1,10 @@
 #pragma once
+#ifdef TOOLS_ENABLED
 
 #include "editor/inspector/editor_inspector.h"
 #include "editor/plugins/editor_plugin.h"
 #include "rmlui/extra/rmlui_sprite_sheet.h"
+
 class RmlUiInspectorPlugin : public EditorInspectorPlugin {
     GDCLASS(RmlUiInspectorPlugin, EditorInspectorPlugin);
 
@@ -18,3 +20,5 @@ class RmlUiEditorPlugin : public EditorPlugin {
 
     void _notification(int p_what);
 };
+
+#endif
