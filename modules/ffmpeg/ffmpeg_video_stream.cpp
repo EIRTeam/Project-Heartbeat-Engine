@@ -92,11 +92,8 @@ typedef RD::ComputeListID ComputeListID;
 #include "tracy_import.h"
 #include "yuv_to_rgb.glsl.gen.h"
 
-#ifdef GDEXTENSION
 #define FREE_RD_RID(rid) RS::get_singleton()->get_rendering_device()->free_rid(rid);
-#else
-#define FREE_RD_RID(rid) RS::get_singleton()->get_rendering_device()->free(rid);
-#endif
+
 void FFmpegVideoStreamPlayback::seek_into_sync() {
 	decoder->seek(playback_position);
 	Vector<Ref<DecodedFrame>> decoded_frames;
@@ -489,7 +486,7 @@ Error YUVGPUConverter::_ensure_plane_textures() {
 			FREE_RD_RID(yuv_planes_uniform_sets[i]);
 		}
 
-		yuv_planes_uniform_sets[i] = _create_uniform_set(yuv_plane_textures[i]);
+		yuv_planes_uniform_sets[i] = _create_uniform_set(yuv_plane_textures[i], i);
 	}
 
 	return OK;
@@ -537,11 +534,11 @@ Error YUVGPUConverter::_ensure_output_texture() {
 	if (out_uniform_set.is_valid()) {
 		FREE_RD_RID(out_uniform_set);
 	}
-	out_uniform_set = _create_uniform_set(out_texture->get_texture_rd_rid());
+	out_uniform_set = _create_uniform_set(out_texture->get_texture_rd_rid(), 4);
 	return OK;
 }
 
-RID YUVGPUConverter::_create_uniform_set(const RID &p_texture_rd_rid) {
+RID YUVGPUConverter::_create_uniform_set(const RID &p_texture_rd_rid, int p_set_idx) {
 #ifdef GDEXTENSION
 	Ref<RDUniform> uniform;
 	uniform.instantiate();
@@ -558,7 +555,7 @@ RID YUVGPUConverter::_create_uniform_set(const RID &p_texture_rd_rid) {
 	Vector<RD::Uniform> uniforms;
 	uniforms.push_back(uniform);
 #endif
-	return RS::get_singleton()->get_rendering_device()->uniform_set_create(uniforms, shader, 0);
+	return RS::get_singleton()->get_rendering_device()->uniform_set_create(uniforms, shader, p_set_idx);
 }
 
 void YUVGPUConverter::_upload_plane_images() {

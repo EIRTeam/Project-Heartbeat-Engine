@@ -56,6 +56,8 @@ using namespace godot;
 
 class YUVGPUConverter : public RefCounted {
 	RID shader;
+	bool yuv_planes_dirty = false;
+	bool has_input_planes = false;
 	Ref<Image> yuv_plane_images[4];
 	RID yuv_plane_textures[4];
 	RID yuv_planes_uniform_sets[4];
@@ -73,7 +75,7 @@ private:
 	void _ensure_pipeline();
 	Error _ensure_plane_textures();
 	Error _ensure_output_texture();
-	RID _create_uniform_set(const RID &p_texture_rd_rid);
+	RID _create_uniform_set(const RID &p_texture_rd_rid, int p_set_idx);
 	void _upload_plane_images();
 	void _clear_texture_internal();
 	void _convert_internal();
