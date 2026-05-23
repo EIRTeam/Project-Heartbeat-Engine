@@ -158,6 +158,7 @@ bool PHNative::is_sdl_device_game_controller(int p_joy_device_idx) {
 	if (JoypadSDL *sdl = JoypadSDL::get_singleton(); sdl) {
 		return sdl->is_device_game_controller(p_joy_device_idx);
 	}
+	return false;
 #else
 	return false;
 #endif
