@@ -634,7 +634,8 @@ void RenderInterface_Godot_RD::execute_blit_texture(RID p_from, RID p_to, const 
     );
 
     RID uniform_set = UniformSetCacheRD::get_singleton()->get_cache(shaders.get_compute_shader(GodotRmlUiShaders::COMPUTE_SHADER_BLIT_TEXTURE), 0, u_src, u_dest);
-    struct __attribute__((packed)) BlitPushConstant {
+    #pragma pack(push,1)
+    struct BlitPushConstant {
         int32_t src[2];
         int32_t src_size[2];
         int32_t dst[2];
@@ -642,6 +643,7 @@ void RenderInterface_Godot_RD::execute_blit_texture(RID p_from, RID p_to, const 
         uint8_t flip_vertical;
         uint8_t padding[15];
     } push_c;
+    #pragma pack(pop)
 
     push_c = {
         .src = {p_source.position.coord[0], p_source.position.coord[1]},
