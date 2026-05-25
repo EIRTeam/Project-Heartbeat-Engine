@@ -3,7 +3,7 @@ from misc.utility.scons_hints import *
 
 Import("env")
 
-env.Prepend(CPPDEFINES=["RMLUI_STATIC_LIB"])
+env.Prepend(CPPDEFINES=["RMLUI_STATIC_LIB", "ITLIB_FLAT_MAP_NO_THROW"])
 
 env_rmlui = env.Clone()
 
