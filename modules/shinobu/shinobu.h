@@ -43,6 +43,7 @@ protected:
 
 public:
 	_FORCE_INLINE_ static Shinobu *get_singleton() { return singleton; }
+	_FORCE_INLINE_ bool is_initialized() const { return initialized; }
 
 	String get_initialization_error() const;
 

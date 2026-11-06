@@ -85,6 +85,7 @@ RmlUiSingleton *RmlUiSingleton::get_singleton()
 RID RmlUiSingleton::create_document_from_path(const String &p_path) {
     RmlDocument doc;
     doc.document = context->LoadDocument(from_godot(p_path));
+    ERR_FAIL_NULL_V_MSG(doc.document, RID(), vformat("Failed to load RmlUi document: %s", p_path));
     RID rid = document_owner.allocate_rid();
     document_owner.initialize_rid(rid, doc);
     doc.document->Show();

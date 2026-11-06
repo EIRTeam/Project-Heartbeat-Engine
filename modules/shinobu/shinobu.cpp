@@ -209,7 +209,7 @@ Error Shinobu::initialize(ma_backend forced_backend) {
 	device_config.wasapi.noAutoConvertSRC = true;
 
 	ma_backend *backends = NULL;
-	uint64_t backend_count = 0;
+	ma_uint32 backend_count = 0;
 
 	if (backend_to_force != ma_backend_null) {
 		backend_count = 1;
@@ -221,10 +221,9 @@ Error Shinobu::initialize(ma_backend forced_backend) {
 	ctx_config.allocationCallbacks.onMalloc = &ma_malloc_godot;
 	ctx_config.allocationCallbacks.onRealloc = &ma_realloc_godot;
 
-	result = ma_context_init(backends, 1, &ctx_config, &context);
-	MA_ERR_RET(result, "Context init failed");
-
+	result = ma_context_init(backends, backend_count, &ctx_config, &context);
 	delete[] backends;
+	MA_ERR_RET(result, "Context init failed");
 
 	result = ma_device_init(&context, &device_config, &device);
 	MA_ERR_RET(result, "Device init failed");
@@ -244,7 +243,7 @@ Error Shinobu::initialize(ma_backend forced_backend) {
 	/*
 	Custom backend vtables
 	*/
-	ma_decoding_backend_vtable *pCustomBackendVTables[] = {
+	static ma_decoding_backend_vtable *pCustomBackendVTables[] = {
 		&g_ma_decoding_backend_vtable_libvorbis
 	};
 
@@ -294,26 +293,32 @@ ma_engine *Shinobu::get_engine() {
 }
 
 Ref<ShinobuSoundSourceMemory> Shinobu::register_sound_from_memory(String m_name_hint, PackedByteArray m_data) {
+	ERR_FAIL_COND_V(!initialized, Ref<ShinobuSoundSourceMemory>());
 	Ref<ShinobuSoundSourceMemory> source;
 	source.instantiate(m_name_hint, m_data);
 	return source;
 }
 
 Ref<ShinobuGroup> Shinobu::create_group(String m_group_name, Ref<ShinobuGroup> m_parent_group) {
+	ERR_FAIL_COND_V(!initialized, Ref<ShinobuGroup>());
 	Ref<ShinobuGroup> out_group = memnew(ShinobuGroup(m_group_name, m_parent_group));
+	ERR_FAIL_COND_V(out_group->get_group() == nullptr, Ref<ShinobuGroup>());
 	groups.push_back(out_group);
 	return out_group;
 }
 
 Ref<ShinobuSpectrumAnalyzerEffect> Shinobu::instantiate_spectrum_analyzer_effect() {
+	ERR_FAIL_COND_V(!initialized, Ref<ShinobuSpectrumAnalyzerEffect>());
 	return memnew(ShinobuSpectrumAnalyzerEffect(2));
 }
 
 Ref<ShinobuPitchShiftEffect> Shinobu::instantiate_pitch_shift() {
+	ERR_FAIL_COND_V(!initialized, Ref<ShinobuPitchShiftEffect>());
 	return memnew(ShinobuPitchShiftEffect(2));
 }
 
 Ref<ShinobuChannelRemapEffect> Shinobu::instantiate_channel_remap(uint32_t channel_count_in, uint32_t channel_count_out) {
+	ERR_FAIL_COND_V(!initialized, Ref<ShinobuChannelRemapEffect>());
 	return memnew(ShinobuChannelRemapEffect(channel_count_in, channel_count_out));
 }
 
@@ -370,9 +375,12 @@ uint64_t Shinobu::get_actual_buffer_size() const {
 
 Shinobu::~Shinobu() {
 	if (initialized) {
+		groups.clear();
+		initialized = false;
 		ma_engine_uninit(&engine);
 		ma_resource_manager_uninit(&resource_manager);
 		ma_device_uninit(&device);
 		ma_context_uninit(&context);
 	}
+	singleton = nullptr;
 }

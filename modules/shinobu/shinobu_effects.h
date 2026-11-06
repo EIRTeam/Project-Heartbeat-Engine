@@ -28,7 +28,8 @@ public:
 
 class ShinobuChannelRemapEffect : public ShinobuEffect {
 	GDCLASS(ShinobuChannelRemapEffect, ShinobuEffect);
-	ma_channel_remap_node remap_node;
+	ma_channel_remap_node remap_node = {};
+	bool initialized = false;
 
 protected:
 	static void _bind_methods();
@@ -43,7 +44,8 @@ public:
 
 class ShinobuPitchShiftEffect : public ShinobuEffect {
 	GDCLASS(ShinobuPitchShiftEffect, ShinobuEffect);
-	ma_pitch_shift_node pitch_shift_node;
+	ma_pitch_shift_node pitch_shift_node = {};
+	bool initialized = false;
 
 protected:
 	static void _bind_methods();
@@ -60,7 +62,8 @@ public:
 
 class ShinobuSpectrumAnalyzerEffect : public ShinobuEffect {
 	GDCLASS(ShinobuSpectrumAnalyzerEffect, ShinobuEffect);
-	ma_spectrum_analyzer_node analyzer_node;
+	ma_spectrum_analyzer_node analyzer_node = {};
+	bool initialized = false;
 
 protected:
 	static void _bind_methods();

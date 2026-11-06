@@ -104,12 +104,13 @@ SWC::InputActionOrigin HBSteamworksInputGlyphsSource::origin_to_steamworks_xbox_
 	if (p_input_origin == InputGlyphsConstants::INPUT_ORIGIN_INVALID) {
 		return SWC::InputActionOrigin::INPUT_ACTION_ORIGIN_NONE;
 	}
+	ERR_FAIL_COND_V(p_input_origin < 0 || p_input_origin >= InputGlyphsConstants::INPUT_ORIGIN_COUNT, SWC::InputActionOrigin::INPUT_ACTION_ORIGIN_NONE);
 	return __origin_to_teamworks_xbox_origin_lut[p_input_origin];
 }
 
 SWC::SteamInputType HBSteamworksInputGlyphsSource::input_type_to_steamworks_input_type(const InputGlyphsConstants::InputType &p_input_type) {
 	// InputType matches ESteamInputType int eh steamworks SDK, so we just do a straight conversion
-	ERR_FAIL_COND_V(p_input_type == InputGlyphsConstants::INPUT_TYPE_MAX, SWC::SteamInputType::STEAM_INPUT_TYPE_X_BOX_ONE_CONTROLLER);
+	ERR_FAIL_COND_V(p_input_type < 0 || p_input_type >= InputGlyphsConstants::INPUT_TYPE_MAX, SWC::SteamInputType::STEAM_INPUT_TYPE_X_BOX_ONE_CONTROLLER);
 	return __input_type_lut[p_input_type];
 }
 

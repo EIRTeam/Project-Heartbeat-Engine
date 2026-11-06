@@ -14,7 +14,8 @@ class ShinobuSoundPlayer : public Node {
 	// Forward declare shinobu sound source
 
 	Ref<ShinobuSoundSource> sound_source;
-	ma_sound sound;
+	ma_sound sound = {};
+	bool initialized = false;
 	String error_message;
 	uint64_t start_time_msec = 0;
 	uint64_t cached_length = -1;

@@ -12,7 +12,9 @@ class ShinobuGroup : public RefCounted {
 	GDCLASS(ShinobuGroup, RefCounted);
 	String name;
 	String error_message;
-	ma_sound_group group;
+	ma_sound_group group = {};
+	Ref<ShinobuGroup> parent_group;
+	bool initialized = false;
 
 protected:
 	static void _bind_methods();

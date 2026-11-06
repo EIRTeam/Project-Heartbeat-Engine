@@ -72,6 +72,7 @@ class InputGlyphsSingleton : public Object {
 	struct GlyphLoadTask {
 		bool aborted = false;
 		Mutex task_mutex;
+		InputGlyphsSingleton *owner = nullptr;
 		GlyphInfo glyph_info;
 		WorkerThreadPool::TaskID task_id;
 		Ref<Image> texture;
@@ -119,6 +120,7 @@ public:
 	String get_event_display_string(const Ref<InputEvent> p_event) const;
 
 	InputGlyphsSingleton();
+	~InputGlyphsSingleton();
 };
 
 #endif // INPUT_GLYPHS_SINGLETON_H

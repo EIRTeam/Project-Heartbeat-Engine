@@ -122,14 +122,24 @@ int FFmpegStreamInfo::load(String p_path) {
 		return err;
 	}
 
-	avio_seek(io_context, 0, SEEK_SET);
-	if (!io_context) {
+	video_streams.clear();
+	audio_streams.clear();
+
+	if (io_context) {
+		avio_seek(io_context, 0, SEEK_SET);
+	} else {
 		const int context_buffer_size = 4096;
 		unsigned char *context_buffer = (unsigned char *)av_malloc(context_buffer_size);
+		ERR_FAIL_NULL_V_MSG(context_buffer, ERR_OUT_OF_MEMORY, "Failed to allocate FFmpeg I/O buffer.");
 		io_context = avio_alloc_context(context_buffer, context_buffer_size, 0, this, &FFmpegStreamInfo::_read_packet_callback, nullptr, &FFmpegStreamInfo::_stream_seek_callback);
+		if (!io_context) {
+			av_free(context_buffer);
+			ERR_FAIL_V_MSG(ERR_OUT_OF_MEMORY, "Failed to allocate FFmpeg I/O context.");
+		}
 	}
 
 	format_context = avformat_alloc_context();
+	ERR_FAIL_NULL_V_MSG(format_context, ERR_OUT_OF_MEMORY, "Failed to allocate FFmpeg format context.");
 	format_context->pb = io_context;
 	format_context->flags |= AVFMT_FLAG_GENPTS;
 

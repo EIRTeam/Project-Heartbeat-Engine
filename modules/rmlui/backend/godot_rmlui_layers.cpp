@@ -41,6 +41,24 @@ void GodotRmlUiLayers::recreate_shared_textures() {
 void GodotRmlUiLayers::clear_layers() {
     DEV_ASSERT(layer_stack.is_empty());
     RD *rd = RD::get_singleton();
+    for (Layer * layer : allocated_layers) {
+        if (!layer->framebuffer.has_value()) {
+            continue;
+        }
+        rd->free_rid(layer->framebuffer->framebuffer);
+        rd->free_rid(layer->framebuffer->color_texture);
+        layer->framebuffer.reset();
+    }
+
+    for (Layer &layer : backbuffers) {
+        if (!layer.framebuffer.has_value()) {
+            continue;
+        }
+        rd->free_rid(layer.framebuffer->framebuffer);
+        rd->free_rid(layer.framebuffer->color_texture);
+        layer.framebuffer.reset();
+    }
+
     if (shared_stencil_buffer.is_valid()) {
         rd->free_rid(shared_stencil_buffer);
         shared_stencil_buffer = RID();
@@ -50,31 +68,19 @@ void GodotRmlUiLayers::clear_layers() {
         rd->free_rid(resolve_intermediary_buffer);
         resolve_intermediary_buffer = RID();
     }
-    for (Layer * layer : allocated_layers) {
-        if (!layer->framebuffer.has_value()) {
-            continue;
-        }
-        rd->free_rid(layer->framebuffer->color_texture);
-        layer->framebuffer.reset();
-    }
-
-    for (Layer &layer : backbuffers) {
-        if (!layer.framebuffer.has_value()) {
-            continue;
-        }
-        rd->free_rid(layer.framebuffer->color_texture);
-        layer.framebuffer.reset();
-    }
 }
 
 void GodotRmlUiLayers::frame_start(RID p_out_framebuffer_id) {
-    framebuffer = p_out_framebuffer_id;
-    
-    if (p_out_framebuffer_id != framebuffer || out_fb_format != RD::get_singleton()->framebuffer_get_format(p_out_framebuffer_id)) {
+    RD *rd = RD::get_singleton();
+    const RD::FramebufferFormatID new_fb_format = rd->framebuffer_get_format(p_out_framebuffer_id);
+    if (p_out_framebuffer_id != framebuffer || out_fb_format != new_fb_format) {
+        if (framebuffer.is_valid() && rd->framebuffer_is_valid(framebuffer)) {
+            rd->framebuffer_set_invalidation_callback(framebuffer, nullptr, nullptr);
+        }
         framebuffer = p_out_framebuffer_id;
-        out_fb_format = RD::get_singleton()->framebuffer_get_format(p_out_framebuffer_id);
+        out_fb_format = new_fb_format;
         clear_layers();
-        RD::get_singleton()->framebuffer_set_invalidation_callback(p_out_framebuffer_id, &GodotRmlUiLayers::_fb_invalidation, this);
+        rd->framebuffer_set_invalidation_callback(p_out_framebuffer_id, &GodotRmlUiLayers::_fb_invalidation, this);
         
         RD::AttachmentFormat color_attachment_format;
         color_attachment_format.format = RenderingDeviceCommons::DATA_FORMAT_R8G8B8A8_UNORM;
@@ -238,4 +244,11 @@ RID GodotRmlUiLayers::backbuffer_get_color_texture(int p_idx) const {
 
 GodotRmlUiLayers::~GodotRmlUiLayers() {
     clear_layers();
+    if (framebuffer.is_valid() && RD::get_singleton()->framebuffer_is_valid(framebuffer)) {
+        RD::get_singleton()->framebuffer_set_invalidation_callback(framebuffer, nullptr, nullptr);
+    }
+    for (Layer *layer : allocated_layers) {
+        memdelete(layer);
+    }
+    allocated_layers.clear();
 }

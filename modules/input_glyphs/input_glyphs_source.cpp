@@ -47,6 +47,10 @@ Ref<InputGlyphsSource> InputGlyphsSource::create() {
 }
 
 Ref<Image> InputGlyphsSourceBuiltin::get_input_glyph(const InputGlyphsConstants::InputType &p_input_type, const InputGlyphsConstants::InputOrigin &p_input_origin, const BitField<InputGlyphStyle> &p_glyphs_style, const InputGlyphSize &p_size) {
+	ERR_FAIL_INDEX_V((int)p_input_type, (int)InputGlyphsConstants::INPUT_TYPE_MAX, Ref<Image>());
+	ERR_FAIL_COND_V(p_input_origin != InputGlyphsConstants::INPUT_ORIGIN_INVALID && (p_input_origin < 0 || p_input_origin >= InputGlyphsConstants::INPUT_ORIGIN_COUNT), Ref<Image>());
+	ERR_FAIL_COND_V(p_size < GLYPH_SIZE_SMALL || p_size >= GLYPH_SIZE_MAX, Ref<Image>());
+
 	int theme = p_glyphs_style & 0b11;
 	int abxy_overrides = p_glyphs_style & 0b110000;
 	abxy_overrides = abxy_overrides >> 4;

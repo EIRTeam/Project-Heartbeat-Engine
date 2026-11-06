@@ -15,6 +15,7 @@ ShinobuSoundSource::ShinobuSoundSource(String m_name) {
 }
 
 float ShinobuSoundSource::ebur128_get_loudness() {
+	ERR_FAIL_COND_V(!Shinobu::get_singleton() || !Shinobu::get_singleton()->is_initialized(), 0.0f);
 	uint64_t start = OS::get_singleton()->get_ticks_usec();
 	ma_sound sound;
 	ma_format format;
@@ -23,6 +24,10 @@ float ShinobuSoundSource::ebur128_get_loudness() {
 	ERR_FAIL_COND_V(instantiate_sound(Ref<ShinobuGroup>(), true, &sound) != OK, 0.0f);
 	ma_sound_get_data_format(&sound, &format, &channel_count, &sample_rate, nullptr, 0);
 	ebur128_state *state = ebur128_init(channel_count, sample_rate, EBUR128_MODE_I);
+	if (state == nullptr) {
+		ma_sound_uninit(&sound);
+		ERR_FAIL_V(0.0f);
+	}
 
 	const uint64_t FRAMES_PER_CHUNK = 300000;
 	Vector<float> chunk_data;
@@ -45,12 +50,15 @@ float ShinobuSoundSource::ebur128_get_loudness() {
 }
 
 uint32_t ShinobuSoundSource::get_channel_count() const {
+	ERR_FAIL_COND_V(!Shinobu::get_singleton() || !Shinobu::get_singleton()->is_initialized(), 0);
 	uint32_t channel_count;
 	// data sources cannot be reused, so this is the best we can do
-	ma_resource_manager_data_source source;
-	ma_resource_manager_data_source_init(ma_engine_get_resource_manager(Shinobu::get_singleton()->get_engine()), name.utf8().get_data(), 0, nullptr, &source);
-	ma_resource_manager_data_source_get_data_format(&source, nullptr, &channel_count, nullptr, nullptr, 0);
+	ma_resource_manager_data_source source = {};
+	ma_result init_result = ma_resource_manager_data_source_init(ma_engine_get_resource_manager(Shinobu::get_singleton()->get_engine()), name.utf8().get_data(), 0, nullptr, &source);
+	ERR_FAIL_COND_V(init_result != MA_SUCCESS, 0);
+	ma_result format_result = ma_resource_manager_data_source_get_data_format(&source, nullptr, &channel_count, nullptr, nullptr, 0);
 	ma_resource_manager_data_source_uninit(&source);
+	ERR_FAIL_COND_V(format_result != MA_SUCCESS, 0);
 	return channel_count;
 }
 
@@ -67,12 +75,17 @@ uint64_t ShinobuSoundSource::get_fixed_length() const {
 }
 
 ShinobuSoundPlayer *ShinobuSoundSource::instantiate(Ref<ShinobuGroup> m_group, bool m_use_source_channel_count) {
+	ERR_FAIL_COND_V(!Shinobu::get_singleton() || !Shinobu::get_singleton()->is_initialized(), nullptr);
+	ERR_FAIL_COND_V(!m_use_source_channel_count && m_group.is_null(), nullptr);
 	return memnew(ShinobuSoundPlayer(this, m_group, m_use_source_channel_count));
 }
 
 ShinobuSoundSource::~ShinobuSoundSource() {}
 
 Error ShinobuSoundSourceMemory::instantiate_sound(Ref<ShinobuGroup> m_group, bool use_source_channel_count, ma_sound *p_sound) {
+	ERR_FAIL_NULL_V(p_sound, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(!Shinobu::get_singleton() || !Shinobu::get_singleton()->is_initialized(), ERR_UNCONFIGURED);
+	ERR_FAIL_COND_V(!use_source_channel_count && (m_group.is_null() || m_group->get_group() == nullptr), ERR_INVALID_PARAMETER);
 	ma_sound_config config = ma_sound_config_init();
 	CharString string_data = name.utf8();
 	config.pFilePath = string_data.ptr();
@@ -96,9 +109,13 @@ ShinobuSoundSourceMemory::ShinobuSoundSourceMemory(String m_name, PackedByteArra
 	ma_engine *engine = Shinobu::get_singleton()->get_engine();
 	name = vformat("%s_%d", name, Shinobu::get_singleton()->get_inc_sound_source_uid());
 	result = ma_resource_manager_register_encoded_data(ma_engine_get_resource_manager(engine), name.utf8().get_data(), (void *)data.ptr(), data.size());
+	MA_ERR(result, "Error registering sound data");
 }
 
 ShinobuSoundSourceMemory::~ShinobuSoundSourceMemory() {
+	if (result != MA_SUCCESS || !Shinobu::get_singleton() || !Shinobu::get_singleton()->is_initialized()) {
+		return;
+	}
 	ma_engine *engine = Shinobu::get_singleton()->get_engine();
 	ma_resource_manager_unregister_data(ma_engine_get_resource_manager(engine), name.utf8().get_data());
 }

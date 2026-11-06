@@ -125,14 +125,21 @@ int64_t VideoDecoder::_stream_seek_callback(void *p_opaque, int64_t p_offset, in
 }
 
 void VideoDecoder::prepare_decoding() {
-	avio_seek(io_context, 0, SEEK_SET);
-	if (!io_context) {
+	if (io_context) {
+		avio_seek(io_context, 0, SEEK_SET);
+	} else {
 		const int context_buffer_size = 4096;
 		unsigned char *context_buffer = (unsigned char *)av_malloc(context_buffer_size);
+		ERR_FAIL_NULL_MSG(context_buffer, "Failed to allocate FFmpeg I/O buffer.");
 		io_context = avio_alloc_context(context_buffer, context_buffer_size, 0, this, &VideoDecoder::_read_packet_callback, nullptr, &VideoDecoder::_stream_seek_callback);
+		if (!io_context) {
+			av_free(context_buffer);
+			ERR_FAIL_MSG("Failed to allocate FFmpeg I/O context.");
+		}
 	}
 
 	format_context = avformat_alloc_context();
+	ERR_FAIL_NULL_MSG(format_context, "Failed to allocate FFmpeg format context.");
 	format_context->pb = io_context;
 	format_context->flags |= AVFMT_FLAG_GENPTS;
 	format_context->video_codec = forced_video_codec;
@@ -198,6 +205,7 @@ Error VideoDecoder::recreate_codec_context() {
 	if (!decoder) {
 		decoder = avcodec_find_decoder(video_stream->codecpar->codec_id);
 	}
+	ERR_FAIL_NULL_V_MSG(decoder, ERR_CANT_CREATE, vformat("No decoder is available for codec %s.", avcodec_get_name(codec_params.codec_id)));
 	if (video_codec_context != nullptr) {
 		avcodec_free_context(&video_codec_context);
 	}
@@ -350,6 +358,7 @@ void VideoDecoder::_decode_next_frame(AVPacket *p_packet, AVFrame *p_receive_fra
 
 int VideoDecoder::_send_packet(AVCodecContext *p_codec_context, AVFrame *p_receive_frame, AVPacket *p_packet) {
 	ZoneScopedN("Video/audio decoder send packet");
+	ERR_FAIL_NULL_V(p_codec_context, AVERROR(EINVAL));
 	// send the packet for decoding.
 	int send_packet_result;
 	{
@@ -364,7 +373,7 @@ int VideoDecoder::_send_packet(AVCodecContext *p_codec_context, AVFrame *p_recei
 		} else {
 			_read_decoded_audio_frames(p_receive_frame);
 		}
-	} else if (format_context->streams[p_packet->stream_index]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+	} else if (p_codec_context == video_codec_context) {
 		print_line(vformat("Failed to send avcodec packet: %s", ffmpeg_get_error_message(send_packet_result)));
 	}
 

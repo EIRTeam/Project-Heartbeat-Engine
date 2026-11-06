@@ -17,7 +17,7 @@ class ShinobuSoundSource : public RefCounted {
 protected:
 	String error_message;
 	String name;
-	ma_result result;
+	ma_result result = MA_ERROR;
 
 	static void _bind_methods();
 

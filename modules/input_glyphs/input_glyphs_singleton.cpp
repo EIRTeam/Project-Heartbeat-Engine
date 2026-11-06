@@ -41,7 +41,7 @@
 InputGlyphsSingleton *InputGlyphsSingleton::singleton = nullptr;
 
 void InputGlyphsSingleton::_glyph_loaded_callback(GlyphLoadTask *p_task) {
-	InputGlyphsSingleton *igs = InputGlyphsSingleton::get_singleton();
+	InputGlyphsSingleton *igs = p_task->owner;
 	WorkerThreadPool::get_singleton()->wait_for_task_completion(p_task->task_id);
 	p_task->task_mutex.lock();
 	igs->mutex.lock();
@@ -157,28 +157,36 @@ InputGlyphsConstants::InputType InputGlyphsSingleton::_get_input_type() const {
 
 void InputGlyphsSingleton::_load_glyph_thread(void *p_userdata) {
 	GlyphLoadTask *task = (GlyphLoadTask *)p_userdata;
+	InputGlyphsSingleton *owner = task->owner;
 
 	task->task_mutex.lock();
 	if (!task->aborted) {
-		Ref<InputGlyphsSource> glyph_src = InputGlyphsSingleton::get_singleton()->glyph_source;
+		Ref<InputGlyphsSource> glyph_src = owner->glyph_source;
 		Ref<Image> texture = glyph_src->get_input_glyph(task->glyph_info.type, task->glyph_info.origin, task->glyph_info.style, task->glyph_info.size);
 		task->texture = texture;
 	}
 	task->task_mutex.unlock();
 
-	callable_mp(InputGlyphsSingleton::get_singleton(), &InputGlyphsSingleton::_on_task_finished).call_deferred();
+	callable_mp(owner, &InputGlyphsSingleton::_on_task_finished).call_deferred();
 }
 
 void InputGlyphsSingleton::_on_task_finished() {
-	auto it = current_tasks.begin();
-	while (it != current_tasks.end()) {
-		if (WorkerThreadPool::get_singleton()->is_task_completed(it->value->task_id)) {
-			InputGlyphs::GlyphUID gid = it->key;
-			_glyph_loaded_callback(it->value);
-			--it;
-			current_tasks.erase(gid);
+	Vector<InputGlyphs::GlyphUID> completed_ids;
+	Vector<GlyphLoadTask *> completed_tasks;
+	mutex.lock();
+	for (const KeyValue<InputGlyphs::GlyphUID, GlyphLoadTask *> &kv : current_tasks) {
+		if (WorkerThreadPool::get_singleton()->is_task_completed(kv.value->task_id)) {
+			completed_ids.push_back(kv.key);
+			completed_tasks.push_back(kv.value);
 		}
-		++it;
+	}
+	for (const InputGlyphs::GlyphUID &uid : completed_ids) {
+		current_tasks.erase(uid);
+	}
+	mutex.unlock();
+
+	for (GlyphLoadTask *task : completed_tasks) {
+		_glyph_loaded_callback(task);
 	}
 }
 
@@ -190,7 +198,6 @@ void InputGlyphsSingleton::_on_input_glyphs_changed() {
 		kv.value->aborted = true;
 		kv.value->task_mutex.unlock();
 	}
-	current_tasks.clear();
 	// Clean loaded glyphs
 	loaded_glyphs.clear();
 	emit_signal("input_glyphs_changed");
@@ -252,7 +259,10 @@ Ref<Texture2D> InputGlyphsSingleton::get_glyph_texture(const InputGlyphsConstant
 }
 
 void InputGlyphsSingleton::request_glyph_texture_load(const InputGlyphsConstants::InputType p_input_type, const InputGlyphsConstants::InputOrigin p_input_origin, const BitField<InputGlyphStyle> p_style, const InputGlyphSize p_size) {
+	ERR_FAIL_INDEX((int)p_input_type, (int)InputGlyphsConstants::INPUT_TYPE_MAX);
+	ERR_FAIL_COND(p_input_origin != InputGlyphsConstants::INPUT_ORIGIN_INVALID && (p_input_origin < 0 || p_input_origin >= InputGlyphsConstants::INPUT_ORIGIN_COUNT));
 	InputGlyphSize size = p_size == InputGlyphSize::GLYPH_SIZE_MAX ? default_glyph_size : p_size;
+	ERR_FAIL_COND(size < GLYPH_SIZE_SMALL || size >= GLYPH_SIZE_MAX);
 	GlyphInfo info;
 	info.type = p_input_type;
 	info.origin = p_input_origin;
@@ -265,6 +275,7 @@ void InputGlyphsSingleton::request_glyph_texture_load(const InputGlyphsConstants
 	}
 
 	GlyphLoadTask *load_task = memnew(GlyphLoadTask);
+	load_task->owner = this;
 	load_task->glyph_info.origin = p_input_origin;
 	load_task->glyph_info.size = size;
 	load_task->glyph_info.style = p_style;
@@ -442,4 +453,23 @@ String InputGlyphsSingleton::get_event_display_string(const Ref<InputEvent> p_ev
 InputGlyphsSingleton::InputGlyphsSingleton() {
 	InputGlyphsSourceBuiltin::make_current();
 	singleton = this;
+}
+
+InputGlyphsSingleton::~InputGlyphsSingleton() {
+	Vector<GlyphLoadTask *> tasks;
+	mutex.lock();
+	for (const KeyValue<InputGlyphs::GlyphUID, GlyphLoadTask *> &kv : current_tasks) {
+		kv.value->task_mutex.lock();
+		kv.value->aborted = true;
+		kv.value->task_mutex.unlock();
+		tasks.push_back(kv.value);
+	}
+	current_tasks.clear();
+	mutex.unlock();
+
+	for (GlyphLoadTask *task : tasks) {
+		WorkerThreadPool::get_singleton()->wait_for_task_completion(task->task_id);
+		memdelete(task);
+	}
+	singleton = nullptr;
 }
