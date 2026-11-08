@@ -6,7 +6,9 @@ void RmlUiControl::_bind_methods() {
 }
 
 void RmlUiControl::load_document(const String &p_path) {
-    document = RmlUiSingleton::get_singleton()->create_document_from_path(p_path);
+    RmlUiSingleton *rml = RmlUiSingleton::get_singleton();
+    ERR_FAIL_NULL(rml);
+    document = rml->create_document_from_path(p_path);
 
 }
 
@@ -15,6 +17,9 @@ void RmlUiControl::_notification(int p_what) {
 
 RmlUiControl::~RmlUiControl() {
     if (document.is_valid()) {
-        RmlUiSingleton::get_singleton()->free_document(document);
+        RmlUiSingleton *rml = RmlUiSingleton::get_singleton();
+        if (rml != nullptr) {
+            rml->free_document(document);
+        }
     }
 }

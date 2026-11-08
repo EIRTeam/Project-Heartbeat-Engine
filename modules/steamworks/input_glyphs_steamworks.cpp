@@ -128,7 +128,9 @@ ESteamInputGlyphSize input_glph_size_to_steamworks(const InputGlyphSize &p_glyph
 }
 
 Ref<Image> HBSteamworksInputGlyphsSource::get_input_glyph(const InputGlyphsConstants::InputType &p_input_type, const InputGlyphsConstants::InputOrigin &p_input_origin, const BitField<InputGlyphStyle> &p_glyphs_style, const InputGlyphSize &p_size) {
-	HBSteamInput *input = Steamworks::get_singleton()->get_input();
+	Steamworks *steamworks = Steamworks::get_singleton();
+	ERR_FAIL_COND_V(steamworks == nullptr || !steamworks->is_valid() || steamworks->get_input() == nullptr || !steamworks->get_input()->is_valid(), Ref<Image>());
+	HBSteamInput *input = steamworks->get_input();
 	// Convert from xbox 360 reference origin to the destination input type
 	SWC::InputActionOrigin steamworks_origin = (SWC::InputActionOrigin)origin_to_steamworks_xbox_origin(p_input_origin);
 	SWC::SteamInputType steamworks_input_type = (SWC::SteamInputType)input_type_to_steamworks_input_type(p_input_type);
@@ -180,16 +182,20 @@ Ref<Image> HBSteamworksInputGlyphsSource::get_input_glyph(const InputGlyphsConst
 }
 
 InputGlyphsConstants::InputType HBSteamworksInputGlyphsSource::identify_joy(int p_device) const {
-	InputHandle_t input_handle = Steamworks::get_singleton()->get_input()->get_joy_steam_input_handle(p_device);
+	Steamworks *steamworks = Steamworks::get_singleton();
+	ERR_FAIL_COND_V(steamworks == nullptr || !steamworks->is_valid() || steamworks->get_input() == nullptr || !steamworks->get_input()->is_valid(), InputGlyphsConstants::UNKNOWN);
+	InputHandle_t input_handle = steamworks->get_input()->get_joy_steam_input_handle(p_device);
 	if (input_handle == 0) {
 		return InputGlyphsConstants::UNKNOWN;
 	}
-	SWC::SteamInputType steam_input_type = Steamworks::get_singleton()->get_input()->get_input_type_for_handle(input_handle);
+	SWC::SteamInputType steam_input_type = steamworks->get_input()->get_input_type_for_handle(input_handle);
 	return steamworks_input_type_to_input_type(steam_input_type);
 }
 
 void HBSteamworksInputGlyphDumpTool::_dump_input_type(InputDumpInfo &p_dump_info, InputGlyphsConstants::InputType p_input_type, Ref<HBSteamworksInputGlyphsSource> p_source) {
-	HBSteamInput *input = Steamworks::get_singleton()->get_input();
+	Steamworks *steamworks = Steamworks::get_singleton();
+	ERR_FAIL_COND(steamworks == nullptr || !steamworks->is_valid() || steamworks->get_input() == nullptr || !steamworks->get_input()->is_valid());
+	HBSteamInput *input = steamworks->get_input();
 
 	SWC::SteamInputType steam_input_type = p_source->input_type_to_steamworks_input_type(p_input_type);
 	for (int size_i = 0; size_i < InputGlyphSize::GLYPH_SIZE_MAX; size_i++) {

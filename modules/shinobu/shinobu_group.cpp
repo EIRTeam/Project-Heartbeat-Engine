@@ -12,28 +12,28 @@ void ShinobuGroup::_bind_methods() {
 }
 
 ma_sound_group *ShinobuGroup::get_group() {
-	return initialized ? &group : nullptr;
+	return initialized && Shinobu::get_singleton() != nullptr && Shinobu::get_singleton()->is_initialized() ? &group : nullptr;
 }
 
 void ShinobuGroup::set_volume(float m_linear_volume) {
-	ERR_FAIL_COND(!initialized);
+	ERR_FAIL_COND(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized());
 	ma_sound_group_set_volume(&group, m_linear_volume);
 }
 
 float ShinobuGroup::get_volume() const {
-	ERR_FAIL_COND_V(!initialized, 0.0f);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), 0.0f);
 	return ma_sound_group_get_volume(&group);
 }
 
 Error ShinobuGroup::connect_to_endpoint() {
-	ERR_FAIL_COND_V(!initialized, ERR_UNCONFIGURED);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), ERR_UNCONFIGURED);
 	ma_engine *engine = Shinobu::get_singleton()->get_engine();
 	MA_ERR_RET(ma_node_attach_output_bus(&group, 0, ma_engine_get_endpoint(engine), 0), "Error connecting group to endpoint");
 	return OK;
 }
 
 Error ShinobuGroup::connect_to_effect(Ref<ShinobuEffect> m_effect) {
-	ERR_FAIL_COND_V(!initialized, ERR_UNCONFIGURED);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), ERR_UNCONFIGURED);
 	ERR_FAIL_COND_V(m_effect.is_null() || m_effect->get_node() == nullptr, ERR_INVALID_PARAMETER);
 	MA_ERR_RET(ma_node_attach_output_bus(&group, 0, m_effect->get_node(), 0), "Error connecting group to effect");
 	return OK;

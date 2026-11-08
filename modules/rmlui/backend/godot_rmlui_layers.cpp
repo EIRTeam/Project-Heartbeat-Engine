@@ -137,6 +137,8 @@ void GodotRmlUiLayers::render_start() {
 void GodotRmlUiLayers::push_layer() {
     RD *rd = RD::get_singleton();
     const int last_idx = layer_stack.size();
+    ERR_FAIL_INDEX(last_idx, allocated_layers.size());
+    ERR_FAIL_COND(!allocated_layers[last_idx]->framebuffer.has_value());
     layer_stack.push_back(allocated_layers[last_idx]);
     DEV_ASSERT(layer_stack[last_idx]->idx == last_idx);
     rd->texture_clear(layer_stack[last_idx]->framebuffer->color_texture, Color(0.0f, 0.0f, 0.0f, 0.0f), 0, 1, 0, 1);
@@ -172,11 +174,13 @@ Rml::LayerHandle GodotRmlUiLayers::get_layer(int p_layer) const {
 RID GodotRmlUiLayers::get_layer_color_texture(int p_layer) const {
     ERR_FAIL_INDEX_V(p_layer, layer_stack.size(), RID());
     DEV_ASSERT(layer_stack[p_layer]->idx == p_layer);
+    ERR_FAIL_COND_V(!layer_stack[p_layer]->framebuffer.has_value(), RID());
     return layer_stack[p_layer]->framebuffer->color_texture;
 }
 
 RID GodotRmlUiLayers::get_layer_framebuffer(int p_layer) const {
     ERR_FAIL_INDEX_V(p_layer, layer_stack.size(), RID());
+    ERR_FAIL_COND_V(!layer_stack[p_layer]->framebuffer.has_value(), RID());
     return layer_stack[p_layer]->framebuffer->framebuffer;
 }
 
@@ -192,6 +196,7 @@ RID GodotRmlUiLayers::get_resolve_buffer() const {
 int GodotRmlUiLayers::layer_get_idx(Rml::LayerHandle p_layer) const {
     Layer *layer = reinterpret_cast<Layer*>(p_layer);
     if (layer == nullptr) {
+        ERR_FAIL_COND_V(allocated_layers.is_empty(), -1);
         layer = allocated_layers[0];
     }
     int idx = layer_stack.find(layer);
@@ -234,11 +239,13 @@ GodotRmlUiLayers::AllocatedFramebuffer GodotRmlUiLayers::allocate_framebuffer(co
 
 RID GodotRmlUiLayers::backbuffer_get_framebuffer(int p_idx) const {
     ERR_FAIL_INDEX_V(p_idx, BACKBUFFER_COUNT, RID());
+    ERR_FAIL_COND_V(!backbuffers[p_idx].framebuffer.has_value(), RID());
     return backbuffers[p_idx].framebuffer->framebuffer;
 }
 
 RID GodotRmlUiLayers::backbuffer_get_color_texture(int p_idx) const {
     ERR_FAIL_INDEX_V(p_idx, BACKBUFFER_COUNT, RID());
+    ERR_FAIL_COND_V(!backbuffers[p_idx].framebuffer.has_value(), RID());
     return backbuffers[p_idx].framebuffer->color_texture;
 }
 

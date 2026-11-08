@@ -162,6 +162,7 @@ ma_backend Shinobu::string_to_backend(String str) {
 }
 
 Error Shinobu::initialize(ma_backend forced_backend) {
+	ERR_FAIL_COND_V(initialized, ERR_ALREADY_IN_USE);
 	List<String> args = OS::get_singleton()->get_cmdline_args();
 	ma_backend backend_to_force = ma_backend_null;
 
@@ -223,10 +224,17 @@ Error Shinobu::initialize(ma_backend forced_backend) {
 
 	result = ma_context_init(backends, backend_count, &ctx_config, &context);
 	delete[] backends;
-	MA_ERR_RET(result, "Context init failed");
+	if (result != MA_SUCCESS) {
+		error_message = vformat("Context init failed (%s)", ma_result_description(result));
+		return FAILED;
+	}
 
 	result = ma_device_init(&context, &device_config, &device);
-	MA_ERR_RET(result, "Device init failed");
+	if (result != MA_SUCCESS) {
+		error_message = vformat("Device init failed (%s)", ma_result_description(result));
+		ma_context_uninit(&context);
+		return FAILED;
+	}
 
 	ma_engine_config engine_config = ma_engine_config_init();
 	engine_config.pDevice = &device;
@@ -256,13 +264,24 @@ Error Shinobu::initialize(ma_backend forced_backend) {
 
 	result = ma_resource_manager_init(&resourceManagerConfig, &resource_manager);
 
-	MA_ERR_RET(result, "Resource manager init failed!");
+	if (result != MA_SUCCESS) {
+		error_message = vformat("Resource manager init failed (%s)", ma_result_description(result));
+		ma_device_uninit(&device);
+		ma_context_uninit(&context);
+		return FAILED;
+	}
 
 	engine_config.pResourceManager = &resource_manager;
 
 	result = ma_engine_init(&engine_config, &engine);
 
-	MA_ERR_RET(result, "Audio engine init failed!");
+	if (result != MA_SUCCESS) {
+		error_message = vformat("Audio engine init failed (%s)", ma_result_description(result));
+		ma_resource_manager_uninit(&resource_manager);
+		ma_device_uninit(&device);
+		ma_context_uninit(&context);
+		return FAILED;
+	}
 
 	initialized = true;
 
@@ -331,11 +350,13 @@ uint64_t Shinobu::get_desired_buffer_size_msec() const {
 }
 
 Error Shinobu::set_master_volume(float m_linear_volume) {
+	ERR_FAIL_COND_V(!initialized, ERR_UNCONFIGURED);
 	MA_ERR_RET(ma_engine_set_volume(&engine, m_linear_volume), "Error setting volume");
 	return OK;
 }
 
 float Shinobu::get_master_volume() {
+	ERR_FAIL_COND_V(!initialized, 0.0f);
 	ma_node *endpoint = ma_engine_get_endpoint(&engine);
 	if (!endpoint) {
 		return 0.0f;
@@ -344,32 +365,38 @@ float Shinobu::get_master_volume() {
 }
 
 uint64_t Shinobu::get_dsp_time() const {
+	ERR_FAIL_COND_V(!initialized, 0);
 	return ma_engine_get_time(&engine) / (float)(ma_engine_get_sample_rate(&engine) / 1000.0f);
 }
 
 Error Shinobu::set_dsp_time(uint64_t m_new_time_msec) {
+	ERR_FAIL_COND_V(!initialized, ERR_UNCONFIGURED);
 	ma_result result = ma_engine_set_time(&engine, m_new_time_msec * (float)(ma_engine_get_sample_rate(&engine) / 1000.0f));
 	MA_ERR_RET(result, "Error setting DSP time");
 	return OK;
 }
 
 String Shinobu::get_current_backend_name() const {
+	ERR_FAIL_COND_V(!initialized, String());
 	return ma_get_backend_name(context.backend);
 }
 
 void Shinobu::pause() {
+	ERR_FAIL_COND(!initialized);
 	if (ma_device_is_started(&device)) {
 		ma_device_stop(&device);
 	}
 }
 
 void Shinobu::resume() {
+	ERR_FAIL_COND(!initialized);
 	if (!ma_device_is_started(&device)) {
 		ma_device_start(&device);
 	}
 }
 
 uint64_t Shinobu::get_actual_buffer_size() const {
+	ERR_FAIL_COND_V(!initialized, 0);
 	return device.playback.internalPeriodSizeInFrames / (double)(device.playback.internalSampleRate / 1000.0);
 }
 

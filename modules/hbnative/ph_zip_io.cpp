@@ -41,8 +41,7 @@ uLong phzipio_write(voidpf opaque, voidpf stream, const void *buf, uLong size) {
 	ERR_FAIL_NULL_V(fa, 0);
 	ERR_FAIL_COND_V(fa->is_null(), 0);
 
-	(*fa)->store_buffer((uint8_t *)buf, size);
-	return size;
+	return (*fa)->store_buffer((const uint8_t *)buf, size) ? size : 0;
 }
 
 ZPOS64_T phzipio_tell(voidpf opaque, voidpf stream) {

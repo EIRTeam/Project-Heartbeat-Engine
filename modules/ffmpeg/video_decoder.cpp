@@ -41,7 +41,9 @@ extern "C" {
 }
 #include "tracy_import.h"
 #include <cstdio>
+#include <cstdint>
 #include <iterator>
+#include <limits>
 
 #ifdef GDEXTENSION
 #include "gdextension_build/gdex_print.h"
@@ -267,6 +269,11 @@ void VideoDecoder::_thread_func(void *userdata) {
 	VideoDecoder *decoder = (VideoDecoder *)userdata;
 	AVPacket *packet = av_packet_alloc();
 	AVFrame *receive_frame = av_frame_alloc();
+	if (packet == nullptr || receive_frame == nullptr) {
+		av_packet_free(&packet);
+		av_frame_free(&receive_frame);
+		return;
+	}
 
 #ifdef GDEXTENSION
 	String video_decoding_str = vformat("Video decoding %d", OS::get_singleton()->get_thread_caller_id());
@@ -406,6 +413,9 @@ void VideoDecoder::_read_decoded_frames(AVFrame *p_received_frame) {
 		Ref<FFmpegFrame> frame;
 		// copy data to a new AVFrame so that `receiveFrame` can be reused.
 		frame.instantiate();
+		if (frame->get_frame() == nullptr) {
+			continue;
+		}
 		av_frame_move_ref(frame->get_frame(), p_received_frame);
 
 		last_decoded_frame_time.set(frame_time);
@@ -434,8 +444,24 @@ void VideoDecoder::_read_decoded_frames(AVFrame *p_received_frame) {
 		{
 			ZoneNamedN(image_unwrap_copy, "Image unwrap copy", true);
 
-			int frame_size = frame->get_frame()->buf[0]->size; // Change this if we ever allow RGBA
-			unwrapped_frame.resize(frame_size);
+			AVFrame *rgba_frame = frame->get_frame();
+			const int64_t row_bytes = (int64_t)width * 4;
+			const bool total_bytes_overflow = row_bytes > 0 && height > std::numeric_limits<int64_t>::max() / row_bytes;
+			const int64_t total_bytes = total_bytes_overflow ? 0 : row_bytes * height;
+			const uintptr_t buffer_start = rgba_frame->buf[0] != nullptr ? (uintptr_t)rgba_frame->buf[0]->data : 0;
+			const uintptr_t data_start = (uintptr_t)rgba_frame->data[0];
+			const uintptr_t buffer_end = rgba_frame->buf[0] != nullptr && rgba_frame->buf[0]->size >= 0 && buffer_start <= std::numeric_limits<uintptr_t>::max() - (uintptr_t)rgba_frame->buf[0]->size ? buffer_start + (uintptr_t)rgba_frame->buf[0]->size : 0;
+			const int64_t stride = rgba_frame->linesize[0];
+			const bool stride_abs_overflow = stride == std::numeric_limits<int64_t>::min();
+			const uintptr_t stride_abs = stride_abs_overflow ? 0 : (stride < 0 ? (uintptr_t)-stride : (uintptr_t)stride);
+			const bool first_row_in_buffer = buffer_end != 0 && data_start >= buffer_start && data_start <= buffer_end && (uintptr_t)row_bytes <= buffer_end - data_start;
+			const bool rows_in_buffer = first_row_in_buffer && (height <= 1 || (stride >= 0 ? stride_abs <= (buffer_end - data_start - (uintptr_t)row_bytes) / (height - 1) : stride_abs > 0 && (uintptr_t)(height - 1) <= (data_start - buffer_start) / stride_abs));
+
+			if (rgba_frame->buf[0] == nullptr || rgba_frame->data[0] == nullptr || width <= 0 || height <= 0 || row_bytes <= 0 || total_bytes_overflow || total_bytes <= 0 || total_bytes > std::numeric_limits<int>::max() || stride_abs < (uintptr_t)row_bytes || stride_abs_overflow || !rows_in_buffer) {
+				frame->do_return();
+				continue;
+			}
+			unwrapped_frame.resize((int)total_bytes);
 			uint8_t *unwrapped_frame_ptrw = unwrapped_frame.ptrw();
 			{
 				ZoneNamedN(image_unwrap_memcopy, "memcpy", true);
@@ -510,6 +536,13 @@ void VideoDecoder::_read_decoded_audio_frames(AVFrame *p_received_frame) {
 		ERR_FAIL_COND_MSG(av_sample_fmt_is_planar((AVSampleFormat)frame->format), "Audio format should never be planar, bug?");
 
 		int data_size = av_samples_get_buffer_size(nullptr, frame->ch_layout.nb_channels, frame->nb_samples, (AVSampleFormat)frame->format, 0);
+		if (data_size <= 0 || frame->data[0] == nullptr) {
+			if (frame != p_received_frame) {
+				av_frame_free(&frame);
+			}
+			av_frame_unref(p_received_frame);
+			return;
+		}
 		Ref<DecodedAudioFrame> audio_frame = memnew(DecodedAudioFrame(frame_time));
 		audio_frame->sample_data.resize(data_size / sizeof(float));
 		memcpy(audio_frame->sample_data.ptrw(), frame->data[0], data_size);
@@ -532,6 +565,9 @@ void VideoDecoder::_scaler_frame_return(Ref<FFmpegFrame> p_scaler_frame) {
 
 Ref<FFmpegFrame> VideoDecoder::_ensure_frame_pixel_format(Ref<FFmpegFrame> p_frame, int p_target_pixel_format) {
 	ZoneScopedN("Video decoder rescale");
+	if (!p_frame.is_valid() || p_frame->get_frame() == nullptr) {
+		return Ref<FFmpegFrame>();
+	}
 
 	if (p_frame->get_frame()->format == (AVPixelFormat)p_target_pixel_format) {
 		return p_frame;
@@ -545,6 +581,11 @@ Ref<FFmpegFrame> VideoDecoder::_ensure_frame_pixel_format(Ref<FFmpegFrame> p_fra
 			width, height, (AVPixelFormat)p_frame->get_frame()->format,
 			width, height, (AVPixelFormat)p_target_pixel_format,
 			1, nullptr, nullptr, nullptr);
+	if (sws_context == nullptr) {
+		print_line("Failed to create SWS context");
+		p_frame->do_return();
+		return Ref<FFmpegFrame>();
+	}
 
 	Ref<FFmpegFrame> scaler_frame;
 	{
@@ -556,6 +597,9 @@ Ref<FFmpegFrame> VideoDecoder::_ensure_frame_pixel_format(Ref<FFmpegFrame> p_fra
 
 	if (!scaler_frame.is_valid()) {
 		scaler_frame.instantiate();
+		if (scaler_frame->get_frame() == nullptr) {
+			return Ref<FFmpegFrame>();
+		}
 		scaler_frame->connect("return_frame", callable_mp(this, &VideoDecoder::_scaler_frame_return));
 	}
 
@@ -646,6 +690,10 @@ AVFrame *VideoDecoder::_ensure_frame_audio_format(AVFrame *p_frame, int p_target
 	AVFrame *out_frame;
 
 	out_frame = av_frame_alloc();
+	if (out_frame == nullptr) {
+		print_line("Failed to allocate SWR frame");
+		return nullptr;
+	}
 	out_frame->format = p_target_audio_format;
 	out_frame->ch_layout = audio_codec_context->ch_layout;
 	out_frame->sample_rate = audio_codec_context->sample_rate;
@@ -655,7 +703,7 @@ AVFrame *VideoDecoder::_ensure_frame_audio_format(AVFrame *p_frame, int p_target
 
 	if (get_buffer_result < 0) {
 		print_line("Failed to allocate SWR frame buffer:", ffmpeg_get_error_message(get_buffer_result));
-		av_frame_unref(out_frame);
+		av_frame_free(&out_frame);
 		return nullptr;
 	}
 
@@ -663,7 +711,7 @@ AVFrame *VideoDecoder::_ensure_frame_audio_format(AVFrame *p_frame, int p_target
 
 	if (converter_result < 0) {
 		print_line("Failed to convert audio frame:", ffmpeg_get_error_message(converter_result));
-		av_frame_unref(out_frame);
+		av_frame_free(&out_frame);
 		return nullptr;
 	}
 

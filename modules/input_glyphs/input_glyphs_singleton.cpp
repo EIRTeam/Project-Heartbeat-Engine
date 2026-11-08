@@ -292,8 +292,9 @@ InputGlyphsConstants::InputOrigin InputGlyphsSingleton::get_origin_from_joy_even
 	Ref<InputEventJoypadButton> joy_button = p_input_event;
 	InputGlyphsConstants::InputOrigin origin = InputGlyphsConstants::INPUT_ORIGIN_INVALID;
 	if (joy_button.is_valid()) {
-		if (joy_button->get_button_index() < JoyButton::SDL_MAX) {
-			origin = InputGlyphsConstants::godot_button_to_input_origin_lut[(int)joy_button->get_button_index()];
+		const int button_index = (int)joy_button->get_button_index();
+		if (button_index >= 0 && button_index < (int)JoyButton::SDL_MAX) {
+			origin = InputGlyphsConstants::godot_button_to_input_origin_lut[button_index];
 		}
 	}
 	// TODO: Implement input event joy motion

@@ -76,7 +76,7 @@ class PHAudioStreamPreviewGenerator : public Node {
 			preview = p_rhs.preview;
 			base_stream = p_rhs.base_stream;
 			playback = p_rhs.playback;
-			generating.set_to(generating.is_set());
+			generating.set_to(p_rhs.generating.is_set());
 			id = p_rhs.id;
 			thread = p_rhs.thread;
 			return *this;
@@ -85,11 +85,12 @@ class PHAudioStreamPreviewGenerator : public Node {
 			preview = p_rhs.preview;
 			base_stream = p_rhs.base_stream;
 			playback = p_rhs.playback;
-			generating.set_to(generating.is_set());
+			generating.set_to(p_rhs.generating.is_set());
 			id = p_rhs.id;
 			thread = p_rhs.thread;
 		}
 		Preview() {
+			thread = nullptr;
 		}
 	};
 
@@ -109,6 +110,7 @@ public:
 	Ref<PHAudioStreamPreview> generate_preview(const Ref<AudioStream> &p_stream);
 
 	PHAudioStreamPreviewGenerator();
+	~PHAudioStreamPreviewGenerator();
 };
 
 #endif // PH_AUDIO_STREAM_PREVIEW_H

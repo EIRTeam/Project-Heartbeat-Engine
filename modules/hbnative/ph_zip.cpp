@@ -35,6 +35,7 @@
 #include "ph_zip.h"
 
 #include "core/io/file_access.h"
+#include <climits>
 
 extern "C" {
 
@@ -57,8 +58,8 @@ static void *phzip_godot_open(voidpf opaque, const void *p_fname, int mode) {
 
 static uLong phzip_godot_read(voidpf opaque, voidpf stream, void *buf, uLong size) {
 	ZipData *zd = (ZipData *)stream;
-	zd->f->get_buffer((uint8_t *)buf, size);
-	return size;
+	uint64_t read = zd->f->get_buffer((uint8_t *)buf, size);
+	return read <= size ? (uLong)read : 0;
 }
 
 static uLong phzip_godot_write(voidpf opaque, voidpf stream, const void *buf, uLong size) {
@@ -181,31 +182,52 @@ bool PHZipArchive::try_open_pack(const String &p_path, bool p_replace_files, uin
 
 	unz_global_info64 gi;
 	int err = unzGetGlobalInfo64(zfile, &gi);
-	ERR_FAIL_COND_V(err != UNZ_OK, false);
+	if (err != UNZ_OK) {
+		unzClose(zfile);
+		return false;
+	}
 
 	Package pkg;
 	pkg.filename = p_path;
 	pkg.zfile = zfile;
-	packages.push_back(pkg);
-	int pkg_num = packages.size() - 1;
+	int pkg_num = packages.size();
+	HashMap<String, File> discovered_files;
 
 	for (uint64_t i = 0; i < gi.number_entry; i++) {
-		char filename_inzip[256];
-
 		unz_file_info64 file_info;
-		err = unzGetCurrentFileInfo64(zfile, &file_info, filename_inzip, sizeof(filename_inzip), nullptr, 0, nullptr, 0);
-		ERR_CONTINUE(err != UNZ_OK);
+		err = unzGetCurrentFileInfo64(zfile, &file_info, nullptr, 0, nullptr, 0, nullptr, 0);
+		if (err != UNZ_OK || file_info.size_filename > (uint64_t)INT_MAX - 1) {
+			unzClose(zfile);
+			return false;
+		}
+		Vector<char> filename_inzip;
+		filename_inzip.resize(file_info.size_filename + 1);
+		err = unzGetCurrentFileInfo64(zfile, &file_info, filename_inzip.ptrw(), filename_inzip.size(), nullptr, 0, nullptr, 0);
+		if (err != UNZ_OK) {
+			unzClose(zfile);
+			return false;
+		}
 
 		File f;
 		f.package = pkg_num;
-		unzGetFilePos64(zfile, &f.file_pos);
+		if (unzGetFilePos64(zfile, &f.file_pos) != UNZ_OK) {
+			unzClose(zfile);
+			return false;
+		}
 
-		String fname = String::utf8(filename_inzip);
-		files[fname] = f;
+		String fname = String::utf8(filename_inzip.ptr());
+		discovered_files[fname] = f;
 
 		if ((i + 1) < gi.number_entry) {
-			unzGoToNextFile(zfile);
+			if (unzGoToNextFile(zfile) != UNZ_OK) {
+				unzClose(zfile);
+				return false;
+			}
 		}
+	}
+	packages.push_back(pkg);
+	for (const KeyValue<String, File> &E : discovered_files) {
+		files[E.key] = E.value;
 	}
 
 	return true;
@@ -260,13 +282,18 @@ bool FileAccessPHZip::is_open() const {
 
 void FileAccessPHZip::seek(uint64_t p_position) {
 	ERR_FAIL_NULL(zfile);
-
-	unzSeekCurrentFile(zfile, p_position);
+	ERR_FAIL_COND(p_position > get_length());
+	ERR_FAIL_COND(unzSeekCurrentFile64(zfile, p_position) != UNZ_OK);
+	at_eof = false;
 }
 
 void FileAccessPHZip::seek_end(int64_t p_position) {
 	ERR_FAIL_NULL(zfile);
-	unzSeekCurrentFile(zfile, get_length() + p_position);
+	ERR_FAIL_COND(p_position < 0 && uint64_t(-(p_position + 1)) + 1 > get_length());
+	ERR_FAIL_COND(p_position > 0 && uint64_t(p_position) > UINT64_MAX - get_length());
+	uint64_t position = p_position < 0 ? get_length() - uint64_t(-(p_position + 1)) - 1 : get_length() + uint64_t(p_position);
+	ERR_FAIL_COND(unzSeekCurrentFile64(zfile, position) != UNZ_OK);
+	at_eof = false;
 }
 
 uint64_t FileAccessPHZip::get_position() const {
@@ -293,12 +320,23 @@ uint64_t FileAccessPHZip::get_buffer(uint8_t *p_dst, uint64_t p_length) const {
 	if (at_eof) {
 		return 0;
 	}
-	int64_t read = unzReadCurrentFile(zfile, p_dst, p_length);
-	ERR_FAIL_COND_V(read < 0, read);
-	if ((uint64_t)read < p_length) {
+	uint64_t total_read = 0;
+	while (total_read < p_length) {
+		unsigned chunk = (unsigned)MIN(p_length - total_read, uint64_t(UINT_MAX));
+		int64_t read = unzReadCurrentFile(zfile, p_dst + total_read, chunk);
+		ERR_FAIL_COND_V(read < 0, total_read > 0 ? total_read : read);
+		if (read == 0) {
+			break;
+		}
+		total_read += read;
+		if ((unsigned)read < chunk) {
+			break;
+		}
+	}
+	if (total_read < p_length) {
 		at_eof = true;
 	}
-	return read;
+	return total_read;
 }
 
 Error FileAccessPHZip::get_error() const {

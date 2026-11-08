@@ -13,16 +13,19 @@ void ShinobuEffect::_bind_methods() {
 }
 
 Error ShinobuEffect::connect_to_effect(Ref<ShinobuEffect> m_effect) {
+	ERR_FAIL_COND_V(Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), ERR_UNCONFIGURED);
 	ERR_FAIL_COND_V(m_effect.is_null() || m_effect->get_node() == nullptr, ERR_INVALID_PARAMETER);
 	return connect_to_node(m_effect->get_node());
 }
 
 Error ShinobuEffect::connect_to_group(Ref<ShinobuGroup> m_group) {
+	ERR_FAIL_COND_V(Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), ERR_UNCONFIGURED);
 	ERR_FAIL_COND_V(m_group.is_null() || m_group->get_group() == nullptr, ERR_INVALID_PARAMETER);
 	return connect_to_node(m_group->get_group());
 }
 
 Error ShinobuEffect::connect_to_endpoint() {
+	ERR_FAIL_COND_V(Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), ERR_UNCONFIGURED);
 	ma_engine *engine = Shinobu::get_singleton()->get_engine();
 	return connect_to_node(ma_engine_get_endpoint(engine));
 }
@@ -47,12 +50,12 @@ void ShinobuChannelRemapEffect::_bind_methods() {
 }
 
 void ShinobuChannelRemapEffect::set_weight(uint8_t channel_in, uint8_t channel_out, float weight) {
-	ERR_FAIL_COND(!initialized);
+	ERR_FAIL_COND(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized());
 	ma_channel_remap_node_set_weight(&remap_node, channel_in, channel_out, weight);
 }
 
 ma_node *ShinobuChannelRemapEffect::get_node() {
-	return initialized ? &remap_node : nullptr;
+	return initialized && Shinobu::get_singleton() != nullptr && Shinobu::get_singleton()->is_initialized() ? &remap_node : nullptr;
 }
 
 ShinobuChannelRemapEffect::~ShinobuChannelRemapEffect() {
@@ -68,17 +71,17 @@ void ShinobuPitchShiftEffect::_bind_methods() {
 }
 
 void ShinobuPitchShiftEffect::set_pitch_scale(float m_pitch_scale) {
-	ERR_FAIL_COND(!initialized);
+	ERR_FAIL_COND(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized());
 	ma_pitch_shift_node_set_pitch_scale(&pitch_shift_node, m_pitch_scale);
 }
 
 float ShinobuPitchShiftEffect::get_pitch_scale() {
-	ERR_FAIL_COND_V(!initialized, 1.0f);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), 1.0f);
 	return ma_pitch_shift_node_get_pitch_scale(&pitch_shift_node);
 }
 
 ma_node *ShinobuPitchShiftEffect::get_node() {
-	return initialized ? &pitch_shift_node : nullptr;
+	return initialized && Shinobu::get_singleton() != nullptr && Shinobu::get_singleton()->is_initialized() ? &pitch_shift_node : nullptr;
 }
 
 ShinobuPitchShiftEffect::ShinobuPitchShiftEffect(uint32_t channel_count) {
@@ -108,11 +111,11 @@ void ShinobuSpectrumAnalyzerEffect::_bind_methods() {
 	BIND_ENUM_CONSTANT(MAGNITUDE_MAX);
 }
 ma_node *ShinobuSpectrumAnalyzerEffect::get_node() {
-	return initialized ? &analyzer_node : nullptr;
+	return initialized && Shinobu::get_singleton() != nullptr && Shinobu::get_singleton()->is_initialized() ? &analyzer_node : nullptr;
 }
 
 Vector2 ShinobuSpectrumAnalyzerEffect::get_magnitude_for_frequency_range(float m_begin, float m_end, ma_spectrum_magnitude_mode mode) {
-	ERR_FAIL_COND_V(!initialized, Vector2());
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), Vector2());
 	MagnitudeResult res = ma_spectrum_analyzer_get_magnitude_for_frequency_range(m_begin, m_end, mode, &analyzer_node);
 	return Vector2(res.l, res.r);
 }

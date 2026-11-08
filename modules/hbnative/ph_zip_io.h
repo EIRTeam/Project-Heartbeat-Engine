@@ -50,7 +50,7 @@ uLong phzipio_read(voidpf opaque, voidpf stream, void *buf, uLong size);
 uLong phzipio_write(voidpf opaque, voidpf stream, const void *buf, uLong size);
 
 ZPOS64_T phzipio_tell(voidpf opaque, voidpf stream);
-long phzipio_seek(voidpf opaque, voidpf stream, uLong offset, int origin);
+long phzipio_seek(voidpf opaque, voidpf stream, ZPOS64_T offset, int origin);
 
 int phzipio_close(voidpf opaque, voidpf stream);
 

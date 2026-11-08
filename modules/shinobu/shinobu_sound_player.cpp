@@ -29,40 +29,40 @@ void ShinobuSoundPlayer::_bind_methods() {
 }
 
 Error ShinobuSoundPlayer::start() {
-	ERR_FAIL_COND_V(!initialized, ERR_UNCONFIGURED);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), ERR_UNCONFIGURED);
 	MA_ERR_RET(ma_sound_start(&sound), "Error starting sound");
 	return OK;
 }
 
 Error ShinobuSoundPlayer::stop() {
-	ERR_FAIL_COND_V(!initialized, ERR_UNCONFIGURED);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), ERR_UNCONFIGURED);
 	MA_ERR_RET(ma_sound_stop(&sound), "Error stopping sound");
 	return OK;
 }
 
 void ShinobuSoundPlayer::set_pitch_scale(float m_pitch_scale) {
-	ERR_FAIL_COND(!initialized);
+	ERR_FAIL_COND(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized());
 	ma_sound_set_pitch(&sound, m_pitch_scale);
 }
 
 float ShinobuSoundPlayer::get_pitch_scale() {
-	ERR_FAIL_COND_V(!initialized, 1.0f);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), 1.0f);
 	return ma_sound_get_pitch(&sound);
 }
 
 void ShinobuSoundPlayer::schedule_start_time(uint64_t m_global_time_msec) {
-	ERR_FAIL_COND(!initialized);
+	ERR_FAIL_COND(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized());
 	start_time_msec = m_global_time_msec;
 	ma_sound_set_start_time_in_milliseconds(&sound, m_global_time_msec);
 }
 
 void ShinobuSoundPlayer::schedule_stop_time(uint64_t m_global_time_msec) {
-	ERR_FAIL_COND(!initialized);
+	ERR_FAIL_COND(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized());
 	ma_sound_set_stop_time_in_milliseconds(&sound, m_global_time_msec);
 }
 
 int64_t ShinobuSoundPlayer::get_playback_position_nsec() {
-	ERR_FAIL_COND_V(!initialized, 0);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), 0);
 	Ref<ShinobuClock> clock = Shinobu::get_singleton()->get_clock();
 	ma_engine *engine = Shinobu::get_singleton()->get_engine();
 
@@ -101,71 +101,71 @@ int64_t ShinobuSoundPlayer::get_playback_position_msec() {
 }
 
 bool ShinobuSoundPlayer::is_at_stream_end() const {
-	ERR_FAIL_COND_V(!initialized, true);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), true);
 	return (bool)ma_sound_at_end(&sound);
 }
 
 bool ShinobuSoundPlayer::is_playing() const {
-	ERR_FAIL_COND_V(!initialized, false);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), false);
 	return (bool)ma_sound_is_playing(&sound);
 }
 
 void ShinobuSoundPlayer::set_volume(float m_linear_volume) {
-	ERR_FAIL_COND(!initialized);
+	ERR_FAIL_COND(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized());
 	ma_sound_set_volume(&sound, m_linear_volume);
 }
 
 float ShinobuSoundPlayer::get_volume() const {
-	ERR_FAIL_COND_V(!initialized, 0.0f);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), 0.0f);
 	return ma_sound_get_volume(&sound);
 }
 
 void ShinobuSoundPlayer::set_looping_enabled(bool m_looping) {
-	ERR_FAIL_COND(!initialized);
+	ERR_FAIL_COND(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized());
 	ma_sound_set_looping(&sound, m_looping);
 }
 
 bool ShinobuSoundPlayer::is_looping_enabled() const {
-	ERR_FAIL_COND_V(!initialized, false);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), false);
 	return (bool)ma_sound_is_looping(&sound);
 }
 
 Error ShinobuSoundPlayer::connect_sound_to_effect(Ref<ShinobuEffect> m_effect) {
-	ERR_FAIL_COND_V(!initialized, ERR_UNCONFIGURED);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), ERR_UNCONFIGURED);
 	ERR_FAIL_COND_V(m_effect.is_null() || m_effect->get_node() == nullptr, ERR_INVALID_PARAMETER);
 	MA_ERR_RET(ma_node_attach_output_bus(&sound, 0, m_effect->get_node(), 0), "Error attaching sound to effect");
 	return OK;
 }
 
 uint64_t ShinobuSoundPlayer::get_channel_count() {
-	ERR_FAIL_COND_V(!initialized, 0);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), 0);
 	ma_uint32 channel_count;
 	ma_sound_get_data_format(&sound, NULL, &channel_count, NULL, NULL, 0);
 	return channel_count;
 }
 
 Error ShinobuSoundPlayer::connect_sound_to_group(Ref<ShinobuGroup> m_group) {
-	ERR_FAIL_COND_V(!initialized, ERR_UNCONFIGURED);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), ERR_UNCONFIGURED);
 	ERR_FAIL_COND_V(m_group.is_null() || m_group->get_group() == nullptr, ERR_INVALID_PARAMETER);
 	MA_ERR_RET(ma_node_attach_output_bus(&sound, 0, m_group->get_group(), 0), "Error attaching sound to group");
 	return OK;
 }
 
 void ShinobuSoundPlayer::fade(int p_duration_ms, float p_volume_begin, float p_volume_end) {
-	ERR_FAIL_COND(!initialized);
+	ERR_FAIL_COND(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized());
 	ma_sound_set_fade_in_milliseconds(&sound, p_volume_begin, p_volume_end, p_duration_ms);
 }
 
 void ShinobuSoundPlayer::_notification(int p_notification) {
 	switch (p_notification) {
 		case NOTIFICATION_PAUSED: {
-			if (!can_process()) {
+			if (!can_process() && initialized && Shinobu::get_singleton() != nullptr && Shinobu::get_singleton()->is_initialized()) {
 				was_playing_before_pause = is_playing();
 				ma_sound_stop(&sound);
 			}
 		} break;
 		case NOTIFICATION_UNPAUSED: {
-			if (was_playing_before_pause && !is_at_stream_end()) {
+			if (was_playing_before_pause && initialized && Shinobu::get_singleton() != nullptr && Shinobu::get_singleton()->is_initialized() && !is_at_stream_end()) {
 				ma_sound_start(&sound);
 			}
 		} break;
@@ -173,7 +173,7 @@ void ShinobuSoundPlayer::_notification(int p_notification) {
 }
 
 Error ShinobuSoundPlayer::seek(int64_t to_time_msec) {
-	ERR_FAIL_COND_V(!initialized, ERR_UNCONFIGURED);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), ERR_UNCONFIGURED);
 	// Sound MUST be stopped before seeking or we crash
 	if (ma_sound_is_playing(&sound) == MA_TRUE) {
 		ma_sound_stop(&sound);
@@ -186,7 +186,7 @@ Error ShinobuSoundPlayer::seek(int64_t to_time_msec) {
 }
 
 uint64_t ShinobuSoundPlayer::get_length_msec() {
-	ERR_FAIL_COND_V(!initialized, 0);
+	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), 0);
 	if (cached_length != -1) {
 		return cached_length;
 	}

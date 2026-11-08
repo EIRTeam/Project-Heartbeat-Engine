@@ -41,17 +41,20 @@ Error PHZIPPacker::open(const String &p_path, ZipAppend p_append) {
 
 	zlib_filefunc64_def io = phzipio_create_io(&fa);
 	zf = zipOpen2_64(p_path.utf8().get_data(), p_append, nullptr, &io);
+	if (zf == nullptr) {
+		fa.unref();
+		return FAILED;
+	}
 	return zf != nullptr ? OK : FAILED;
 }
 
 Error PHZIPPacker::close() {
-	ERR_FAIL_COND_V_MSG(fa.is_null(), FAILED, "PHZIPPacker cannot be closed because it is not open.");
+	ERR_FAIL_COND_V_MSG(fa.is_null() || zf == nullptr, FAILED, "PHZIPPacker cannot be closed because it is not open.");
 
 	Error err = zipClose(zf, nullptr) == ZIP_OK ? OK : FAILED;
-	if (err == OK) {
-		DEV_ASSERT(fa.is_null());
-		zf = nullptr;
-	}
+	DEV_ASSERT(fa.is_null());
+	zf = nullptr;
+	fa.unref();
 
 	return err;
 }
@@ -66,7 +69,7 @@ int PHZIPPacker::get_compression_level() const {
 }
 
 Error PHZIPPacker::start_file(const String &p_path) {
-	ERR_FAIL_COND_V_MSG(fa.is_null(), FAILED, "PHZIPPacker must be opened before use.");
+	ERR_FAIL_COND_V_MSG(fa.is_null() || zf == nullptr, FAILED, "PHZIPPacker must be opened before use.");
 
 	zip_fileinfo zipfi;
 
@@ -82,7 +85,7 @@ Error PHZIPPacker::start_file(const String &p_path) {
 	zipfi.internal_fa = 0;
 	zipfi.external_fa = 0;
 
-	int err = zipOpenNewFileInZip4(zf,
+	int err = zipOpenNewFileInZip4_64(zf,
 			p_path.utf8().get_data(),
 			&zipfi,
 			nullptr,
@@ -99,18 +102,29 @@ Error PHZIPPacker::start_file(const String &p_path) {
 			nullptr,
 			0,
 			0, // "version made by", indicates the compatibility of the file attribute information (the `external_fa` field above).
-			1 << 11); // Bit 11 is the language encoding flag. When set, filename and comment fields must be encoded using UTF-8.
+			1 << 11, // Bit 11 is the language encoding flag. When set, filename and comment fields must be encoded using UTF-8.
+			1); // Reserve ZIP64 extra-field space; the final size is not known yet.
 	return err == ZIP_OK ? OK : FAILED;
 }
 
 Error PHZIPPacker::write_file(const Vector<uint8_t> &p_data) {
-	ERR_FAIL_COND_V_MSG(fa.is_null(), FAILED, "PHZIPPacker must be opened before use.");
+	ERR_FAIL_COND_V_MSG(fa.is_null() || zf == nullptr, FAILED, "PHZIPPacker must be opened before use.");
 
-	return zipWriteInFileInZip(zf, p_data.ptr(), p_data.size()) == ZIP_OK ? OK : FAILED;
+	const uint8_t *data = p_data.ptr();
+	uint64_t remaining = p_data.size();
+	while (remaining > 0) {
+		unsigned chunk = (unsigned)MIN(remaining, uint64_t(UINT_MAX));
+		if (zipWriteInFileInZip(zf, data, chunk) != ZIP_OK) {
+			return FAILED;
+		}
+		data += chunk;
+		remaining -= chunk;
+	}
+	return OK;
 }
 
 Error PHZIPPacker::close_file() {
-	ERR_FAIL_COND_V_MSG(fa.is_null(), FAILED, "PHZIPPacker must be opened before use.");
+	ERR_FAIL_COND_V_MSG(fa.is_null() || zf == nullptr, FAILED, "PHZIPPacker must be opened before use.");
 
 	return zipCloseFileInZip(zf) == ZIP_OK ? OK : FAILED;
 }

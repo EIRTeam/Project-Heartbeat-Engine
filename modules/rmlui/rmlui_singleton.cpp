@@ -21,7 +21,7 @@ void RmlUiSingleton::_bind_methods() {
     ClassDB::bind_method(D_METHOD("end_frame"), &RmlUiSingleton::end_frame);
 }
 void RmlUiSingleton::init() {
-    initialized = true;
+    ERR_FAIL_COND_MSG(initialized, "RmlUi has already been initialized.");
     Rml::SetFileInterface(&file_interface);
     Rml::SetSystemInterface(&system_interface);
     render_interface = memnew(RenderInterface_Godot_RD);
@@ -29,12 +29,22 @@ void RmlUiSingleton::init() {
     Rml::SetRenderInterface(render_interface);
     Rml::SetFontEngineInterface(&font_interface);
 
-    Rml::Initialise();
+    if (!Rml::Initialise()) {
+        memdelete(render_interface);
+        render_interface = nullptr;
+        return;
+    }
 
     Ref<FontFile> font = SceneTree::get_singleton()->get_root()->get_theme_default_font();
     font_interface.LoadFontFaceFromGodot(font, 0, true, Rml::Style::FontWeight::Auto);
     Vector2i window_size = DisplayServer::get_singleton()->window_get_size();
     context = Rml::CreateContext(Rml::String("penis"), Rml::Vector2i(window_size.x, window_size.y));
+    if (context == nullptr) {
+        Rml::Shutdown();
+        memdelete(render_interface);
+        render_interface = nullptr;
+        return;
+    }
 
     Rml::Debugger::Initialise(context);
     Rml::Debugger::SetVisible(true);
@@ -45,8 +55,10 @@ void RmlUiSingleton::init() {
 
     SceneTree::get_singleton()->get_root()->connect("window_input", callable_mp(this, &RmlUiSingleton::_on_input));
     RenderingServer::get_singleton()->canvas_item_add_rendering_callback(canvas_item, callable_mp(this, &RmlUiSingleton::_draw_context_commands));
+    initialized = true;
 }
 void RmlUiSingleton::begin_frame() {
+    ERR_FAIL_COND(!initialized || context == nullptr || render_interface == nullptr);
     const Vector2i window_size = DisplayServer::get_singleton()->window_get_size();
     context->SetDimensions(Rml::Vector2i(
         window_size.x,
@@ -61,10 +73,12 @@ void RmlUiSingleton::begin_frame() {
 }
 
 void RmlUiSingleton::_draw_context_commands(RenderCanvasDataRD *p_data) {
+    ERR_FAIL_COND(!initialized || render_interface == nullptr);
     render_interface->render();
 }
 
 void RmlUiSingleton::_on_input(const Ref<InputEvent> &p_event) {
+    ERR_FAIL_COND(!initialized || context == nullptr);
     if (RmlGodot::process_event(context, p_event)) {
         SceneTree::get_singleton()->get_root()->set_input_as_handled();
     }
@@ -74,6 +88,7 @@ void RmlUiSingleton::end_frame() {
 }
 
 void RmlUiSingleton::_end_frame() {
+    ERR_FAIL_COND(!initialized || render_interface == nullptr);
     render_interface->end_frame();
 }
 
@@ -83,6 +98,7 @@ RmlUiSingleton *RmlUiSingleton::get_singleton()
 }
 
 RID RmlUiSingleton::create_document_from_path(const String &p_path) {
+    ERR_FAIL_COND_V(!initialized || context == nullptr, RID());
     RmlDocument doc;
     doc.document = context->LoadDocument(from_godot(p_path));
     ERR_FAIL_NULL_V_MSG(doc.document, RID(), vformat("Failed to load RmlUi document: %s", p_path));
@@ -102,6 +118,7 @@ void RmlUiSingleton::attach_document_to_control(const RID &p_document, Control *
 
 void RmlUiSingleton::free_document(const RID &p_document)
 {
+	ERR_FAIL_COND(!initialized || context == nullptr);
     RmlDocument *document = document_owner.get_or_null(p_document);
 	ERR_FAIL_NULL(document);
     context->UnloadDocument(document->document);
@@ -114,15 +131,26 @@ RmlUiSingleton::RmlUiSingleton() {
 
 RmlUiSingleton::~RmlUiSingleton() {
     if (!initialized) {
+        if (singleton == this) {
+            singleton = nullptr;
+        }
         return;
     }
     if (canvas_item.is_valid()) {
         RS::get_singleton()->free_rid(canvas_item);
     }
 
+    initialized = false;
+    if (context != nullptr) {
+        context = nullptr;
+    }
     Rml::Shutdown();
 
     if (render_interface != nullptr) {
         memdelete(render_interface);
+        render_interface = nullptr;
+    }
+    if (singleton == this) {
+        singleton = nullptr;
     }
 }

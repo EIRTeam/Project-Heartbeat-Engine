@@ -36,7 +36,7 @@ float PHAudioStreamPreview::get_length() const {
 	return length;
 }
 float PHAudioStreamPreview::get_max(float p_time, float p_time_next) const {
-	if (length == 0) {
+	if (!(length > 0.0f) || preview.size() < 2) {
 		return 0;
 	}
 
@@ -63,7 +63,7 @@ float PHAudioStreamPreview::get_max(float p_time, float p_time_next) const {
 }
 
 float PHAudioStreamPreview::get_avg(float p_time, float p_time_next) const {
-	if (length == 0) {
+	if (!(length > 0.0f) || preview.size() < 2) {
 		return 0;
 	}
 
@@ -91,7 +91,7 @@ float PHAudioStreamPreview::get_avg(float p_time, float p_time_next) const {
 }
 
 float PHAudioStreamPreview::get_rms(float p_time, float p_time_next) const {
-	if (length == 0) {
+	if (!(length > 0.0f) || preview.size() < 2) {
 		return 0;
 	}
 
@@ -119,7 +119,7 @@ float PHAudioStreamPreview::get_rms(float p_time, float p_time_next) const {
 }
 
 float PHAudioStreamPreview::get_min(float p_time, float p_time_next) const {
-	if (length == 0) {
+	if (!(length > 0.0f) || preview.size() < 2) {
 		return 0;
 	}
 
@@ -239,14 +239,14 @@ Ref<PHAudioStreamPreview> PHAudioStreamPreviewGenerator::generate_preview(const 
 	preview->id = p_stream->get_instance_id();
 
 	float len_s = preview->base_stream->get_length();
-	if (len_s == 0) {
+	if (!(len_s > 0.0f) || !Math::is_finite(len_s)) {
 		len_s = 60 * 5; //five minutes
 	}
 
 	int frames = AudioServer::get_singleton()->get_mix_rate() * len_s;
 
 	Vector<uint8_t> maxmin;
-	int pw = frames / 20;
+	int pw = MAX(1, frames / 20);
 	maxmin.resize(pw * 2);
 	{
 		uint8_t *ptr = maxmin.ptrw();
@@ -302,4 +302,18 @@ void PHAudioStreamPreviewGenerator::_notification(int p_what) {
 PHAudioStreamPreviewGenerator::PHAudioStreamPreviewGenerator() {
 	singleton = this;
 	set_process(true);
+}
+
+PHAudioStreamPreviewGenerator::~PHAudioStreamPreviewGenerator() {
+	for (KeyValue<ObjectID, Preview> &E : previews) {
+		if (E.value.thread != nullptr) {
+			E.value.thread->wait_to_finish();
+			memdelete(E.value.thread);
+			E.value.thread = nullptr;
+		}
+	}
+	previews.clear();
+	if (singleton == this) {
+		singleton = nullptr;
+	}
 }
