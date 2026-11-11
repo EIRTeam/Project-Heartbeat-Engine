@@ -29,6 +29,9 @@ public:
 	static bool is_sdl_device_game_controller(int p_joy_device_idx);
 	static uint64_t get_clock_time_usec();
 	static String get_sdl_device_guid(int p_joy_device_idx);
+	static Error write_file_atomic(const String &p_path, const PackedByteArray &p_data);
+	static Error write_var_atomic(const String &p_path, const Variant &p_data);
+	static Error copy_file_atomic(const String &p_source, const String &p_destination);
 	bool get_blur_controls_enabled() const;
 	void set_blur_controls_enabled(bool p_blur_controls_enabled);
 	Array get_string_from_utf8_checked(const PackedByteArray &p_arr) const;

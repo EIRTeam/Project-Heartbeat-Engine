@@ -173,6 +173,80 @@ uint64_t PHNative::get_clock_time_usec() {
 	return Time::get_singleton()->get_ticks_usec();
 }
 
+Error PHNative::write_file_atomic(const String &p_path, const PackedByteArray &p_data) {
+	bool previous_backup_save = FileAccess::is_backup_save_enabled();
+	FileAccess::set_backup_save(true);
+	Error open_error = OK;
+	Ref<FileAccess> file = FileAccess::open(p_path, FileAccess::WRITE, &open_error);
+	if (open_error != OK || file.is_null()) {
+		FileAccess::set_backup_save(previous_backup_save);
+		return open_error != OK ? open_error : ERR_FILE_CANT_OPEN;
+	}
+	if (!file->store_buffer(p_data.ptr(), p_data.size())) {
+		file->close();
+		FileAccess::set_backup_save(previous_backup_save);
+		return file->get_error();
+	}
+	file->flush();
+	file->close();
+	FileAccess::set_backup_save(previous_backup_save);
+	return file->get_error();
+}
+
+Error PHNative::write_var_atomic(const String &p_path, const Variant &p_data) {
+	bool previous_backup_save = FileAccess::is_backup_save_enabled();
+	FileAccess::set_backup_save(true);
+	Error open_error = OK;
+	Ref<FileAccess> file = FileAccess::open(p_path, FileAccess::WRITE, &open_error);
+	if (open_error != OK || file.is_null()) {
+		FileAccess::set_backup_save(previous_backup_save);
+		return open_error != OK ? open_error : ERR_FILE_CANT_OPEN;
+	}
+	if (!file->store_var(p_data)) {
+		file->close();
+		FileAccess::set_backup_save(previous_backup_save);
+		return file->get_error() != OK ? file->get_error() : ERR_FILE_CANT_WRITE;
+	}
+	file->flush();
+	file->close();
+	FileAccess::set_backup_save(previous_backup_save);
+	return file->get_error();
+}
+
+Error PHNative::copy_file_atomic(const String &p_source, const String &p_destination) {
+	bool previous_backup_save = FileAccess::is_backup_save_enabled();
+	FileAccess::set_backup_save(true);
+	Error open_error = OK;
+	Ref<FileAccess> source = FileAccess::open(p_source, FileAccess::READ, &open_error);
+	if (open_error != OK || source.is_null()) {
+		FileAccess::set_backup_save(previous_backup_save);
+		return open_error != OK ? open_error : ERR_FILE_CANT_OPEN;
+	}
+
+	Ref<FileAccess> destination = FileAccess::open(p_destination, FileAccess::WRITE, &open_error);
+	if (open_error != OK || destination.is_null()) {
+		FileAccess::set_backup_save(previous_backup_save);
+		return open_error != OK ? open_error : ERR_FILE_CANT_OPEN;
+	}
+
+	PackedByteArray buffer;
+	buffer.resize(1024 * 1024);
+	while (source->get_position() < source->get_length()) {
+		uint64_t remaining = source->get_length() - source->get_position();
+		uint64_t requested = MIN(remaining, (uint64_t)buffer.size());
+		PackedByteArray chunk = source->get_buffer(requested);
+		if ((uint64_t)chunk.size() != requested || !destination->store_buffer(chunk.ptr(), chunk.size())) {
+			destination->close();
+			FileAccess::set_backup_save(previous_backup_save);
+			return destination->get_error() != OK ? destination->get_error() : ERR_FILE_CANT_WRITE;
+		}
+	}
+	destination->flush();
+	destination->close();
+	FileAccess::set_backup_save(previous_backup_save);
+	return destination->get_error();
+}
+
 String PHNative::get_sdl_device_guid(int p_joy_device_idx) {
 #ifdef SDL_ENABLED
 	if (JoypadSDL *sdl = JoypadSDL::get_singleton(); sdl) {
@@ -190,6 +264,9 @@ void PHNative::_bind_methods() {
 	ClassDB::bind_static_method("PHNative", D_METHOD("is_sdl_device_game_controller"), &PHNative::is_sdl_device_game_controller);
 	ClassDB::bind_static_method("PHNative", D_METHOD("get_sdl_device_guid"), &PHNative::get_sdl_device_guid);
 	ClassDB::bind_static_method("PHNative", D_METHOD("get_clock_time_usec"), &PHNative::get_clock_time_usec);
+	ClassDB::bind_static_method("PHNative", D_METHOD("write_file_atomic", "path", "data"), &PHNative::write_file_atomic);
+	ClassDB::bind_static_method("PHNative", D_METHOD("write_var_atomic", "path", "data"), &PHNative::write_var_atomic);
+	ClassDB::bind_static_method("PHNative", D_METHOD("copy_file_atomic", "source", "destination"), &PHNative::copy_file_atomic);
 
 	ClassDB::bind_method(D_METHOD("get_blur_controls_enabled"), &PHNative::get_blur_controls_enabled);
 	ClassDB::bind_method(D_METHOD("set_blur_controls_enabled", "blur_controls_enabled"), &PHNative::set_blur_controls_enabled);
