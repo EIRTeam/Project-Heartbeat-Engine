@@ -1,6 +1,10 @@
 name: 🐧 Linux Builds
 on:
   workflow_call:
+    secrets:
+      GLITCHTIP_AUTH_TOKEN:
+        description: Token for uploading master build symbols to GlitchTip.
+        required: false
 
 # Global Settings
 env:
@@ -26,7 +30,6 @@ jobs:
             target: editor
             sconsflags: profile="../misc/build_profiles/editor_debug_linux.py"
             tests: false
-            # Skip debug symbols, they're way too big with MSVC.
             bin: ./engine/bin/godot.linuxbsd.editor.x86_64
             artifact-name: linux-editor
 
@@ -88,6 +91,16 @@ jobs:
           sconsflags: ${{ env.SCONSFLAGS }} ${{ matrix.sconsflags }}
           platform: linuxbsd
           target: ${{ matrix.target }}
+
+      # Upload the original ELF/DWARF before Extract debug symbols strips it.
+      - name: Upload debug symbols to GlitchTip
+        if: ${{ success() && github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+        timeout-minutes: 20
+        uses: ./.github/actions/upload-debug-symbols
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.GLITCHTIP_AUTH_TOKEN }}
+        with:
+          path: ${{ matrix.bin }}
 
       - name: Save Godot build cache
         uses: ./.github/actions/godot-cache-save

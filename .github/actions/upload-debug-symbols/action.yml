@@ -1,0 +1,21 @@
+name: Upload debug symbols
+description: Upload native debug symbols to the Project Heartbeat GlitchTip project.
+
+inputs:
+  path:
+    description: File path or glob matching the debug information files to upload.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Upload debug symbols
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        SYMBOL_PATH_PATTERN: ${{ inputs.path }}
+        SENTRY_URL: https://glitchtip.eirexe.moe
+        SENTRY_ORG: eirteam
+        SENTRY_PROJECT: project-heartbeat
+        SENTRY_DISABLE_UPDATE_CHECK: "true"
+      run: python "$ACTION_PATH/upload.py"

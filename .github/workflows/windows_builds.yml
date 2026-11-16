@@ -1,6 +1,10 @@
 name: 🏁 Windows Builds
 on:
   workflow_call:
+    secrets:
+      GLITCHTIP_AUTH_TOKEN:
+        description: Token for uploading master build symbols to GlitchTip.
+        required: false
 
 # Global Settings
 # SCONS_CACHE for windows must be set in the build environment
@@ -23,7 +27,6 @@ jobs:
             target: editor
             sconsflags: profile="../misc/build_profiles/editor_debug_windows.py"
             tests: false
-            # Skip debug symbols, they're way too big with MSVC.
             bin: ./bin/godot.windows.editor.x86_64.exe
             compiler: msvc
             artifact-name: windows-editor
@@ -69,6 +72,15 @@ jobs:
           platform: windows
           target: ${{ matrix.target }}
           tests: ${{ matrix.tests }}
+
+      - name: Upload debug symbols to GlitchTip
+        if: ${{ success() && github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+        timeout-minutes: 20
+        uses: ./.github/actions/upload-debug-symbols
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.GLITCHTIP_AUTH_TOKEN }}
+        with:
+          path: engine/bin/godot.windows.${{ matrix.target }}.x86_64*.pdb
 
       - name: Save Godot build cache
         uses: ./.github/actions/godot-cache-save

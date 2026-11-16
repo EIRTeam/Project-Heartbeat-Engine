@@ -27,10 +27,14 @@ jobs:
   linux-build:
     name: 🐧 Linux
     uses: ./.github/workflows/linux_builds.yml
+    secrets:
+      GLITCHTIP_AUTH_TOKEN: ${{ secrets.GLITCHTIP_AUTH_TOKEN }}
 
   windows-build:
     name: 🏁 Windows
     uses: ./.github/workflows/windows_builds.yml
+    secrets:
+      GLITCHTIP_AUTH_TOKEN: ${{ secrets.GLITCHTIP_AUTH_TOKEN }}
 
   upload-release:
     needs: [windows-build, linux-build, android-build]
