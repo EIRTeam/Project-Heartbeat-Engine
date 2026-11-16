@@ -22,6 +22,7 @@ protected:
 public:
 	static PHNative *get_singleton() { return singleton; }
 	Ref<Process> create_process(const String &p_path, const Vector<String> &p_arguments = Vector<String>(), const String &p_working_dir = "", bool p_open_stdin = false);
+	void crash_test();
 	void linalg_test();
 	static Ref<AudioStreamOggVorbis> load_ogg_from_file(const String &p_path);
 	static Ref<AudioStreamOggVorbis> load_ogg_from_buffer(const Vector<uint8_t> &p_buffer);

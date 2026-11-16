@@ -14,6 +14,12 @@ Ref<Process> PHNative::create_process(const String &p_path, const Vector<String>
 	return Process::create(p_path, p_arguments, p_working_dir, p_open_stdin);
 }
 
+void PHNative::crash_test() {
+	// Deliberately trigger a native access violation for testing crash handlers.
+	volatile int *null_ptr = nullptr;
+	*null_ptr = 0;
+}
+
 void PHNative::linalg_test() {
 }
 
@@ -258,6 +264,7 @@ String PHNative::get_sdl_device_guid(int p_joy_device_idx) {
 
 void PHNative::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("create_process", "path", "arguments", "working_directory", "open_stdin"), &PHNative::create_process, DEFVAL(Vector<String>()), DEFVAL(""), DEFVAL(false));
+	ClassDB::bind_method(D_METHOD("crash_test"), &PHNative::crash_test);
 	ClassDB::bind_static_method("PHNative", D_METHOD("load_ogg_from_file", "path"), &PHNative::load_ogg_from_file);
 	ClassDB::bind_static_method("PHNative", D_METHOD("load_ogg_from_buffer", "buffer"), &PHNative::load_ogg_from_buffer);
 	ClassDB::bind_static_method("PHNative", D_METHOD("get_rendering_api_name"), &PHNative::get_rendering_api_name);
