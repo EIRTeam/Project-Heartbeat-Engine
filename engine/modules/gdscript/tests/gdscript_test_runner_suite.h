@@ -35,8 +35,129 @@
 #include "modules/gdscript/gdscript_cache.h"
 #include "tests/test_macros.h"
 #include "tests/test_utils.h"
+#if defined(USE_BREAKPAD) && defined(TESTS_ENABLED)
+#include "core/os/thread.h"
+#include "modules/breakpad/breakpad.h"
+
+#include <atomic>
+#include <cstring>
+#endif
 
 namespace GDScriptTests {
+
+#if defined(USE_BREAKPAD) && defined(TESTS_ENABLED)
+struct BreakpadTraceThreadTestData {
+	std::atomic<bool> ready = false;
+	std::atomic<bool> finish = false;
+};
+
+static void breakpad_trace_thread_test(void *p_userdata) {
+	BreakpadTraceThreadTestData *data = static_cast<BreakpadTraceThreadTestData *>(p_userdata);
+	breakpad_gdscript_enter("res://worker.gd", "worker", 7);
+	data->ready.store(true, std::memory_order_release);
+	while (!data->finish.load(std::memory_order_acquire)) {
+		Thread::yield();
+	}
+	breakpad_gdscript_exit();
+}
+
+TEST_CASE("[Modules][GDScript] Breakpad trace captures nested frames and reuses idle slots") {
+	breakpad_gdscript_enter("res://outer.gd", "outer", 10);
+	breakpad_gdscript_enter("res://inner.gd", "inner", 20);
+	breakpad_gdscript_line(21);
+
+	const BreakpadGDScriptTrace *trace = breakpad_get_gdscript_trace_for_testing();
+	auto find_thread_with_path = [trace](const char *p_path) -> const BreakpadGDScriptTraceThread * {
+		for (size_t i = 0; i < trace->thread_count; i++) {
+			if (trace->threads[i].frame_count > 0 && strcmp(trace->threads[i].frames[0].path, p_path) == 0) {
+				return &trace->threads[i];
+			}
+		}
+		return nullptr;
+	};
+	uint64_t thread_id = 0;
+	const BreakpadGDScriptTraceThread *thread_trace = find_thread_with_path("res://outer.gd");
+	for (size_t i = 0; i < trace->thread_count; i++) {
+		if (&trace->threads[i] == thread_trace) {
+			thread_id = trace->threads[i].thread_id;
+			break;
+		}
+	}
+
+	REQUIRE(thread_trace != nullptr);
+	CHECK(thread_id != 0);
+	REQUIRE(thread_trace->frame_count == 2);
+	CHECK(String::utf8(thread_trace->frames[0].path) == "res://outer.gd");
+	CHECK(String::utf8(thread_trace->frames[0].function) == "outer");
+	CHECK(thread_trace->frames[0].line == 10);
+	CHECK(String::utf8(thread_trace->frames[1].path) == "res://inner.gd");
+	CHECK(String::utf8(thread_trace->frames[1].function) == "inner");
+	CHECK(thread_trace->frames[1].line == 21);
+
+	BreakpadTraceThreadTestData thread_data;
+	Thread worker_thread;
+	REQUIRE(worker_thread.start(breakpad_trace_thread_test, &thread_data) != Thread::UNASSIGNED_ID);
+	while (!thread_data.ready.load(std::memory_order_acquire)) {
+		Thread::yield();
+	}
+	const BreakpadGDScriptTraceThread *worker_trace = find_thread_with_path("res://worker.gd");
+	REQUIRE(worker_trace != nullptr);
+	CHECK(worker_trace->thread_id != thread_trace->thread_id);
+	thread_data.finish.store(true, std::memory_order_release);
+	worker_thread.wait_to_finish();
+
+	breakpad_gdscript_exit();
+	CHECK(thread_trace->frame_count == 1);
+	CHECK(thread_trace->frames[0].line == 10);
+	breakpad_gdscript_exit();
+	CHECK(thread_trace->thread_id == 0);
+	CHECK(thread_trace->frame_count == 0);
+
+	for (size_t i = 0; i < BREAKPAD_GDSCRIPT_TRACE_FRAME_COUNT + 1; i++) {
+		breakpad_gdscript_enter("res://nested.gd", "nested", (int)i + 1);
+	}
+	thread_trace = find_thread_with_path("res://nested.gd");
+	REQUIRE(thread_trace != nullptr);
+	CHECK(thread_trace->frame_count == BREAKPAD_GDSCRIPT_TRACE_FRAME_COUNT);
+	CHECK(thread_trace->truncated == 1);
+	for (size_t i = 0; i < BREAKPAD_GDSCRIPT_TRACE_FRAME_COUNT + 1; i++) {
+		breakpad_gdscript_exit();
+	}
+	CHECK(thread_trace->thread_id == 0);
+	CHECK(thread_trace->frame_count == 0);
+	CHECK(thread_trace->truncated == 0);
+
+	breakpad_gdscript_enter("res://reused.gd", "reused", 42);
+	thread_trace = find_thread_with_path("res://reused.gd");
+	REQUIRE(thread_trace != nullptr);
+	CHECK(thread_trace->thread_id == thread_id);
+	CHECK(thread_trace->frame_count == 1);
+	CHECK(String::utf8(thread_trace->frames[0].path) == "res://reused.gd");
+	breakpad_gdscript_exit();
+
+	const String long_path = "res://" + String("p").repeat(BREAKPAD_GDSCRIPT_TRACE_PATH_SIZE * 2);
+	const String long_function = String("f").repeat(BREAKPAD_GDSCRIPT_TRACE_FUNCTION_SIZE * 2);
+	breakpad_gdscript_enter(long_path, long_function, 99);
+	const String expected_long_path = "res://" + String("p").repeat(BREAKPAD_GDSCRIPT_TRACE_PATH_SIZE - 1 - 6);
+	thread_trace = find_thread_with_path(expected_long_path.utf8().get_data());
+	REQUIRE(thread_trace != nullptr);
+	CHECK(thread_trace->frame_count == 1);
+	CHECK(thread_trace->frames[0].path[BREAKPAD_GDSCRIPT_TRACE_PATH_SIZE - 1] == '\0');
+	CHECK(thread_trace->frames[0].function[BREAKPAD_GDSCRIPT_TRACE_FUNCTION_SIZE - 1] == '\0');
+	CHECK(strlen(thread_trace->frames[0].path) == BREAKPAD_GDSCRIPT_TRACE_PATH_SIZE - 1);
+	CHECK(strlen(thread_trace->frames[0].function) == BREAKPAD_GDSCRIPT_TRACE_FUNCTION_SIZE - 1);
+	breakpad_gdscript_exit();
+
+	const String utf8_boundary_path = String("a").repeat(BREAKPAD_GDSCRIPT_TRACE_PATH_SIZE - 2) + "é";
+	breakpad_gdscript_enter(utf8_boundary_path, "utf8", 100);
+	thread_trace = find_thread_with_path(String("a").repeat(BREAKPAD_GDSCRIPT_TRACE_PATH_SIZE - 2).utf8().get_data());
+	REQUIRE(thread_trace != nullptr);
+	CHECK(thread_trace->frame_count == 1);
+	CHECK(strlen(thread_trace->frames[0].path) == BREAKPAD_GDSCRIPT_TRACE_PATH_SIZE - 2);
+	CHECK(String::utf8(thread_trace->frames[0].path) == String("a").repeat(BREAKPAD_GDSCRIPT_TRACE_PATH_SIZE - 2));
+	breakpad_gdscript_exit();
+}
+#endif
 
 class TestGDScriptCacheAccessor {
 public:

@@ -39,6 +39,9 @@
 #include "core/io/resource_saver.h"
 #include "core/object/script_language.h"
 #include "core/templates/rb_set.h"
+#ifdef USE_BREAKPAD
+#include "modules/breakpad/breakpad.h"
+#endif
 
 class GDScriptNativeClass : public RefCounted {
 	GDCLASS(GDScriptNativeClass, RefCounted);
@@ -476,6 +479,11 @@ public:
 	bool debug_break_parse(const String &p_file, int p_line, const String &p_error);
 
 	_FORCE_INLINE_ void enter_function(CallLevel *call_level, GDScriptInstance *p_instance, GDScriptFunction *p_function, Variant *p_stack, int *p_ip, int *p_line) {
+#ifdef USE_BREAKPAD
+		if (p_function != nullptr && p_function->get_script() != nullptr) {
+			breakpad_gdscript_enter(p_function->get_script()->get_script_path(), p_function->get_name().operator String(), *p_line);
+		}
+#endif
 		if (!track_call_stack) {
 			return;
 		}
@@ -510,6 +518,9 @@ public:
 	}
 
 	_FORCE_INLINE_ void exit_function() {
+#ifdef USE_BREAKPAD
+		breakpad_gdscript_exit();
+#endif
 		if (!track_call_stack) {
 			return;
 		}
