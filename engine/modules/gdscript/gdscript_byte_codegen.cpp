@@ -1823,7 +1823,11 @@ void GDScriptByteCodeGenerator::write_breakpoint() {
 }
 
 void GDScriptByteCodeGenerator::write_newline(int p_line) {
-	if (GDScriptLanguage::get_singleton()->should_track_call_stack()) {
+	bool track_line = GDScriptLanguage::get_singleton()->should_track_call_stack();
+#ifdef USE_BREAKPAD
+	track_line = true;
+#endif
+	if (track_line) {
 		// Add newline for debugger and stack tracking if enabled in the project settings.
 		append_opcode(GDScriptFunction::OPCODE_LINE);
 		append(p_line);

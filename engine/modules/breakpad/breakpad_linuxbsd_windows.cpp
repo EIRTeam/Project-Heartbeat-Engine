@@ -42,6 +42,10 @@
 #include <thirdparty/breakpad/src/google_breakpad/common/minidump_format.h>
 #else
 #include <thirdparty/breakpad/src/client/linux/handler/exception_handler.h>
+#ifdef __linux__
+#include <sys/syscall.h>
+#include <unistd.h>
+#endif
 #endif
 
 static google_breakpad::ExceptionHandler *breakpad_handler = nullptr;
@@ -56,12 +60,24 @@ static BreakpadGDScriptTrace gdscript_trace = {
 static std::atomic_flag gdscript_trace_slot_locks[BREAKPAD_GDSCRIPT_TRACE_THREAD_COUNT] = {};
 static thread_local int gdscript_trace_slot = -1;
 
+static uint64_t get_breakpad_thread_id() {
+#ifdef WINDOWS_ENABLED
+	return GetCurrentThreadId();
+#elif defined(__linux__)
+	return (uint64_t)syscall(SYS_gettid);
+#else
+	// Breakpad minidump thread IDs are OS-specific. Keep the engine ID as a
+	// fallback on platforms without a corresponding implementation here.
+	return (uint64_t)Thread::get_caller_id();
+#endif
+}
+
 static int get_gdscript_trace_slot() {
 	if (gdscript_trace_slot >= 0) {
 		return gdscript_trace_slot;
 	}
 
-	const uint64_t thread_id = (uint64_t)Thread::get_caller_id();
+	const uint64_t thread_id = get_breakpad_thread_id();
 	for (size_t i = 0; i < BREAKPAD_GDSCRIPT_TRACE_THREAD_COUNT; i++) {
 		while (gdscript_trace_slot_locks[i].test_and_set(std::memory_order_acquire)) {
 			Thread::yield();
@@ -80,7 +96,12 @@ static int get_gdscript_trace_slot() {
 
 static void copy_trace_string(char *destination, size_t destination_size, const String &source) {
 	CharString utf8 = source.utf8();
-	const size_t length = MIN((size_t)utf8.length(), destination_size - 1);
+	size_t length = MIN((size_t)utf8.length(), destination_size - 1);
+	if (length < (size_t)utf8.length()) {
+		while (length > 0 && ((uint8_t)utf8[length] & 0xc0) == 0x80) {
+			length--;
+		}
+	}
 	memcpy(destination, utf8.get_data(), length);
 	destination[length] = '\0';
 }
@@ -229,11 +250,20 @@ void breakpad_gdscript_exit() {
 	if (gdscript_trace_slot < 0) {
 		return;
 	}
-	BreakpadGDScriptTraceThread &slot = gdscript_trace.threads[gdscript_trace_slot];
+	const int slot_index = gdscript_trace_slot;
+	BreakpadGDScriptTraceThread &slot = gdscript_trace.threads[slot_index];
 	if (slot.truncated > 0) {
 		slot.truncated--;
 	} else if (slot.frame_count > 0) {
 		slot.frame_count--;
+	}
+	if (slot.truncated == 0 && slot.frame_count == 0) {
+		while (gdscript_trace_slot_locks[slot_index].test_and_set(std::memory_order_acquire)) {
+			Thread::yield();
+		}
+		slot.thread_id = 0;
+		gdscript_trace_slot = -1;
+		gdscript_trace_slot_locks[slot_index].clear(std::memory_order_release);
 	}
 }
 
@@ -245,4 +275,8 @@ void breakpad_gdscript_line(int line) {
 	if (slot.frame_count > 0) {
 		slot.frames[slot.frame_count - 1].line = line;
 	}
+}
+
+const BreakpadGDScriptTrace *breakpad_get_gdscript_trace_for_testing() {
+	return &gdscript_trace;
 }

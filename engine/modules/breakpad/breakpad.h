@@ -50,7 +50,8 @@ void breakpad_handle_signal(int sig);
 void breakpad_handle_exception_pointers(void *exinfo);
 
 // Versioned, fixed-layout GDScript trace data is stored in process-lifetime
-// memory and registered with Breakpad. Keep this layout stable for dump readers.
+// memory and registered with Breakpad. On Windows/Linux thread_id matches the
+// OS thread ID used by minidump thread records. Keep this layout stable for dump readers.
 constexpr uint32_t BREAKPAD_GDSCRIPT_TRACE_MAGIC = 0x47535452; // "GSTR"
 constexpr uint32_t BREAKPAD_GDSCRIPT_TRACE_VERSION = 1;
 constexpr size_t BREAKPAD_GDSCRIPT_TRACE_THREAD_COUNT = 32;
@@ -82,3 +83,4 @@ struct BreakpadGDScriptTrace {
 void breakpad_gdscript_enter(const String &path, const String &function, int line);
 void breakpad_gdscript_exit();
 void breakpad_gdscript_line(int line);
+const BreakpadGDScriptTrace *breakpad_get_gdscript_trace_for_testing();
