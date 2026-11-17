@@ -3901,6 +3901,9 @@ Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_a
 				CHECK_SPACE(2);
 
 				line = _code_ptr[ip + 1];
+#ifdef USE_BREAKPAD
+				breakpad_gdscript_line(line);
+#endif
 				ip += 2;
 
 				if (EngineDebugger::is_active()) {

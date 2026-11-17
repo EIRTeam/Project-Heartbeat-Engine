@@ -30,6 +30,11 @@
 
 #pragma once
 
+#include "core/string/ustring.h"
+
+#include <cstddef>
+#include <cstdint>
+
 void initialize_breakpad(bool register_handlers);
 void disable_breakpad();
 void report_user_data_dir_usable();
@@ -43,3 +48,37 @@ void breakpad_handle_signal(int sig);
 // Windows crash handling goes through this
 // TODO: should Windows header be included here to use an actual type?
 void breakpad_handle_exception_pointers(void *exinfo);
+
+// Versioned, fixed-layout GDScript trace data is stored in process-lifetime
+// memory and registered with Breakpad. Keep this layout stable for dump readers.
+constexpr uint32_t BREAKPAD_GDSCRIPT_TRACE_MAGIC = 0x47535452; // "GSTR"
+constexpr uint32_t BREAKPAD_GDSCRIPT_TRACE_VERSION = 1;
+constexpr size_t BREAKPAD_GDSCRIPT_TRACE_THREAD_COUNT = 32;
+constexpr size_t BREAKPAD_GDSCRIPT_TRACE_FRAME_COUNT = 32;
+constexpr size_t BREAKPAD_GDSCRIPT_TRACE_PATH_SIZE = 128;
+constexpr size_t BREAKPAD_GDSCRIPT_TRACE_FUNCTION_SIZE = 64;
+
+struct BreakpadGDScriptTraceFrame {
+	int32_t line;
+	char path[BREAKPAD_GDSCRIPT_TRACE_PATH_SIZE];
+	char function[BREAKPAD_GDSCRIPT_TRACE_FUNCTION_SIZE];
+};
+
+struct BreakpadGDScriptTraceThread {
+	uint64_t thread_id;
+	uint32_t frame_count;
+	uint32_t truncated;
+	BreakpadGDScriptTraceFrame frames[BREAKPAD_GDSCRIPT_TRACE_FRAME_COUNT];
+};
+
+struct BreakpadGDScriptTrace {
+	uint32_t magic;
+	uint32_t version;
+	uint32_t thread_count;
+	uint32_t frame_capacity;
+	BreakpadGDScriptTraceThread threads[BREAKPAD_GDSCRIPT_TRACE_THREAD_COUNT];
+};
+
+void breakpad_gdscript_enter(const String &path, const String &function, int line);
+void breakpad_gdscript_exit();
+void breakpad_gdscript_line(int line);

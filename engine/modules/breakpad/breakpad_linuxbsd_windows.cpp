@@ -32,6 +32,10 @@
 
 #include "core/io/dir_access.h"
 #include "core/os/os.h"
+#include "core/os/thread.h"
+
+#include <atomic>
+#include <cstring>
 
 #ifdef WINDOWS_ENABLED
 #include <thirdparty/breakpad/src/client/windows/handler/exception_handler.h>
@@ -42,6 +46,44 @@
 
 static google_breakpad::ExceptionHandler *breakpad_handler = nullptr;
 static bool register_breakpad_handlers;
+static BreakpadGDScriptTrace gdscript_trace = {
+	BREAKPAD_GDSCRIPT_TRACE_MAGIC,
+	BREAKPAD_GDSCRIPT_TRACE_VERSION,
+	BREAKPAD_GDSCRIPT_TRACE_THREAD_COUNT,
+	BREAKPAD_GDSCRIPT_TRACE_FRAME_COUNT,
+	{},
+};
+static std::atomic_flag gdscript_trace_slot_locks[BREAKPAD_GDSCRIPT_TRACE_THREAD_COUNT] = {};
+static thread_local int gdscript_trace_slot = -1;
+
+static int get_gdscript_trace_slot() {
+	if (gdscript_trace_slot >= 0) {
+		return gdscript_trace_slot;
+	}
+
+	const uint64_t thread_id = (uint64_t)Thread::get_caller_id();
+	for (size_t i = 0; i < BREAKPAD_GDSCRIPT_TRACE_THREAD_COUNT; i++) {
+		while (gdscript_trace_slot_locks[i].test_and_set(std::memory_order_acquire)) {
+			Thread::yield();
+		}
+		if (gdscript_trace.threads[i].thread_id == thread_id ||
+				gdscript_trace.threads[i].thread_id == 0) {
+			gdscript_trace.threads[i].thread_id = thread_id;
+			gdscript_trace_slot = (int)i;
+			gdscript_trace_slot_locks[i].clear(std::memory_order_release);
+			return gdscript_trace_slot;
+		}
+		gdscript_trace_slot_locks[i].clear(std::memory_order_release);
+	}
+	return -1;
+}
+
+static void copy_trace_string(char *destination, size_t destination_size, const String &source) {
+	CharString utf8 = source.utf8();
+	const size_t length = MIN((size_t)utf8.length(), destination_size - 1);
+	memcpy(destination, utf8.get_data(), length);
+	destination[length] = '\0';
+}
 
 #ifdef WINDOWS_ENABLED
 static bool dump_callback(const wchar_t *dump_path, const wchar_t *minidump_id, void *context,
@@ -78,6 +120,7 @@ static void create_breakpad_handler(const String &crash_folder) {
 
 	breakpad_handler = new google_breakpad::ExceptionHandler(descriptor, nullptr, dump_callback, nullptr, register_breakpad_handlers, -1);
 #endif
+	breakpad_handler->RegisterAppMemory(&gdscript_trace, sizeof(gdscript_trace));
 }
 
 static String get_settings_specific_crash_folder() {
@@ -163,4 +206,43 @@ void breakpad_handle_exception_pointers(void *exinfo) {
 #ifdef WINDOWS_ENABLED
 	breakpad_handler->WriteMinidumpForException(static_cast<EXCEPTION_POINTERS *>(exinfo));
 #endif
+}
+
+void breakpad_gdscript_enter(const String &path, const String &function, int line) {
+	const int slot_index = get_gdscript_trace_slot();
+	if (slot_index < 0) {
+		return;
+	}
+	BreakpadGDScriptTraceThread &slot = gdscript_trace.threads[slot_index];
+	if (slot.frame_count >= BREAKPAD_GDSCRIPT_TRACE_FRAME_COUNT) {
+		slot.truncated++;
+		return;
+	}
+	BreakpadGDScriptTraceFrame &frame = slot.frames[slot.frame_count];
+	frame.line = line;
+	copy_trace_string(frame.path, sizeof(frame.path), path);
+	copy_trace_string(frame.function, sizeof(frame.function), function);
+	slot.frame_count++;
+}
+
+void breakpad_gdscript_exit() {
+	if (gdscript_trace_slot < 0) {
+		return;
+	}
+	BreakpadGDScriptTraceThread &slot = gdscript_trace.threads[gdscript_trace_slot];
+	if (slot.truncated > 0) {
+		slot.truncated--;
+	} else if (slot.frame_count > 0) {
+		slot.frame_count--;
+	}
+}
+
+void breakpad_gdscript_line(int line) {
+	if (gdscript_trace_slot < 0) {
+		return;
+	}
+	BreakpadGDScriptTraceThread &slot = gdscript_trace.threads[gdscript_trace_slot];
+	if (slot.frame_count > 0) {
+		slot.frames[slot.frame_count - 1].line = line;
+	}
 }
