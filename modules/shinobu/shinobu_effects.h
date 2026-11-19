@@ -2,6 +2,7 @@
 #define SHINOBU_EFFECTS_H
 
 #include "core/object/ref_counted.h"
+#include "core/variant/type_info.h"
 
 #include "shinobu_channel_remap.h"
 #include "shinobu_pitch_shift.h"

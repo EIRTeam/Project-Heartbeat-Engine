@@ -1,4 +1,7 @@
 #include "ph_singleton.h"
+#include "core/input/input.h"
+#include "core/object/class_db.h"
+#include "core/os/os.h"
 #include "thirdparty/linalg.h"
 #ifdef SDL_ENABLED
 #include "drivers/sdl/joypad_sdl.h"
@@ -161,8 +164,9 @@ String PHNative::get_rendering_api_name() {
 
 bool PHNative::is_sdl_device_game_controller(int p_joy_device_idx) {
 #ifdef SDL_ENABLED
-	if (JoypadSDL *sdl = JoypadSDL::get_singleton(); sdl) {
-		return sdl->is_device_game_controller(p_joy_device_idx);
+	Input *input = Input::get_singleton();
+	if (input->get_connected_joypads().has(p_joy_device_idx)) {
+		return input->get_joy_info(p_joy_device_idx).get("mapping_handled", false);
 	}
 	return false;
 #else
@@ -172,11 +176,10 @@ bool PHNative::is_sdl_device_game_controller(int p_joy_device_idx) {
 
 uint64_t PHNative::get_clock_time_usec() {
 #ifdef SDL_ENABLED
-	if (JoypadSDL *sdl = JoypadSDL::get_singleton(); sdl) {
-		return sdl->get_sdl_time_nsec() / 1000;
-	}
-#endif
+	return JoypadSDL::get_sdl_time_nsec() / 1000;
+#else
 	return Time::get_singleton()->get_ticks_usec();
+#endif
 }
 
 Error PHNative::write_file_atomic(const String &p_path, const PackedByteArray &p_data) {
@@ -255,8 +258,9 @@ Error PHNative::copy_file_atomic(const String &p_source, const String &p_destina
 
 String PHNative::get_sdl_device_guid(int p_joy_device_idx) {
 #ifdef SDL_ENABLED
-	if (JoypadSDL *sdl = JoypadSDL::get_singleton(); sdl) {
-		return sdl->get_device_guid(p_joy_device_idx);
+	Input *input = Input::get_singleton();
+	if (input->get_connected_joypads().has(p_joy_device_idx)) {
+		return input->get_joy_guid(p_joy_device_idx);
 	}
 #endif
 	return "";
@@ -268,8 +272,8 @@ void PHNative::_bind_methods() {
 	ClassDB::bind_static_method("PHNative", D_METHOD("load_ogg_from_file", "path"), &PHNative::load_ogg_from_file);
 	ClassDB::bind_static_method("PHNative", D_METHOD("load_ogg_from_buffer", "buffer"), &PHNative::load_ogg_from_buffer);
 	ClassDB::bind_static_method("PHNative", D_METHOD("get_rendering_api_name"), &PHNative::get_rendering_api_name);
-	ClassDB::bind_static_method("PHNative", D_METHOD("is_sdl_device_game_controller"), &PHNative::is_sdl_device_game_controller);
-	ClassDB::bind_static_method("PHNative", D_METHOD("get_sdl_device_guid"), &PHNative::get_sdl_device_guid);
+	ClassDB::bind_static_method("PHNative", D_METHOD("is_sdl_device_game_controller", "joy_device_idx"), &PHNative::is_sdl_device_game_controller);
+	ClassDB::bind_static_method("PHNative", D_METHOD("get_sdl_device_guid", "joy_device_idx"), &PHNative::get_sdl_device_guid);
 	ClassDB::bind_static_method("PHNative", D_METHOD("get_clock_time_usec"), &PHNative::get_clock_time_usec);
 	ClassDB::bind_static_method("PHNative", D_METHOD("write_file_atomic", "path", "data"), &PHNative::write_file_atomic);
 	ClassDB::bind_static_method("PHNative", D_METHOD("write_var_atomic", "path", "data"), &PHNative::write_var_atomic);

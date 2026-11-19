@@ -1,4 +1,5 @@
 #include "shinobu_effects.h"
+#include "core/object/class_db.h"
 #include "shinobu.h"
 #include "shinobu_channel_remap.h"
 #include "shinobu_group.h"

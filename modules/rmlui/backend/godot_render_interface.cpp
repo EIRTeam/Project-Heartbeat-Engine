@@ -26,6 +26,7 @@
 #include "servers/rendering/rendering_device_commons.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server.h"
+#include "servers/rendering/rendering_server_enums.h"
 
 Rml::CompiledGeometryHandle RenderInterface_Godot_RD::CompileGeometry(Rml::Span<const Rml::Vertex> vertices, Rml::Span<const int> indices) {
     const uint32_t vertex_size = (vertices.size() * sizeof(Rml::Vertex));
@@ -394,7 +395,7 @@ void RenderInterface_Godot_RD::execute_command(const RenderGeometryCommand &p_co
 	}
 
     if (*currently_bound_shader == BoundShader::TEXTURE) {
-        RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RenderingServer::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RenderingServer::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+        RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
         RID texture_rid = RS::get_singleton()->texture_get_rd_texture(texture->texture_ref->get_rid());
         RD::Uniform texture_uniform = RD::Uniform(RenderingDeviceCommons::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, texture_rid}));
         RID uniform_set = uniform_cache->get_cache(shaders.get_render_shader(GodotRmlUiShaders::RENDER_SHADER_TEXTURE), TEXTURE_SHADER_UNIFORM_SET_IDX, texture_uniform); 
@@ -621,7 +622,7 @@ void RenderInterface_Godot_RD::execute_blit_texture(RID p_from, RID p_to, const 
     RD::ComputeListID compute_list = rd->compute_list_begin();
     rd->compute_list_bind_compute_pipeline(compute_list, shaders.get_compute_pipeline(GodotRmlUiShaders::COMPUTE_SHADER_BLIT_TEXTURE));
     
-    RID sampler =  RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RenderingServer::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RenderingServer::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
+    RID sampler =  RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
     RD::Uniform u_src(
         RenderingDeviceCommons::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE,
         0,
@@ -677,7 +678,7 @@ RID RenderInterface_Godot_RD::make_texture_uniform_set(RID p_texture, RID p_shad
 
     RD::Uniform texture_uniform;
     texture_uniform.uniform_type = RenderingDeviceCommons::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
-    texture_uniform.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RenderingServer::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RenderingServer::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED));
+    texture_uniform.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED));
     texture_uniform.append_id(p_texture);
     texture_uniform.binding = 0;
 

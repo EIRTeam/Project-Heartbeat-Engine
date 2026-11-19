@@ -1,5 +1,6 @@
 #include "register_types.h"
 #include "core/config/engine.h"
+#include "core/object/class_db.h"
 #include "modules/register_module_types.h"
 
 #include "discord_rpc.h"

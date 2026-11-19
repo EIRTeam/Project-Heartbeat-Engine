@@ -29,6 +29,8 @@
 /**************************************************************************/
 
 #include "steam_input.h"
+#include "core/object/class_db.h"
+#include "core/object/callable_mp.h"
 #include "core/input/input.h"
 #include "input_glyphs_steamworks.h"
 #include "steam/steam_api_flat.h"

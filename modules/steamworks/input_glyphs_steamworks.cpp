@@ -34,6 +34,7 @@
 #include "core/io/file_access.h"
 #include "core/io/image.h"
 #include "core/io/json.h"
+#include "scene/main/scene_tree.h"
 #include "scene/resources/image_texture.h"
 #include "scene/resources/placeholder_textures.h"
 #include "steam/isteaminput.h"

@@ -1,4 +1,5 @@
 #include "diva_object.h"
+#include "core/object/class_db.h"
 void DIVAObjectSet::read_submesh_indices(DIVASubmesh *p_submesh, uint32_t p_index_count, Ref<StreamPeerBuffer> p_spb) {
 	bool tri_strip = p_submesh->primitive == OBJ_PRIMITIVE_TRIANGLE_STRIP;
 	p_submesh->index_array.resize(p_index_count);

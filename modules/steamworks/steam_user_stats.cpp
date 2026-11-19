@@ -1,4 +1,5 @@
 #include "steam_user_stats.h"
+#include "core/object/class_db.h"
 #include "steam/steam_api_flat.h"
 
 void HBSteamUserStats::_bind_methods() {

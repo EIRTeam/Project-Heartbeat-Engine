@@ -34,10 +34,11 @@
 Error InputGlyphSVGDecode::render_svg(Ref<Image> p_image, const PackedByteArray &p_buffer, const Vector2i &p_dimensions) {
 	ERR_FAIL_COND_V_MSG(p_dimensions == Vector2i(), ERR_INVALID_PARAMETER, "Steamworks Glyphs SVG: Can't load SVG with a scale of 0.");
 
-	std::unique_ptr<tvg::Picture> picture = tvg::Picture::gen();
+	tvg::Picture *picture = tvg::Picture::gen();
 
-	tvg::Result result = picture->load((const char *)p_buffer.ptr(), p_buffer.size(), "svg", true);
+	tvg::Result result = picture->load((const char *)p_buffer.ptr(), p_buffer.size(), "svg", nullptr, true);
 	if (result != tvg::Result::Success) {
+		tvg::Paint::rel(picture);
 		return ERR_INVALID_DATA;
 	}
 	uint32_t width = MAX(1, p_dimensions.x);
@@ -54,51 +55,31 @@ Error InputGlyphSVGDecode::render_svg(Ref<Image> p_image, const PackedByteArray 
 
 	picture->size(width, height);
 
-	std::unique_ptr<tvg::SwCanvas> sw_canvas = tvg::SwCanvas::gen();
-	// Note: memalloc here, be sure to memfree before any return.
-	uint32_t *buffer = (uint32_t *)memalloc(sizeof(uint32_t) * width * height);
+	std::unique_ptr<tvg::SwCanvas> sw_canvas(tvg::SwCanvas::gen());
+	Vector<uint8_t> buffer;
+	buffer.resize(sizeof(uint32_t) * width * height);
 
-	tvg::Result res = sw_canvas->target(buffer, width, width, height, tvg::SwCanvas::ARGB8888S);
+	tvg::Result res = sw_canvas->target((uint32_t *)buffer.ptrw(), width, width, height, tvg::ColorSpace::ABGR8888S);
 	if (res != tvg::Result::Success) {
-		memfree(buffer);
+		tvg::Paint::rel(picture);
 		ERR_FAIL_V_MSG(FAILED, "ImageLoaderSVG: Couldn't set target on ThorVG canvas.");
 	}
 
-	res = sw_canvas->push(std::move(picture));
+	res = sw_canvas->add(picture);
 	if (res != tvg::Result::Success) {
-		memfree(buffer);
 		ERR_FAIL_V_MSG(FAILED, "ImageLoaderSVG: Couldn't insert ThorVG picture on canvas.");
 	}
 
-	res = sw_canvas->draw();
+	res = sw_canvas->draw(true);
 	if (res != tvg::Result::Success) {
-		memfree(buffer);
 		ERR_FAIL_V_MSG(FAILED, "ImageLoaderSVG: Couldn't draw ThorVG pictures on canvas.");
 	}
 
 	res = sw_canvas->sync();
 	if (res != tvg::Result::Success) {
-		memfree(buffer);
 		ERR_FAIL_V_MSG(FAILED, "ImageLoaderSVG: Couldn't sync ThorVG canvas.");
 	}
 
-	Vector<uint8_t> image;
-	image.resize(width * height * sizeof(uint32_t));
-
-	for (uint32_t y = 0; y < height; y++) {
-		for (uint32_t x = 0; x < width; x++) {
-			uint32_t n = buffer[y * width + x];
-			const size_t offset = sizeof(uint32_t) * width * y + sizeof(uint32_t) * x;
-			image.write[offset + 0] = (n >> 16) & 0xff;
-			image.write[offset + 1] = (n >> 8) & 0xff;
-			image.write[offset + 2] = n & 0xff;
-			image.write[offset + 3] = (n >> 24) & 0xff;
-		}
-	}
-
-	res = sw_canvas->clear(true);
-	memfree(buffer);
-
-	p_image->set_data(width, height, false, Image::FORMAT_RGBA8, image);
+	p_image->set_data(width, height, false, Image::FORMAT_RGBA8, buffer);
 	return OK;
 }

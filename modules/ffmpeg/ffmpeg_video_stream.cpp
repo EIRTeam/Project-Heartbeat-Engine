@@ -83,6 +83,7 @@ typedef int64_t ComputeListID;
 #else
 #include "servers/rendering/rendering_device_binds.h"
 #include "servers/rendering/rendering_server.h"
+#include "core/object/callable_mp.h"
 typedef RD::TextureFormat RDTextureFormatC;
 typedef RD::TextureView RDTextureViewC;
 #define TEXTURE_FORMAT_COMPAT(tf) tf;

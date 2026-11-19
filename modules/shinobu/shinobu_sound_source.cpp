@@ -1,4 +1,5 @@
 #include "shinobu_sound_source.h"
+#include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "shinobu.h"
 #include "shinobu_macros.h"

@@ -29,10 +29,13 @@
 /*************************************************************************/
 
 #include "ph_audio_stream_editor.h"
+#include "core/object/class_db.h"
+#include "core/object/callable_mp.h"
 
 #include "core/config/project_settings.h"
 #include "core/io/resource_loader.h"
 #include "ph_audio_stream_preview.h"
+#include "servers/rendering/rendering_server.h"
 
 void PHAudioStreamEditor::_notification(int p_what) {
 	if (p_what == NOTIFICATION_THEME_CHANGED || p_what == NOTIFICATION_ENTER_TREE) {

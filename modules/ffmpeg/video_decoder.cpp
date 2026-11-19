@@ -50,6 +50,8 @@ extern "C" {
 #include <godot_cpp/classes/rendering_server.hpp>
 #else
 #include "servers/rendering/rendering_server.h"
+#include "core/object/callable_mp.h"
+#include "core/os/os.h"
 #endif
 
 extern "C" {

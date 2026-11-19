@@ -35,6 +35,7 @@
 #ifdef ENABLE_STREAM_INFO
 
 #include "core/object/ref_counted.h"
+#include "core/variant/type_info.h"
 
 class FileAccess;
 

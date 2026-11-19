@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "ph_zip_packer.h"
+#include "core/object/class_db.h"
 
 #include "core/io/zip_io.h"
 #include "core/os/os.h"

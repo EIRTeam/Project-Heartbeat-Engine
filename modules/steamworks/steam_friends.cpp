@@ -29,6 +29,8 @@
 /**************************************************************************/
 
 #include "steam_friends.h"
+#include "core/object/class_db.h"
+#include "core/object/callable_mp.h"
 #include "scene/resources/image_texture.h"
 #include "steam/steam_api_flat.h"
 #include "sw_error_macros.h"
