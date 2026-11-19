@@ -6,7 +6,7 @@
 [subrepo]
 	remote = https://github.com/EIRTeam/shinobu.git
 	branch = ph-godot-4.7.2
-	commit = 5b3d16461277f6dbbb8ce57c2346bdb5eaff4c1e
-	parent = 916a18df47e5ef27b633dc2244aa96616a14b945
+	commit = 973dd02a86b4dfd49cec91b3e10a3608448d4c31
+	parent = 276bcde5471755352b736703227ac9388b9df886
 	method = merge
 	cmdver = 0.4.9
