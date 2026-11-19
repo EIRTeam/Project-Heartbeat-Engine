@@ -42,16 +42,29 @@
 
 namespace InputGlyphs {
 typedef uint64_t GlyphUID;
-static GlyphUID calculate_guid(const InputGlyphsConstants::InputType &p_input_type, const InputGlyphsConstants::InputOrigin &p_input_origin, const int &p_style, const InputGlyphSize &p_glyph_size) {
-	GlyphUID uid;
-	uid = p_input_origin << 6;
-	uid |= p_input_type << 12;
+static constexpr GlyphUID calculate_guid(const InputGlyphsConstants::InputType &p_input_type, const InputGlyphsConstants::InputOrigin &p_input_origin, const int &p_style, const InputGlyphSize &p_glyph_size) {
+	// Input origins include -1 for INPUT_ORIGIN_INVALID; offset them to keep
+	// that value distinct while encoding it as an unsigned field.
+	const GlyphUID origin = static_cast<GlyphUID>(p_input_origin + 1);
+	const GlyphUID input_type = static_cast<GlyphUID>(p_input_type);
+	const GlyphUID style = static_cast<GlyphUID>(p_style);
+	const GlyphUID size = static_cast<GlyphUID>(p_glyph_size);
 
-	uid |= p_style;
-	uid |= p_glyph_size;
-
-	return uid;
+	return (input_type << 14) | (origin << 8) | (style << 2) | size;
 }
+
+static_assert(calculate_guid(InputGlyphsConstants::KEYBOARD, InputGlyphsConstants::INPUT_ORIGIN_A, GLYPH_STYLE_LIGHT, GLYPH_SIZE_SMALL) !=
+		calculate_guid(InputGlyphsConstants::KEYBOARD, InputGlyphsConstants::INPUT_ORIGIN_A, GLYPH_STYLE_KNOCKOUT, GLYPH_SIZE_MEDIUM));
+static_assert(calculate_guid(InputGlyphsConstants::KEYBOARD, InputGlyphsConstants::INPUT_ORIGIN_INVALID, GLYPH_STYLE_KNOCKOUT, GLYPH_SIZE_SMALL) !=
+		calculate_guid(InputGlyphsConstants::KEYBOARD, InputGlyphsConstants::INPUT_ORIGIN_A, GLYPH_STYLE_KNOCKOUT, GLYPH_SIZE_SMALL));
+static_assert(calculate_guid(InputGlyphsConstants::UNKNOWN, InputGlyphsConstants::INPUT_ORIGIN_A, GLYPH_STYLE_KNOCKOUT, GLYPH_SIZE_SMALL) !=
+		calculate_guid(InputGlyphsConstants::STEAM_CONTROLLER, InputGlyphsConstants::INPUT_ORIGIN_A, GLYPH_STYLE_KNOCKOUT, GLYPH_SIZE_SMALL));
+static_assert(calculate_guid(InputGlyphsConstants::KEYBOARD, InputGlyphsConstants::INPUT_ORIGIN_A, GLYPH_STYLE_KNOCKOUT, GLYPH_SIZE_SMALL) !=
+		calculate_guid(InputGlyphsConstants::KEYBOARD, InputGlyphsConstants::INPUT_ORIGIN_B, GLYPH_STYLE_KNOCKOUT, GLYPH_SIZE_SMALL));
+static_assert(calculate_guid(InputGlyphsConstants::KEYBOARD, InputGlyphsConstants::INPUT_ORIGIN_A, GLYPH_STYLE_NEUTRAL_COLOR_ABXY, GLYPH_SIZE_SMALL) !=
+		calculate_guid(InputGlyphsConstants::KEYBOARD, InputGlyphsConstants::INPUT_ORIGIN_A, GLYPH_STYLE_SOLID_ABXY, GLYPH_SIZE_SMALL));
+static_assert(calculate_guid(InputGlyphsConstants::KEYBOARD, InputGlyphsConstants::INPUT_ORIGIN_A, GLYPH_STYLE_KNOCKOUT, GLYPH_SIZE_SMALL) !=
+		calculate_guid(InputGlyphsConstants::KEYBOARD, InputGlyphsConstants::INPUT_ORIGIN_A, GLYPH_STYLE_KNOCKOUT, GLYPH_SIZE_LARGE));
 } //namespace InputGlyphs
 
 class InputGlyphsSingleton : public Object {
