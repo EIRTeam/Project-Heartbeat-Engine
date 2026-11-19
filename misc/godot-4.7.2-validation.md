@@ -2,11 +2,15 @@
 
 ## Status
 
-Stage 5 is in progress. The integrated Linux development build, headless
+Stage 5 has completed the available local Linux checks, but is not fully
+validated or ready for release. The integrated Linux development build, headless
 module/API smoke test, headless editor startup, and nine focused PH regression
-tests passed. The broad portable suite exposed two failing cases described
-below. The Linux release-template build is running. The earlier standalone
-engine results are recorded in `godot-4.7.2-rebase.md`.
+tests passed. ClassDB validation also passed after the binding fixes; the
+portable suite retains one GDScript orphan-output fixture failure. The Linux
+release-template build and packed-project startup passed. An intermittent
+editor-export shutdown crash was diagnosed and the lifecycle fix passed three
+fresh-project exports. Earlier standalone results are in
+`godot-4.7.2-rebase.md`.
 
 Work is on `upgrade/godot-4.7.2` in `/tmp/opencode/ph-godot-4.7.2`.
 The original user checkout is untouched. No stage 5 changes have been pushed.
@@ -72,6 +76,10 @@ The integrated development binary reports `4.7.2.dev.custom_build`.
   device-query tests.
 - Qualify the rectangle packer's helper with its new `Math` namespace and
   include the texture resource definition in RmlUi's render-interface header.
+- Include Compositor2D dependencies directly so non-SCU release compilation
+  does not depend on neighboring translation units.
+- Guard deferred editor script-doc-cache work against editor destruction and
+  command-line mode, fixing the export-shutdown crash observed below.
 
 Compatibility changes are committed separately:
 
@@ -113,15 +121,20 @@ Initial portable result: 1,395 cases, 1,393 passed, 2 failed, 23 skipped;
 1. ClassDB exposed-method validation reports seven unnamed arguments in
    FFmpeg, InputGlyphRect, and PHNative bindings. Added explicit `D_METHOD`
    argument names (and corrected a mis-bound default argument in
-   `set_action_name`). The development binary must be rebuilt and this test
-   rerun before marking it fixed by validation.
+   `set_action_name`). Development rebuild and retest passed ClassDB validation.
 2. GDScript's `call_native_static_method_validated.gd` calls
    `Node.print_orphan_nodes()` and expects no output. PH's existing
    `PHAudioStreamPreviewGenerator` and `PHNative` singleton Nodes are
-   intentionally unattached and appear in the output. The standalone engine
+   currently unattached and appear in the output. The standalone engine
    does not register these modules and passed the fixture. Do not modify
    expected upstream output or change singleton lifecycle merely to hide this
    discrepancy; record it as a remaining integration-test limitation.
+
+Retest after the binding fixes:
+1,395 cases, 1,394 passed, 1 failed, 23 skipped;
+424,953 assertions, 424,951 passed, 2 failed. Both failed assertions are in
+the GDScript fixture case above; ClassDB no longer fails.
+Log: `/tmp/opencode/ph-godot-4.7.2-integrated-tests-final.log`.
 
 The focused PH regression run completed successfully:
 
@@ -134,6 +147,12 @@ The focused PH regression run completed successfully:
 9 cases and 47 assertions passed, zero failures.
 Log: `/tmp/opencode/ph-godot-4.7.2-regressions.log`.
 
+After the final editor fix, a combined ClassDB/PH regression run passed:
+10 cases, 154,494 assertions, zero failures. Filter:
+`--test-case=*ClassDB*,*PHZip*,*FFmpeg*,*InputGlyphs*,*PHNative*`.
+Log: `/tmp/opencode/ph-godot-4.7.2-final-targeted-tests.log`.
+This focused success does not override the broader GDScript fixture failure.
+
 The separate release-template build uses:
 
 ```bash
@@ -145,6 +164,60 @@ This exercises the release/template compilation paths, but disables symbols
 and LTO for local resource limits. It does not validate release symbol uploads
 or the unmodified production profile. Log:
 `/tmp/opencode/ph-godot-4.7.2-production-build.log`.
+
+The initial release build failed only in Compositor2D, where the non-SCU
+compilation path exposed missing direct includes for the rendering server,
+callable helpers, and ClassDB. Added those includes to the engine source.
+Retry passed with the same options; log:
+`/tmp/opencode/ph-godot-4.7.2-production-build-retry-1.log`.
+Development rebuild then passed, followed by the ClassDB retest above.
+SCons builds were run sequentially to avoid concurrent writes to generated files.
+
+## Export and packed release startup
+
+Production disables loose-project path overrides, as expected. Attempts using
+`--path` or the project CWD were rejected; the build settings were not weakened.
+
+Exported the synthetic smoke project to a PCK, copied the release executable
+next to `smoke.pck`, and linked its FFmpeg/Steam runtime libraries in the
+isolated `/tmp/opencode/ph-packed-release-smoke` directory. Running the packed
+release with `--headless` returned 0 and printed `PH_RELEASE_SMOKE_PASS`.
+Log: `/tmp/opencode/ph-godot-4.7.2-release-packed-smoke.log`.
+
+The first PCK export wrote its output but aborted during shutdown (exit 134),
+logging a null EditorNode singleton. Later exports, including under GDB,
+returned 0, so successful retries alone were not treated as a fix.
+
+The captured core and linker map identify the crashing thread in:
+
+```text
+EditorHelp::_regen_script_doc_thread
+EditorHelp::_reload_scripts_documentation
+EditorFileSystemDirectory::get_subdir_count
+```
+
+A deferred doc-cache request can run after EditorNode destruction, interpret
+the null-singleton `is_cmdline_mode()` fallback as false, and start work with a
+destroyed filesystem. Guard both script-doc-cache entry points against an
+absent editor and command-line mode.
+
+The updated development build succeeded, followed by three exports using
+separate fresh project directories and XDG caches. All returned 0 with no
+`ERROR`/script-error diagnostics:
+
+- `/tmp/opencode/ph-godot-4.7.2-export-fixed-1.log`
+- `/tmp/opencode/ph-godot-4.7.2-export-fixed-2.log`
+- `/tmp/opencode/ph-godot-4.7.2-export-fixed-3.log`
+
+These were synthetic projects, not Project Heartbeat itself.
+
+Diagnostics (temporary, not committed):
+
+- `/tmp/opencode/ph-godot-4.7.2-export-pack.log`
+- `/tmp/opencode/ph-godot-4.7.2-export-pack-gdb.log`
+- `/tmp/opencode/ph-godot-export-core-backtrace.log`
+- `/tmp/opencode/ph-godot-4.7.2-development-link.map`
+- `/tmp/opencode/ph-godot-4.7.2-export-fix-build.log`
 
 ## Headless smoke checks
 
@@ -166,10 +239,11 @@ Headless editor startup/import/shutdown also returned 0 with no errors in
 | Check | Status / prerequisite |
 | --- | --- |
 | Linux development build with all custom modules | Passed with debug symbols disabled |
-| Portable integrated engine/module tests | 1,393 passed, 2 failed; binding fixes await retest, orphan-output fixture remains |
+| Portable integrated engine/module tests | 1,394 passed, 1 GDScript orphan-output fixture failed; ClassDB binding retest passed |
 | PH ZIP regressions | Passed in focused 9-case regression run |
 | FFmpeg converter lifetime regressions | Passed in focused 9-case regression run |
-| Linux production release template | Running with symbols/LTO disabled |
+| Linux production release template | Build and packed startup passed with symbols/LTO disabled |
+| Synthetic PCK export | Lifecycle fix passed three fresh-project exports |
 | Headless editor startup and module registration | Passed |
 | Windows editor/release template | Blocked locally: MinGW cross-compiler not found |
 | Android template/APK | Blocked locally: SDK/NDK environment and Android FFmpeg dependencies unavailable |
@@ -184,3 +258,23 @@ are unset). `vulkaninfo --summary` does detect an AMD RX 7800 XT Vulkan device,
 but emits loader/device warnings. This alone does not validate any GPU path.
 No Xvfb executable was found. Do not mark rendering checks passed based only
 on a dummy/headless renderer.
+
+## Handoff
+
+All source changes are local to `upgrade/godot-4.7.2`, with the engine fixes
+separate from custom-module fixes. No stage 5 changes were pushed.
+The original checkout retains its original local edits.
+
+Before landing/release:
+
+1. Decide how to handle the GDScript orphan-output fixture without hiding
+   unrelated failures or changing singleton ownership casually.
+2. Synchronize the additional engine commits to Shinobu's versioned upgrade
+   branch using git-subrepo, verify the remote and resulting metadata, and
+   preserve the engine/module commit separation.
+3. Run Windows and Android CI builds with the required dependencies/toolchains.
+4. Validate the actual PH project and its audio, video, GUI, renderer, and
+   crash-reporting behavior on supported hardware.
+5. Build full-symbol production artifacts and validate dump symbolication.
+
+Do not treat the successful local Linux checks as completion of this matrix.
