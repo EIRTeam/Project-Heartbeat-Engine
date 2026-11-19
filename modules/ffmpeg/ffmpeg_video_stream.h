@@ -55,32 +55,40 @@ using namespace godot;
 #endif
 
 class YUVGPUConverter : public RefCounted {
-	RID shader;
-	bool yuv_planes_dirty = false;
-	bool has_input_planes = false;
+	// Playback-thread inputs. Render commands receive snapshots, never these fields.
 	Ref<Image> yuv_plane_images[4];
+	Vector2i input_frame_size;
+	// Stable wrapper, instantiated before any commands are submitted.
+	Ref<Texture2DRD> out_texture;
+	// GPU state below is only accessed on the render thread.
+	RID shader;
 	RID yuv_plane_textures[4];
 	RID yuv_planes_uniform_sets[4];
 	RID pipeline;
-	Ref<Texture2DRD> out_texture;
 	RID out_uniform_set;
 	Vector2i frame_size;
 
 	struct PushConstant {
 		uint32_t use_alpha;
 		uint8_t padding[11];
-	} push_constant;
+	} push_constant = {};
 
 private:
 	void _ensure_pipeline();
 	Error _ensure_plane_textures();
 	Error _ensure_output_texture();
 	RID _create_uniform_set(const RID &p_texture_rd_rid, int p_set_idx);
-	void _upload_plane_images();
+	void _upload_plane_images(const Array &p_planes);
 	void _clear_texture_internal();
-	void _convert_internal();
+	void _convert_internal(const Vector2i &p_size, const Array &p_planes);
+	// Bind as RefCounted: this private helper is not a registered Godot class.
+	static void _initialize_on_render_thread(Ref<RefCounted> p_converter, Vector2i p_size);
+	static void _convert_on_render_thread(Ref<RefCounted> p_converter, Vector2i p_size, Array p_planes);
+	static void _clear_on_render_thread(Ref<RefCounted> p_converter);
+	static void _free_on_render_thread(Array p_rids, Ref<Texture2DRD> p_texture);
 
 public:
+	// Called from playback's owning thread, not concurrently by multiple producers.
 	void set_plane_image(int p_plane_idx, Ref<Image> p_image);
 	Vector2i get_frame_size() const;
 	void set_frame_size(const Vector2i &p_frame_size);
