@@ -2,18 +2,17 @@
 
 ## Status
 
-Stage 5 has completed the available local Linux checks, but is not fully
-validated or ready for release. The integrated Linux development build, headless
-module/API smoke test, headless editor startup, and nine focused PH regression
-tests passed. ClassDB validation also passed after the binding fixes; the
-portable suite retains one GDScript orphan-output fixture failure. The Linux
-release-template build and packed-project startup passed. An intermittent
-editor-export shutdown crash was diagnosed and the lifecycle fix passed three
-fresh-project exports. Earlier standalone results are in
-`godot-4.7.2-rebase.md`.
+Stage 5 has passed integrated Linux builds, all 1,395 portable engine cases
+(424,953 assertions), actual PH import and 11 game tests, and software Vulkan/GL
+rendering/video checks. CI passed all six platform build jobs. Linux CI-symbol
+minidump validation recovered the crash function and source line.
+This is not release approval: physical audio/GPU gameplay, live services,
+Windows crash handling, and fresh-cache export diagnostics remain unvalidated.
+Earlier standalone results are in `godot-4.7.2-rebase.md`.
 
 Work is on `upgrade/godot-4.7.2` in `/tmp/opencode/ph-godot-4.7.2`.
-The original user checkout is untouched. No stage 5 changes have been pushed.
+The original user checkout is untouched. Upgrade branches have been pushed;
+shared `ph` remains unchanged. See the publication section below.
 
 ## Clean development build
 
@@ -86,10 +85,9 @@ Compatibility changes are committed separately:
 - `f222f30874`: engine SDL clock-helper signature.
 - `2b641f6718`: external modules and regression tests.
 
-The clock-helper signature change is an engine delta beyond the stage 4
-import and must be synchronized back to the versioned Shinobu branch after
-validation. The engine no longer exactly matches the earlier published SHA.
-No stage 5 changes have been pushed.
+These engine deltas have been synchronized to Shinobu's versioned branch.
+The later Vulkan video fix removes CPU push-constant padding so its 4-byte
+layout matches the shader; a static assertion and GPU fixture cover it.
 
 ## Test safety and environment
 
@@ -127,8 +125,9 @@ Initial portable result: 1,395 cases, 1,393 passed, 2 failed, 23 skipped;
    `PHAudioStreamPreviewGenerator` and `PHNative` singleton Nodes are
    currently unattached and appear in the output. The standalone engine
    does not register these modules and passed the fixture. Do not modify
-   expected upstream output or change singleton lifecycle merely to hide this
-   discrepancy; record it as a remaining integration-test limitation.
+    expected upstream output or change singleton lifecycle merely to hide this
+    discrepancy. Instead, the fixture now exercises a native static void setter
+    using its current value, independent of ambient orphan Nodes.
 
 Retest after the binding fixes:
 1,395 cases, 1,394 passed, 1 failed, 23 skipped;
@@ -151,7 +150,10 @@ After the final editor fix, a combined ClassDB/PH regression run passed:
 10 cases, 154,494 assertions, zero failures. Filter:
 `--test-case=*ClassDB*,*PHZip*,*FFmpeg*,*InputGlyphs*,*PHNative*`.
 Log: `/tmp/opencode/ph-godot-4.7.2-final-targeted-tests.log`.
-This focused success does not override the broader GDScript fixture failure.
+The final portable rerun after the fixture change passed all 1,395 cases and
+424,953 assertions, with 23 skipped. Expected fixture output and singleton
+ownership are unchanged.
+Log: `/tmp/opencode/ph-godot-4.7.2-integrated-tests-fixture-fixed.log`.
 
 The separate release-template build uses:
 
@@ -239,42 +241,108 @@ Headless editor startup/import/shutdown also returned 0 with no errors in
 | Check | Status / prerequisite |
 | --- | --- |
 | Linux development build with all custom modules | Passed with debug symbols disabled |
-| Portable integrated engine/module tests | 1,394 passed, 1 GDScript orphan-output fixture failed; ClassDB binding retest passed |
+| Portable integrated engine/module tests | All 1,395 cases / 424,953 assertions passed; 23 skipped |
 | PH ZIP regressions | Passed in focused 9-case regression run |
 | FFmpeg converter lifetime regressions | Passed in focused 9-case regression run |
 | Linux production release template | Build and packed startup passed with symbols/LTO disabled |
 | Synthetic PCK export | Lifecycle fix passed three fresh-project exports |
 | Headless editor startup and module registration | Passed |
-| Windows editor/release template | Blocked locally: MinGW cross-compiler not found |
-| Android template/APK | Blocked locally: SDK/NDK environment and Android FFmpeg dependencies unavailable |
-| Actual Project Heartbeat import/gameplay/export | Game project not present in this checkout |
-| Audio timing, devices, latency, seeking | Requires runtime/media/device checks |
-| Video playback and teardown/reload | Pending runtime/media checks |
-| Diegetic GUI, clipping, Compositor2D layers/masks | Requires rendering validation |
-| Linux/Windows minidumps and symbolication | Pending; debug-symbol artifacts/tooling required |
+| Windows editor/debug/release template | Passed CI builds; runtime not tested |
+| Android release template | Passed CI build; APK/device runtime not tested |
+| Actual Project Heartbeat import/tests | Clean import and 11/11 tests |
+| Actual Project Heartbeat export | PCK produced; repeat export clean, fresh-cache diagnostics unresolved |
+| Audio timing, devices, latency | Requires physical device checks |
+| Video playback, seeking, teardown | Passed software Vulkan and GL, three cycles each |
+| Clipping / Compositor2D | Pixel clipping passed both; callback/textures passed Vulkan; gameplay/layers/masks remain |
+| Linux minidump symbolication | CI binary/symbols recovered crash function/source; exception metadata incomplete |
+| Windows minidumps | Runtime not tested |
 
 No display server is configured in this shell (`DISPLAY` and `WAYLAND_DISPLAY`
 are unset). `vulkaninfo --summary` does detect an AMD RX 7800 XT Vulkan device,
 but emits loader/device warnings. This alone does not validate any GPU path.
-No Xvfb executable was found. Do not mark rendering checks passed based only
-on a dummy/headless renderer.
+An isolated downloaded Xvfb plus Mesa software drivers subsequently enabled
+real Vulkan/GL code-path checks. AMD presentation under Xvfb failed due to
+missing DRI3; no physical-GPU pass is claimed.
 
 ## Handoff
 
-All source changes are local to `upgrade/godot-4.7.2`, with the engine fixes
-separate from custom-module fixes. No stage 5 changes were pushed.
-The original checkout retains its original local edits.
+Engine fixes remain separate from custom-module fixes. The original checkouts
+retain their original local edits.
 
 Before landing/release:
 
-1. Decide how to handle the GDScript orphan-output fixture without hiding
-   unrelated failures or changing singleton ownership casually.
-2. Synchronize the additional engine commits to Shinobu's versioned upgrade
-   branch using git-subrepo, verify the remote and resulting metadata, and
-   preserve the engine/module commit separation.
-3. Run Windows and Android CI builds with the required dependencies/toolchains.
-4. Validate the actual PH project and its audio, video, GUI, renderer, and
-   crash-reporting behavior on supported hardware.
-5. Build full-symbol production artifacts and validate dump symbolication.
+1. Verify CI on the final pushed revision (prior green CI predates the video fix).
+2. Repeat actual-game export with a fresh import cache and investigate the
+   first-run legacy-resource, shader, and tool-scene diagnostics.
+3. Validate actual gameplay/audio/GUI on supported hardware and live services.
+4. Test Windows crash handling/symbolication and Linux exception metadata.
 
 Do not treat the successful local Linux checks as completion of this matrix.
+
+## Actual PH project validation
+
+Isolated game checkout:
+`/home/eirexe/hdd_backup/repos/Project-Heartbeat-godot-4.7.2-validation`,
+branch `upgrade/godot-4.7.2-validation`, based on `508324c1c0e5`.
+The original game checkout and its local settings are unchanged.
+XDG data/config/cache use `/tmp/opencode/ph-game-validation-xdg/`.
+An isolated override disables Steam auto-init; import/export use
+`-- --gdscript-tests` to avoid service initialization.
+
+Compatibility fixes explicitly return bool from two `_set` hooks and
+`EditorLayer._can_drop_data`, preserving default property handling. Regression
+tests cover these hooks. Test mode disables Diagnostics processing before
+Shinobu initialization and parents the two otherwise orphaned timers without
+starting them. The clean result is 11/11 tests, zero runner errors and no leaks:
+`/tmp/opencode/ph-game-4.7.2-tests-clean.log`.
+Import log: `/tmp/opencode/ph-game-4.7.2-import-retry.log`.
+
+Actual `Main` export produced a roughly 63 MiB PCK in
+`/home/eirexe/hdd_backup/repos/ph-godot-4.7.2-validation-artifacts/`.
+Six ignored downloader dependencies were copied from the original checkout
+into this isolated checkout for the export plugin; originals are untouched.
+The first export exited 0 but logged missing export-plugin `_get_name`,
+an InputManagerTester type-inference failure, obsolete GDNative resources,
+shader sampler checks, missing glyph children and child-order errors.
+Added the required plugin name and explicit float type. Repeat export exited
+0 with no error diagnostics, but reused import/export caches and does not
+prove the other first-run diagnostics resolved.
+Logs: `/tmp/opencode/ph-game-4.7.2-export.log` and
+`/tmp/opencode/ph-game-4.7.2-export-final.log`.
+Actual packed-game startup/gameplay is not claimed.
+
+## Renderer/media and crash validation
+
+Reproducible fixture: `misc/validation/godot_upgrade_gpu/` (README includes
+clip generation and commands). Both tracked-path runs returned 0 and
+`PH_GPU_MEDIA_PASS`. GL logs only the expected Xvfb V-Sync warning.
+Coverage: clipping pixels, rendered decoded-red frame, seek advancement,
+three playback/teardown cycles and surviving texture wrappers; Vulkan also
+checks Compositor2D callbacks and screen/backbuffer textures.
+Logs: `/tmp/opencode/ph-gpu-tracked-vulkan.log` and
+`/tmp/opencode/ph-gpu-tracked-gles.log`.
+Local development rebuild after the push-constant fix passed:
+`/tmp/opencode/ph-godot-4.7.2-vulkan-video-fix-build.log`.
+
+The CI Linux editor intentionally crashed via `PHNative.crash_test()` and
+produced a minidump. Matching `.syms` (debug ID
+`81A5E241FB7AF67347A8D61A250AAA0D0`) and checksum-verified
+minidump-stackwalk 0.27.0 recovered `PHNative::crash_test()` and
+`modules/hbnative/ph_singleton.cpp:20`. The handler uses
+`SimulateSignalDelivery`; exception type remains
+`unknown 0x00000000 / 0x00000000`. Function recovery is not complete
+exception-metadata validation.
+Result: `/tmp/opencode/ph-linux-crash-symbolicated.json`.
+
+## Publication and CI
+
+Initial integrated CI:
+https://github.com/EIRTeam/Project-Heartbeat-Engine/actions/runs/44557184504
+passed Linux editor/release, Windows editor/debug/release and Android release.
+Normal CI symbols were built; public release publication was safely skipped
+by the new master-only guard. This run predates the final video/fixture fixes.
+
+`git subrepo push engine` synchronized Shinobu `ph-godot-4.7.2` to
+`cf26cf1712e6c12d3569a2aeff0245166665b8f7`; engine tree matches except
+for monorepo `.gitrepo` metadata. Remote shared `ph` remains
+`835ce68f18b5a6de87466251c11f03f6bb940d0a`.
