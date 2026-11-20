@@ -657,8 +657,13 @@ void YUVGPUConverter::_convert_internal(const Vector2i &p_size, const Array &p_p
 	push_constant.use_alpha = alpha.is_empty() ? 0 : 1;
 
 	PackedByteArray push_constant_data;
-	push_constant_data.resize(sizeof(push_constant));
-	memcpy(push_constant_data.ptrw(), &push_constant, push_constant_data.size());
+	// Godot 4.7's RenderingDevice strictly validates the push constant size
+	// against what the compute shader declares (4 bytes here: bool use_alpha).
+	// Uploading the padded 16-byte struct gets the call rejected on every
+	// frame, so the YUV->RGB pipeline never executes and video never renders
+	// in Forward+/Mobile on Godot 4.7+. Pass only the declared 4 bytes.
+	push_constant_data.resize(4);
+	memcpy(push_constant_data.ptrw(), &push_constant, 4);
 
 	ComputeListID compute_list = rd->compute_list_begin();
 	rd->compute_list_bind_compute_pipeline(compute_list, pipeline);
@@ -673,6 +678,7 @@ void YUVGPUConverter::_convert_internal(const Vector2i &p_size, const Array &p_p
 	rd->compute_list_bind_uniform_set(compute_list, yuv_planes_uniform_sets[2], 2);
 	rd->compute_list_bind_uniform_set(compute_list, yuv_planes_uniform_sets[3], 3);
 	rd->compute_list_bind_uniform_set(compute_list, out_uniform_set, 4);
+
 	rd->compute_list_dispatch(compute_list, Math::ceil(frame_size.x / 8.0f), Math::ceil(frame_size.y / 8.0f), 1);
 	rd->compute_list_end();
 }
