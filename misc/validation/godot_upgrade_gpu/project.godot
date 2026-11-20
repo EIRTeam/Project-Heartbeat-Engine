@@ -1,0 +1,8 @@
+config_version=5
+
+[application]
+config/name="PH GPU media upgrade validation"
+
+[display]
+window/size/viewport_width=128
+window/size/viewport_height=128

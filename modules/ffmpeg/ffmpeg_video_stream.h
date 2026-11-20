@@ -70,8 +70,8 @@ class YUVGPUConverter : public RefCounted {
 
 	struct PushConstant {
 		uint32_t use_alpha;
-		uint8_t padding[11];
 	} push_constant = {};
+	static_assert(sizeof(PushConstant) == sizeof(uint32_t), "YUV shader push constant must match its single GLSL bool.");
 
 private:
 	void _ensure_pipeline();
