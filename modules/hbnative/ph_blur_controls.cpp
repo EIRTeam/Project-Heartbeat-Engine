@@ -1,7 +1,9 @@
 #include "ph_blur_controls.h"
+#include "core/object/callable_mp.h"
 #include "ph_singleton.h"
 #include "scene/resources/material.h"
 #include "scene/resources/style_box_flat.h"
+#include "servers/rendering/rendering_device.h"
 
 Ref<ShaderMaterial> HBStyleboxBlurDrawer::blur_material;
 

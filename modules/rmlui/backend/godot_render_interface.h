@@ -1,5 +1,6 @@
 #pragma once
 
+#include "scene/resources/texture.h"
 #include "rmlui/backend/godot_rmlui_layers.h"
 #include "rmlui/backend/godot_rmlui_shaders.h"
 #include "rmlui/backend/shaders/color.glsl.gen.h"

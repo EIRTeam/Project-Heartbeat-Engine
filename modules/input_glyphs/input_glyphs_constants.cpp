@@ -1,4 +1,5 @@
 #include "input_glyphs_constants.h"
+#include "core/object/class_db.h"
 void InputGlyphsConstants::_bind_methods() {
 	BIND_ENUM_CONSTANT(INPUT_ORIGIN_INVALID);
 	BIND_ENUM_CONSTANT(INPUT_ORIGIN_A);

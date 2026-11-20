@@ -31,6 +31,7 @@
 #ifndef TEST_STEAM_UGC_H
 #define TEST_STEAM_UGC_H
 
+#include "core/object/callable_mp.h"
 #include "test_steamworks.h"
 #include "tests/test_macros.h"
 #include "tests/test_tools.h"

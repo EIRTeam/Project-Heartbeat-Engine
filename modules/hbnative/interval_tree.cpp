@@ -1,4 +1,5 @@
 #include "interval_tree.h"
+#include "core/object/class_db.h"
 
 void HBIntervalTree::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("insert", "low", "high", "value"), &HBIntervalTree::insert);

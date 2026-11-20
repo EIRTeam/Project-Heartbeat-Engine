@@ -1,4 +1,5 @@
 #include "ph_zip_video_stream.h"
+#include "core/object/class_db.h"
 
 void PHZipFFmpegVideoStream::_bind_methods() {
 	ClassDB::bind_static_method("PHZipFFmpegVideoStream", D_METHOD("create", "archive", "path"), &PHZipFFmpegVideoStream::create);

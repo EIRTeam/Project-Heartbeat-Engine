@@ -1,4 +1,6 @@
 #include "multi_spin_box.h"
+#include "core/object/class_db.h"
+#include "core/object/callable_mp.h"
 #include "core/input/input.h"
 #include "core/math/expression.h"
 #include "core/os/keyboard.h"

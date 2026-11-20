@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "thirdparty/minizip/ioapi.h"
+#include "core/object/class_db.h"
 #include "thirdparty/minizip/unzip.h"
 #ifdef MINIZIP_ENABLED
 

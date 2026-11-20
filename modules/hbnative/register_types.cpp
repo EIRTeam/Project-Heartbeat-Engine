@@ -28,6 +28,7 @@
 
 #include "rectpack/rectpack.h"
 #include "threen.h"
+#include "servers/rendering/rendering_server.h"
 
 static PHAudioStreamPreviewGenerator *preview_generator_ptr = NULL;
 static PHNative *ph_ptr = NULL;

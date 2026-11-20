@@ -3,6 +3,7 @@
 #include "register_types.h"
 
 #include "core/config/engine.h"
+#include "core/object/class_db.h"
 #include "shinobu.h"
 #include "shinobu_effects.h"
 #include "shinobu_sound_player.h"

@@ -29,6 +29,7 @@
 /*************************************************************************/
 
 #include "process.h"
+#include "core/object/class_db.h"
 #include "core/os/os.h"
 
 Ref<Process> (*Process::_create)(const String &p_path, const Vector<String> &p_arguments, const String &p_working_dir, bool p_open_stdin) = nullptr;

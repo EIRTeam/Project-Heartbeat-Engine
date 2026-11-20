@@ -1,4 +1,5 @@
 #include "shinobu_group.h"
+#include "core/object/class_db.h"
 #include "shinobu.h"
 #include "shinobu_effects.h"
 #include "shinobu_macros.h"

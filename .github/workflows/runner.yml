@@ -37,5 +37,6 @@ jobs:
       GLITCHTIP_AUTH_TOKEN: ${{ secrets.GLITCHTIP_AUTH_TOKEN }}
 
   upload-release:
+    if: ${{ github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     needs: [windows-build, linux-build, android-build]
     uses: ./.github/workflows/upload_release.yml

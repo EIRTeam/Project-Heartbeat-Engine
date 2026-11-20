@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "steam_remote_storage.h"
+#include "core/object/class_db.h"
 #include "steam/steam_api_flat.h"
 
 void HBSteamRemoteStorage::_bind_methods() {

@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "steam_apps.h"
+#include "core/object/class_db.h"
 #include "steam/steam_api_flat.h"
 
 void HBSteamApps::_bind_methods() {

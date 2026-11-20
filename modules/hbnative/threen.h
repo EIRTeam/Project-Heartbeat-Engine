@@ -34,6 +34,7 @@
 #include "core/object/object.h"
 #include "core/templates/vector.h"
 #include "core/variant/variant.h"
+#include "core/variant/type_info.h"
 #include "scene/main/node.h"
 
 // Helper defines ported from 3.x.

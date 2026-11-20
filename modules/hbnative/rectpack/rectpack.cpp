@@ -1,5 +1,6 @@
 #include "rectpack.h"
 #include "core/error/error_list.h"
+#include "core/math/math_funcs.h"
 #include "core/math/rect2i.h"
 #include "core/object/class_db.h"
 #include "core/typedefs.h"
@@ -23,8 +24,8 @@ Dictionary HBRectPack::pack_rects(PackedVector2Array p_rects, Vector2i p_startin
 	}
 
 	Vector2i pack_size = Vector2(
-			nearest_power_of_2_templated(p_starting_pack_size.x),
-			nearest_power_of_2_templated(p_starting_pack_size.y));
+			Math::nearest_power_of_2_templated(p_starting_pack_size.x),
+			Math::nearest_power_of_2_templated(p_starting_pack_size.y));
 
 	bool packed = false;
 

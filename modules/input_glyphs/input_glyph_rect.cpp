@@ -1,4 +1,6 @@
 #include "input_glyph_rect.h"
+#include "core/object/class_db.h"
+#include "core/object/callable_mp.h"
 
 #include "core/config/project_settings.h"
 #include "input_glyphs_singleton.h"
@@ -94,7 +96,7 @@ void InputGlyphRect::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "action_text"), "set_action_text", "get_action_text");
 
-	ClassDB::bind_method("set_action_name", &InputGlyphRect::set_action_name, "action_name");
+	ClassDB::bind_method(D_METHOD("set_action_name", "action_name"), &InputGlyphRect::set_action_name);
 	ClassDB::bind_method("get_action_name", &InputGlyphRect::get_action_name);
 
 	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "action_name"), "set_action_name", "get_action_name");

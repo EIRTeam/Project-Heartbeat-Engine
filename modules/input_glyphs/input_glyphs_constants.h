@@ -1,7 +1,9 @@
 #ifndef INPUT_GLYPHS_CONSTANTS_H
 #define INPUT_GLYPHS_CONSTANTS_H
 
+#include "core/input/input_enums.h"
 #include "core/object/ref_counted.h"
+#include "core/variant/type_info.h"
 #include <iterator>
 
 class InputGlyphsConstants : public RefCounted {
@@ -69,6 +71,11 @@ public:
 		INPUT_ORIGIN_PADDLE3,
 		INPUT_ORIGIN_PADDLE4,
 		INPUT_ORIGIN_TRACKPAD_CLICK,
+		INPUT_ORIGIN_INVALID, // MISC2 has no corresponding glyph origin.
+		INPUT_ORIGIN_INVALID, // MISC3
+		INPUT_ORIGIN_INVALID, // MISC4
+		INPUT_ORIGIN_INVALID, // MISC5
+		INPUT_ORIGIN_INVALID, // MISC6
 	};
 	static_assert(std::size(godot_button_to_input_origin_lut) == (int)JoyButton::SDL_MAX);
 

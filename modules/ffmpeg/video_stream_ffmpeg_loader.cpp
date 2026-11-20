@@ -29,6 +29,10 @@
 /**************************************************************************/
 
 #include "video_stream_ffmpeg_loader.h"
+
+#ifndef GDEXTENSION
+#include "core/object/class_db.h"
+#endif
 extern "C" {
 #include "libavformat/avformat.h"
 }

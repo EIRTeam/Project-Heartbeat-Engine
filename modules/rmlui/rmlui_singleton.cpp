@@ -1,4 +1,6 @@
 #include "rmlui_singleton.h"
+#include "core/object/class_db.h"
+#include "core/object/callable_mp.h"
 #include "RmlUi/Core/Core.h"
 #include "RmlUi/Debugger/Debugger.h"
 #include "core/variant/variant.h"
@@ -12,6 +14,7 @@
 #include "scene/main/window.h"
 #include "scene/resources/world_2d.h"
 #include "servers/display/display_server.h"
+#include "servers/rendering/rendering_server.h"
 #include "RmlUi/Debugger.h"
 #include "backend/godot_conversion.h"
 

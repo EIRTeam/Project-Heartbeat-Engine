@@ -31,6 +31,7 @@
 #include "register_types.h"
 
 #include "core/config/project_settings.h"
+#include "core/object/class_db.h"
 #include "steamworks.h"
 #include "steamworks_constants.gen.h"
 

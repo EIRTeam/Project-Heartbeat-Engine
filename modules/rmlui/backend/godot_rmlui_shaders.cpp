@@ -2,6 +2,7 @@
 #include "RmlUi/Core/Math.h"
 #include "core/error/error_macros.h"
 #include "core/templates/hashfuncs.h"
+#include "servers/rendering/rendering_device.h"
 #include "rmlui/backend/shaders/color.glsl.gen.h"
 #include "rmlui/backend/shaders/passthrough.glsl.gen.h"
 #include "rmlui/backend/shaders/rmlui_blur.glsl.gen.h"

@@ -10,6 +10,7 @@
 #include "core/string/translation_server.h"
 #include "godot_conversion.h"
 #include "servers/display/display_server.h"
+#include "servers/display/display_server_enums.h"
 
 
 double SystemInterface_Godot::GetElapsedTime() {
@@ -18,22 +19,22 @@ double SystemInterface_Godot::GetElapsedTime() {
 
 void SystemInterface_Godot::SetMouseCursor(const Rml::String &p_cursor_name) {
 
-    DisplayServer::CursorShape shape = DisplayServer::CURSOR_ARROW; 
+    DisplayServerEnums::CursorShape shape = DisplayServerEnums::CURSOR_ARROW;
 
     if (p_cursor_name == "move") {
-        shape = DisplayServer::CURSOR_MOVE;
+        shape = DisplayServerEnums::CURSOR_MOVE;
     } else if (p_cursor_name == "pointer") {
-        shape = DisplayServer::CURSOR_POINTING_HAND;
+        shape = DisplayServerEnums::CURSOR_POINTING_HAND;
     } else if (p_cursor_name == "resize") {
-        shape = DisplayServer::CURSOR_BDIAGSIZE;
+        shape = DisplayServerEnums::CURSOR_BDIAGSIZE;
     } else if (p_cursor_name == "cross") {
-        shape = DisplayServer::CURSOR_CROSS;
+        shape = DisplayServerEnums::CURSOR_CROSS;
     } else if (p_cursor_name == "text") {
-        shape = DisplayServer::CURSOR_IBEAM;
+        shape = DisplayServerEnums::CURSOR_IBEAM;
     } else if (p_cursor_name == "unavailable") {
-        shape = DisplayServer::CURSOR_FORBIDDEN;
+        shape = DisplayServerEnums::CURSOR_FORBIDDEN;
     } else if (Rml::StringUtilities::StartsWith(p_cursor_name, "rmlui-scroll")) {
-        shape = DisplayServer::CURSOR_MOVE;
+        shape = DisplayServerEnums::CURSOR_MOVE;
     } else if (p_cursor_name != "arrow" && !p_cursor_name.empty()) {
         ERR_FAIL_MSG(vformat("Unknown mouse cursor type %s", to_godot(p_cursor_name)));
     }

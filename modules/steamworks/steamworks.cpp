@@ -29,6 +29,10 @@
 /**************************************************************************/
 
 #include "steamworks.h"
+#include "core/object/class_db.h"
+#include "core/object/callable_mp.h"
+#include "core/os/os.h"
+#include "scene/main/scene_tree.h"
 #include "scene/main/window.h"
 #include "steam/steam_api_flat.h"
 #include "steamworks_constants.gen.h"

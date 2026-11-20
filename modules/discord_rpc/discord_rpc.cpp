@@ -1,4 +1,5 @@
 #include "discord_rpc.h"
+#include "core/object/class_db.h"
 
 #include "thirdparty/discord_rpc/include/discord_rpc.h"
 

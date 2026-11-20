@@ -3,6 +3,7 @@
 #include "core/error/error_macros.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
 #include "servers/rendering/rendering_device_commons.h"
+#include "servers/rendering/rendering_device.h"
 
 void GodotRmlUiLayers::_fb_invalidation(void *p_userdata) {
     GodotRmlUiLayers *layers = static_cast<GodotRmlUiLayers*>(p_userdata);

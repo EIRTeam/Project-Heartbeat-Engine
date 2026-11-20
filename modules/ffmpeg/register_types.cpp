@@ -34,6 +34,7 @@
 #include "gdextension_build/gdex_print.h"
 #include <godot_cpp/classes/resource_loader.hpp>
 #else
+#include "core/object/class_db.h"
 #include "core/string/print_string.h"
 #include "ffmpeg_stream_info.h"
 #endif

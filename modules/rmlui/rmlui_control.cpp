@@ -1,4 +1,5 @@
 #include "rmlui_control.h"
+#include "core/object/class_db.h"
 #include "rmlui/rmlui_singleton.h"
 
 void RmlUiControl::_bind_methods() {

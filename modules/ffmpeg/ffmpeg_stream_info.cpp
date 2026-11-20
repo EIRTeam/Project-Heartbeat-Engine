@@ -44,10 +44,10 @@ void FFmpegStreamInfo::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("load", "path"), &FFmpegStreamInfo::load);
 	ClassDB::bind_method(D_METHOD("get_video_stream_count"), &FFmpegStreamInfo::get_video_stream_count);
 	ClassDB::bind_method(D_METHOD("get_audio_stream_count"), &FFmpegStreamInfo::get_audio_stream_count);
-	ClassDB::bind_method(D_METHOD("get_video_stream_codec"), &FFmpegStreamInfo::get_video_stream_codec);
-	ClassDB::bind_method(D_METHOD("get_audio_stream_codec"), &FFmpegStreamInfo::get_audio_stream_codec);
-	ClassDB::bind_static_method("FFmpegStreamInfo", D_METHOD("video_codec_to_string"), &FFmpegStreamInfo::video_codec_to_string);
-	ClassDB::bind_static_method("FFmpegStreamInfo", D_METHOD("audio_codec_to_string"), &FFmpegStreamInfo::audio_codec_to_string);
+	ClassDB::bind_method(D_METHOD("get_video_stream_codec", "idx"), &FFmpegStreamInfo::get_video_stream_codec);
+	ClassDB::bind_method(D_METHOD("get_audio_stream_codec", "idx"), &FFmpegStreamInfo::get_audio_stream_codec);
+	ClassDB::bind_static_method("FFmpegStreamInfo", D_METHOD("video_codec_to_string", "codec"), &FFmpegStreamInfo::video_codec_to_string);
+	ClassDB::bind_static_method("FFmpegStreamInfo", D_METHOD("audio_codec_to_string", "codec"), &FFmpegStreamInfo::audio_codec_to_string);
 
 	BIND_ENUM_CONSTANT(VIDEO_CODEC_H264);
 	BIND_ENUM_CONSTANT(VIDEO_CODEC_H265);

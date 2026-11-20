@@ -32,6 +32,7 @@
 #define TEST_STEAM_MATCHMAKING_H
 
 #include "../steamworks.h"
+#include "core/object/callable_mp.h"
 #include "test_steamworks.h"
 #include "tests/test_macros.h"
 
@@ -159,8 +160,7 @@ TEST_CASE("[SteamMatchmaking] Test lobby creation and interaction") {
 			OS::get_singleton()->delay_usec(500000);
 		}
 		CHECK_MESSAGE(signal_tester->got_chat_message_received_signal, "Send chat string should trigger a chat message received signal.");
-		String s;
-		s.parse_utf8((const char *)signal_tester->chat_msg_data.ptr(), signal_tester->chat_msg_data.size());
+		String s = String::utf8((const char *)signal_tester->chat_msg_data.ptr(), signal_tester->chat_msg_data.size());
 		CHECK_MESSAGE(s == test_chat_msg_string, "Send chat string should trigger a chat message received signal.");
 	}
 }

@@ -83,6 +83,7 @@ typedef int64_t ComputeListID;
 #else
 #include "servers/rendering/rendering_device_binds.h"
 #include "servers/rendering/rendering_server.h"
+#include "core/object/callable_mp.h"
 typedef RD::TextureFormat RDTextureFormatC;
 typedef RD::TextureView RDTextureViewC;
 #define TEXTURE_FORMAT_COMPAT(tf) tf;
@@ -379,28 +380,59 @@ void FFmpegVideoStreamPlayback::clear() {
 }
 
 YUVGPUConverter::~YUVGPUConverter() {
+	// Queued commands retain us, so no conversion can still be using these RIDs.
+	// Destruction itself may run on any thread: cleanup must not refer to this.
+	Array rids;
 	for (size_t i = 0; i < std::size(yuv_planes_uniform_sets); i++) {
 		if (yuv_planes_uniform_sets[i].is_valid()) {
-			FREE_RD_RID(yuv_planes_uniform_sets[i]);
-		}
-		if (yuv_plane_textures[i].is_valid()) {
-			FREE_RD_RID(yuv_plane_textures[i]);
+			rids.push_back(yuv_planes_uniform_sets[i]);
 		}
 	}
+	if (out_uniform_set.is_valid()) {
+		rids.push_back(out_uniform_set);
+	}
+	for (size_t i = 0; i < std::size(yuv_plane_textures); i++) {
+		if (yuv_plane_textures[i].is_valid()) {
+			rids.push_back(yuv_plane_textures[i]);
+		}
+	}
+	if (pipeline.is_valid()) {
+		rids.push_back(pipeline);
+	}
+	if (shader.is_valid()) {
+		rids.push_back(shader);
+	}
+	RS *rs = RS::get_singleton();
+	ERR_FAIL_NULL(rs);
+	rs->call_on_render_thread(callable_mp_static(&YUVGPUConverter::_free_on_render_thread).bind(rids, out_texture));
+}
 
-	if (out_texture.is_valid() && out_texture->get_texture_rd_rid().is_valid()) {
-		RID out_rid = out_texture->get_texture_rd_rid();
-		out_texture->set_texture_rd_rid(RID());
+void YUVGPUConverter::_free_on_render_thread(Array p_rids, Ref<Texture2DRD> p_texture) {
+	// Free uniform sets before their textures, and the pipeline before its shader.
+	// RenderingDevice defers physical GPU destruction until in-flight work is safe.
+	for (int i = 0; i < p_rids.size(); i++) {
+		RID rid = p_rids[i];
+		FREE_RD_RID(rid);
+	}
+	if (p_texture.is_valid() && p_texture->get_texture_rd_rid().is_valid()) {
+		RID out_rid = p_texture->get_texture_rd_rid();
+		p_texture->set_texture_rd_rid(RID());
 		FREE_RD_RID(out_rid);
 	}
+}
 
-	if (pipeline.is_valid()) {
-		FREE_RD_RID(pipeline);
-	}
+void YUVGPUConverter::_initialize_on_render_thread(Ref<RefCounted> p_converter, Vector2i p_size) {
+	YUVGPUConverter *converter = static_cast<YUVGPUConverter *>(p_converter.ptr());
+	converter->frame_size = p_size;
+	converter->_ensure_output_texture();
+}
 
-	if (shader.is_valid()) {
-		FREE_RD_RID(shader);
-	}
+void YUVGPUConverter::_convert_on_render_thread(Ref<RefCounted> p_converter, Vector2i p_size, Array p_planes) {
+	static_cast<YUVGPUConverter *>(p_converter.ptr())->_convert_internal(p_size, p_planes);
+}
+
+void YUVGPUConverter::_clear_on_render_thread(Ref<RefCounted> p_converter) {
+	static_cast<YUVGPUConverter *>(p_converter.ptr())->_clear_texture_internal();
 }
 
 void YUVGPUConverter::_clear_texture_internal() {
@@ -452,13 +484,15 @@ Error YUVGPUConverter::_ensure_plane_textures() {
 			if (static_cast<int>(format.width) == desired_frame_width && static_cast<int>(format.height) == desired_frame_height) {
 				continue;
 			}
-			continue;
 		}
 
 		// Texture didn't exist or was invalid, re-create it
 
 		// free existing texture if needed
 		if (yuv_plane_textures[i].is_valid()) {
+			// Freeing a texture also invalidates its dependent uniform sets.
+			FREE_RD_RID(yuv_planes_uniform_sets[i]);
+			yuv_planes_uniform_sets[i] = RID();
 			FREE_RD_RID(yuv_plane_textures[i]);
 		}
 
@@ -495,9 +529,6 @@ Error YUVGPUConverter::_ensure_plane_textures() {
 Error YUVGPUConverter::_ensure_output_texture() {
 	_ensure_pipeline();
 	RD *rd = RS::get_singleton()->get_rendering_device();
-	if (!out_texture.is_valid()) {
-		out_texture.instantiate();
-	}
 
 	if (out_texture->get_texture_rd_rid().is_valid()) {
 		RDTextureFormatC format = TEXTURE_FORMAT_COMPAT(rd->texture_get_format(out_texture->get_texture_rd_rid()));
@@ -507,7 +538,11 @@ Error YUVGPUConverter::_ensure_output_texture() {
 	}
 
 	if (out_texture->get_texture_rd_rid().is_valid()) {
-		FREE_RD_RID(out_texture->get_texture_rd_rid());
+		FREE_RD_RID(out_uniform_set);
+		out_uniform_set = RID();
+		RID old_rid = out_texture->get_texture_rd_rid();
+		out_texture->set_texture_rd_rid(RID());
+		FREE_RD_RID(old_rid);
 	}
 
 	RDTextureFormatC out_texture_format;
@@ -558,58 +593,68 @@ RID YUVGPUConverter::_create_uniform_set(const RID &p_texture_rd_rid, int p_set_
 	return RS::get_singleton()->get_rendering_device()->uniform_set_create(uniforms, shader, p_set_idx);
 }
 
-void YUVGPUConverter::_upload_plane_images() {
-	for (size_t i = 0; i < std::size(yuv_plane_images); i++) {
-		ERR_CONTINUE_MSG(!yuv_plane_images[i].is_valid() && i != 3, vformat("YUV plane %d was missing, cannot upload texture data.", (int)i));
-		if (!yuv_plane_images[i].is_valid()) {
+void YUVGPUConverter::_upload_plane_images(const Array &p_planes) {
+	for (int i = 0; i < p_planes.size(); i++) {
+		PackedByteArray data = p_planes[i];
+		ERR_CONTINUE_MSG(data.is_empty() && i != 3, vformat("YUV plane %d was missing, cannot upload texture data.", i));
+		if (data.is_empty()) {
 			continue;
 		}
-		RS::get_singleton()->get_rendering_device()->texture_update(yuv_plane_textures[i], 0, yuv_plane_images[i]->get_data());
+		RS::get_singleton()->get_rendering_device()->texture_update(yuv_plane_textures[i], 0, data);
 	}
 }
 
 void YUVGPUConverter::set_plane_image(int p_plane_idx, Ref<Image> p_image) {
+	ERR_FAIL_INDEX((size_t)p_plane_idx, std::size(yuv_plane_images));
 	if (!p_image.is_valid()) {
 		yuv_plane_images[p_plane_idx] = p_image;
 		return;
 	}
-	ERR_FAIL_COND(!p_image.is_valid());
-	ERR_FAIL_INDEX((size_t)p_plane_idx, std::size(yuv_plane_images));
 	// Sanity checks
-	int desired_frame_width = p_plane_idx == 0 || p_plane_idx == 3 ? frame_size.width : Math::ceil(frame_size.width / 2.0f);
-	int desired_frame_height = p_plane_idx == 0 || p_plane_idx == 3 ? frame_size.height : Math::ceil(frame_size.height / 2.0f);
+	int desired_frame_width = p_plane_idx == 0 || p_plane_idx == 3 ? input_frame_size.width : Math::ceil(input_frame_size.width / 2.0f);
+	int desired_frame_height = p_plane_idx == 0 || p_plane_idx == 3 ? input_frame_size.height : Math::ceil(input_frame_size.height / 2.0f);
 	ERR_FAIL_COND_MSG(p_image->get_width() != desired_frame_width, vformat("Wrong YUV plane width for plane %d, expected %d got %d", p_plane_idx, desired_frame_width, p_image->get_width()));
 	ERR_FAIL_COND_MSG(p_image->get_height() != desired_frame_height, vformat("Wrong YUV plane height for plane %, expected %d got %d", p_plane_idx, desired_frame_height, p_image->get_height()));
 	ERR_FAIL_COND_MSG(p_image->get_format() != Image::FORMAT_R8, "Wrong image format, expected R8");
 	yuv_plane_images[p_plane_idx] = p_image;
 }
 
-Vector2i YUVGPUConverter::get_frame_size() const { return frame_size; }
+Vector2i YUVGPUConverter::get_frame_size() const { return input_frame_size; }
 
 void YUVGPUConverter::set_frame_size(const Vector2i &p_frame_size) {
 	ERR_FAIL_COND_MSG(p_frame_size.x == 0, "Frame size cannot be zero!");
 	ERR_FAIL_COND_MSG(p_frame_size.y == 0, "Frame size cannot be zero!");
-	frame_size = p_frame_size;
+	input_frame_size = p_frame_size;
 
 	yuv_plane_images[0].unref();
 	yuv_plane_images[1].unref();
 	yuv_plane_images[2].unref();
+	yuv_plane_images[3].unref();
+	RS::get_singleton()->call_on_render_thread(callable_mp_static(&YUVGPUConverter::_initialize_on_render_thread).bind(Ref<RefCounted>(this), p_frame_size));
 }
 
 void YUVGPUConverter::convert() {
-	RenderingServer::get_singleton()->call_on_render_thread(callable_mp(this, &YUVGPUConverter::_convert_internal));
+	// Image data uses copy-on-write storage. Retain a stable snapshot even if
+	// playback replaces its images or the decoder recycles the source frame.
+	Array planes;
+	for (const Ref<Image> &image : yuv_plane_images) {
+		planes.push_back(image.is_valid() ? image->get_data() : PackedByteArray());
+	}
+	RS::get_singleton()->call_on_render_thread(callable_mp_static(&YUVGPUConverter::_convert_on_render_thread).bind(Ref<RefCounted>(this), input_frame_size, planes));
 }
 
-void YUVGPUConverter::_convert_internal() {
+void YUVGPUConverter::_convert_internal(const Vector2i &p_size, const Array &p_planes) {
+	frame_size = p_size;
 	// First we must ensure everything we need exists
 	_ensure_pipeline();
 	_ensure_plane_textures();
 	_ensure_output_texture();
-	_upload_plane_images();
+	_upload_plane_images(p_planes);
 
 	RD *rd = RS::get_singleton()->get_rendering_device();
 
-	push_constant.use_alpha = yuv_plane_images[3].is_valid() ? 1 : 0;
+	PackedByteArray alpha = p_planes[3];
+	push_constant.use_alpha = alpha.is_empty() ? 0 : 1;
 
 	PackedByteArray push_constant_data;
 	push_constant_data.resize(sizeof(push_constant));
@@ -633,12 +678,11 @@ void YUVGPUConverter::_convert_internal() {
 }
 
 Ref<Texture2D> YUVGPUConverter::get_output_texture() const {
-	const_cast<YUVGPUConverter *>(this)->_ensure_output_texture();
 	return out_texture;
 }
 
 void YUVGPUConverter::clear_output_texture() {
-	RenderingServer::get_singleton()->call_on_render_thread(callable_mp(this, &YUVGPUConverter::_clear_texture_internal));
+	RS::get_singleton()->call_on_render_thread(callable_mp_static(&YUVGPUConverter::_clear_on_render_thread).bind(Ref<RefCounted>(this)));
 }
 
 YUVGPUConverter::YUVGPUConverter() {

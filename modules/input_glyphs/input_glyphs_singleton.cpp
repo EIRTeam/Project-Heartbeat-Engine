@@ -29,9 +29,11 @@
 /**************************************************************************/
 
 #include "input_glyphs_singleton.h"
+#include "core/config/engine.h"
+#include "core/object/class_db.h"
 #include "core/config/project_settings.h"
 #include "core/input/input_map.h"
-#include "core/object/callable_method_pointer.h"
+#include "core/object/callable_mp.h"
 #include "core/object/worker_thread_pool.h"
 #include "core/string/print_string.h"
 #include "scene/main/scene_tree.h"
