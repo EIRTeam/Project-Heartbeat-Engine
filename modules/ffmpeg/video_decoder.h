@@ -123,6 +123,17 @@ struct AVPacket;
 
 class VideoDecoder : public RefCounted {
 public:
+	enum DecodePolicy {
+		DECODE_DEFAULT,
+		DECODE_SOFTWARE_ONLY,
+		DECODE_PREFER_GPU,
+		DECODE_REQUIRE_GPU,
+	};
+	enum DecodeBackend {
+		BACKEND_PENDING,
+		BACKEND_SOFTWARE,
+		BACKEND_VULKAN,
+	};
 	enum HardwareVideoDecoder {
 		NONE = 0,
 		NVDEC = 1,
@@ -143,7 +154,11 @@ public:
 	};
 
 private:
-	FFmpegFrameFormat frame_format;
+	FFmpegFrameFormat frame_format = FFmpegFrameFormat::RGBA8;
+	DecodePolicy decode_policy = DECODE_DEFAULT;
+	bool gpu_output_requested = false;
+	String gpu_failure_reason;
+	SafeNumeric<int> decoded_backend;
 	Vector<Ref<DecodedAudioFrame>> decoded_audio_frames;
 
 	Ref<CoreBind::Mutex> audio_buffer_mutex;
@@ -233,13 +248,15 @@ public:
 	double get_last_decoded_frame_time() const;
 	bool is_running() const;
 	bool is_seeking() const { return seek_in_progress.is_set(); }
+	DecodeBackend get_decode_backend() const { return DecodeBackend(decoded_backend.get()); }
+	String get_gpu_failure_reason() const { return gpu_failure_reason; }
 	double get_duration() const;
 	Vector2i get_size() const;
 	int get_audio_mix_rate() const;
 	int get_audio_channel_count() const;
 	FFmpegFrameFormat get_frame_format() const { return frame_format; }
 
-	VideoDecoder(Ref<FileAccess> p_file);
+	VideoDecoder(Ref<FileAccess> p_file, DecodePolicy p_policy = DECODE_DEFAULT);
 	~VideoDecoder();
 };
 

@@ -1,0 +1,9 @@
+config_version=5
+
+[application]
+config/name="FFmpeg decode policy regression"
+
+[rendering]
+renderer/rendering_method="forward_plus"
+rendering_device/vulkan/video_decode=true
+rendering_device/vulkan/video_decode_output=true

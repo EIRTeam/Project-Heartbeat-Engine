@@ -106,6 +106,12 @@ void FFmpegVideoStreamPlayback::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_clock_recovery_tolerance", "seconds"), &FFmpegVideoStreamPlayback::set_clock_recovery_tolerance);
 	ClassDB::bind_method(D_METHOD("get_clock_recovery_tolerance"), &FFmpegVideoStreamPlayback::get_clock_recovery_tolerance);
 	ClassDB::bind_method(D_METHOD("get_playback_timing"), &FFmpegVideoStreamPlayback::get_playback_timing);
+	ClassDB::bind_method(D_METHOD("get_decode_backend"), &FFmpegVideoStreamPlayback::get_decode_backend);
+	ClassDB::bind_method(D_METHOD("is_using_gpu_decoding"), &FFmpegVideoStreamPlayback::is_using_gpu_decoding);
+	ClassDB::bind_method(D_METHOD("get_decode_fallback_reason"), &FFmpegVideoStreamPlayback::get_decode_fallback_reason);
+#ifdef FFMPEG_GPU_TESTS_ENABLED
+	ClassDB::bind_method(D_METHOD("test_force_gpu_failure"), &FFmpegVideoStreamPlayback::test_force_gpu_failure);
+#endif
 #endif
 }
 
@@ -122,6 +128,65 @@ Callable FFmpegVideoStreamPlayback::get_playback_clock() const {
 	return playback_clock;
 }
 
+String FFmpegVideoStreamPlayback::get_decode_backend() const {
+	if (decoder.is_null()) {
+		return "pending";
+	}
+	switch (decoder->get_decode_backend()) {
+		case VideoDecoder::BACKEND_VULKAN:
+			return "vulkan";
+		case VideoDecoder::BACKEND_SOFTWARE:
+			return "software";
+		default:
+			return "pending";
+	}
+}
+
+bool FFmpegVideoStreamPlayback::is_using_gpu_decoding() const {
+	return get_decode_backend() == "vulkan" && decoder->get_decoder_state() != VideoDecoder::FAULTED;
+}
+
+String FFmpegVideoStreamPlayback::get_decode_fallback_reason() const {
+	return decode_fallback_reason;
+}
+
+bool FFmpegVideoStreamPlayback::_fallback_to_software(const String &p_reason) {
+	const bool resume = playing;
+	available_frames.clear();
+	available_audio_frames.clear();
+	last_frame.unref();
+	last_frame_image.unref();
+	// Join the old decoder before reusing its input. GPU jobs retain their
+	// own AVFrames/converter until the renderer's fences complete.
+	decoder.unref();
+	source_file->seek(0);
+	decoder = Ref<VideoDecoder>(memnew(VideoDecoder(source_file, VideoDecoder::DECODE_SOFTWARE_ONLY)));
+	decoder->start_decoding();
+	decode_fallback_reason = p_reason;
+	if (decoder->get_decoder_state() == VideoDecoder::FAULTED) {
+		stop_reason = "software fallback initialization failed";
+		playing = false;
+		ERR_PRINT(stop_reason);
+		return false;
+	}
+	_initialize_output();
+	decoder->seek(MAX(0.0, playback_position), false, !playback_clock.is_null());
+	just_seeked = playback_clock.is_null();
+	clock_lag_since_usec = 0;
+	playing = resume;
+	print_verbose("FFmpeg switched to software decoding: " + p_reason);
+	return true;
+}
+
+#ifdef FFMPEG_GPU_TESTS_ENABLED
+void FFmpegVideoStreamPlayback::test_force_gpu_failure() {
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+	ERR_FAIL_COND(vulkan_converter.is_null());
+	static_cast<VulkanVideoConverter *>(vulkan_converter.ptr())->test_force_failure();
+#endif
+}
+#endif
+
 void FFmpegVideoStreamPlayback::set_clock_recovery_tolerance(double p_seconds) {
 	ERR_FAIL_COND_MSG(!Math::is_finite(p_seconds) || p_seconds < 0.1 || p_seconds > 30.0,
 			"Video clock recovery tolerance must be between 0.1 and 30 seconds.");
@@ -136,6 +201,8 @@ double FFmpegVideoStreamPlayback::get_clock_recovery_tolerance() const {
 Dictionary FFmpegVideoStreamPlayback::get_playback_timing() const {
 	Dictionary result;
 	result["external_clock"] = !playback_clock.is_null();
+	result["decode_backend"] = get_decode_backend();
+	result["decode_fallback_reason"] = decode_fallback_reason;
 	result["clock_time"] = playback_position / 1000.0;
 	result["has_frame"] = last_frame.is_valid();
 	result["selected_frame_time"] = last_frame.is_valid() ? last_frame->get_time() / 1000.0 : 0.0;
@@ -276,10 +343,23 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 #ifdef FFMPEG_GPU_DECODE_ENABLED
 	if (vulkan_converter.is_valid() &&
 			(static_cast<VulkanVideoConverter *>(vulkan_converter.ptr())->has_failed() || decoder->get_decoder_state() == VideoDecoder::FAULTED)) {
-		stop_reason = decoder->get_decoder_state() == VideoDecoder::FAULTED ? "Vulkan decoder fault" : "Vulkan conversion failure";
-		ERR_PRINT(vformat("FFmpeg playback stopped: %s. This is not a clock-lateness timeout; no CPU fallback is allowed.", stop_reason));
-		playing = false;
-		return;
+		const String failure = decoder->get_decoder_state() == VideoDecoder::FAULTED ? "Vulkan decoder fault" : "Vulkan conversion failure";
+		if (decode_policy == VideoDecoder::DECODE_PREFER_GPU) {
+			if (playback_clock.is_null()) {
+				playback_position += p_delta * 1000.0;
+			} else if (!_update_playback_clock()) {
+				return;
+			}
+			_fallback_to_software(failure);
+			// Let VideoStreamPlayer switch texture/audio formats before any
+			// software audio is mixed into the old backend's resampler.
+			return;
+		} else {
+			stop_reason = failure;
+			ERR_PRINT(vformat("FFmpeg playback stopped: %s. This is not a clock-lateness timeout; CPU fallback is not enabled.", stop_reason));
+			playing = false;
+			return;
+		}
 	}
 #endif
 
@@ -432,7 +512,9 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 #ifdef GDEXTENSION
 		mix_audio(sample_count, audio_frame->get_sample_data(), 0);
 #else
-		mix_callback(mix_udata, audio_frame->get_sample_data().ptr(), sample_count);
+		if (mix_callback != nullptr) {
+			mix_callback(mix_udata, audio_frame->get_sample_data().ptr(), sample_count);
+		}
 #endif
 		next_audio_frame = next_audio_frame->next();
 		available_audio_frames.pop_front();
@@ -450,14 +532,33 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 	}
 }
 
-Error FFmpegVideoStreamPlayback::load(Ref<FileAccess> p_file_access) {
-	decoder = Ref<VideoDecoder>(memnew(VideoDecoder(p_file_access)));
+Error FFmpegVideoStreamPlayback::load(Ref<FileAccess> p_file_access, VideoDecoder::DecodePolicy p_policy) {
+#ifndef GDEXTENSION
+	source_file = p_file_access;
+	decode_policy = p_policy;
+#endif
+	decoder = Ref<VideoDecoder>(memnew(VideoDecoder(p_file_access, p_policy)));
 
 	decoder->start_decoding();
-	Vector2i size = decoder->get_size();
 	if (decoder->get_decoder_state() == VideoDecoder::FAULTED) {
+#ifndef GDEXTENSION
+		if (decode_policy == VideoDecoder::DECODE_PREFER_GPU) {
+			String reason = decoder->get_gpu_failure_reason();
+			return _fallback_to_software(reason.is_empty() ? "GPU decoder initialization failed." : reason) ? OK : FAILED;
+		}
+#endif
 		return FAILED;
 	}
+	_initialize_output();
+	return OK;
+}
+
+void FFmpegVideoStreamPlayback::_initialize_output() {
+	yuv_converter.unref();
+	yuv_texture.unref();
+	vulkan_converter.unref();
+	texture.unref();
+	const Vector2i size = decoder->get_size();
 
 #ifdef FFMPEG_GPU_DECODE_ENABLED
 	if (decoder->get_frame_format() == FFmpegFrameFormat::VULKAN) {
@@ -477,7 +578,6 @@ Error FFmpegVideoStreamPlayback::load(Ref<FileAccess> p_file_access) {
 		texture = ImageTexture::create_from_image(Image::create_empty(size.x, size.y, false, Image::FORMAT_RGBA8));
 #endif
 	}
-	return OK;
 }
 
 bool FFmpegVideoStreamPlayback::is_paused_internal() const {
@@ -520,7 +620,6 @@ void FFmpegVideoStreamPlayback::stop_internal() {
 		playback_position = 0.0f;
 		decoder->seek(playback_position, true);
 		just_seeked = true;
-		texture.unref();
 	}
 	if (yuv_converter.is_valid()) {
 		yuv_converter->clear_output_texture();
@@ -772,6 +871,11 @@ Error YUVGPUConverter::_ensure_output_texture() {
 	Ref<RDTextureFormat> out_texture_format_c = out_texture_format.get_texture_format();
 #else
 	RD::TextureFormat out_texture_format_c = out_texture_format;
+	// Texture2DRD's canvas representation also creates an sRGB sampling view.
+	// CPU-decoded YUV output needs the same mutable-format declaration as the
+	// Vulkan decoder's converted RGBA output.
+	out_texture_format_c.shareable_formats.push_back(RD::DATA_FORMAT_R8G8B8A8_UNORM);
+	out_texture_format_c.shareable_formats.push_back(RD::DATA_FORMAT_R8G8B8A8_SRGB);
 	RD::TextureView texture_view;
 #endif
 	out_texture->set_texture_rd_rid(rd->texture_create(out_texture_format_c, texture_view));

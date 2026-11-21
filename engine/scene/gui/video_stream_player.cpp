@@ -165,6 +165,32 @@ void VideoStreamPlayer::_notification(int p_notification) {
 
 			playback->update(delta * speed_scale); // playback->is_playing() returns false in the last video frame
 
+			// A playback may replace its output when switching decode backends.
+			// Do not keep displaying the old GPU texture after software fallback.
+			Ref<Texture2D> current_texture = playback->get_texture();
+			if (current_texture != texture) {
+				if (texture.is_valid()) {
+					texture->disconnect_changed(callable_mp(this, &VideoStreamPlayer::texture_changed));
+				}
+				texture = current_texture;
+				if (texture.is_valid()) {
+					texture->connect_changed(callable_mp(this, &VideoStreamPlayer::texture_changed).bind(texture));
+				}
+				texture_changed(texture);
+				queue_redraw();
+				// Discard pre-fallback audio and accommodate formats discovered
+				// by the new software decoder's stream-info probe.
+				const int channels = playback->get_channels();
+				AudioServer::get_singleton()->lock();
+				if (channels > 0) {
+					resampler.setup(channels, playback->get_mix_rate(), AudioServer::get_singleton()->get_mix_rate(), buffering_ms, 0);
+				} else {
+					resampler.clear();
+				}
+				AudioServer::get_singleton()->unlock();
+				playback->set_mix_callback(channels > 0 ? _audio_mix_callback : nullptr, channels > 0 ? this : nullptr);
+			}
+
 			if (!playback->is_playing()) {
 				resampler.flush();
 				if (loop) {

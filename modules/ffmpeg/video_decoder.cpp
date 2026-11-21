@@ -556,25 +556,40 @@ Error VideoDecoder::recreate_codec_context() {
 
 #ifdef FFMPEG_GPU_DECODE_ENABLED
 	const bool video_decode_enabled = GLOBAL_GET("rendering/rendering_device/vulkan/video_decode").operator bool();
-	vulkan_output_enabled = GLOBAL_GET("rendering/rendering_device/vulkan/video_decode_output").operator bool();
-	ERR_FAIL_COND_V_MSG(vulkan_output_enabled && !video_decode_enabled, ERR_UNAVAILABLE,
-			"Vulkan video output requires Vulkan Video device creation. No CPU fallback is allowed.");
-	if (video_decode_enabled && _initialize_vulkan_device_context(codec_params.codec_id)) {
+	vulkan_output_enabled = gpu_output_requested;
+	if (vulkan_output_enabled && !video_decode_enabled) {
+		gpu_failure_reason = "Vulkan Video device creation is disabled (video_decode=false).";
+		if (decode_policy != DECODE_PREFER_GPU) {
+			ERR_PRINT(gpu_failure_reason);
+		}
+		return ERR_UNAVAILABLE;
+	}
+	if (decode_policy != DECODE_SOFTWARE_ONLY && video_decode_enabled && _initialize_vulkan_device_context(codec_params.codec_id)) {
 		if (vulkan_output_enabled) {
 			video_codec_context->hw_device_ctx = av_buffer_ref(vulkan_device_context);
 			ERR_FAIL_NULL_V(video_codec_context->hw_device_ctx, ERR_OUT_OF_MEMORY);
 			video_codec_context->get_format = _vulkan_only_format;
 			frame_format = FFmpegFrameFormat::VULKAN;
-			print_verbose("FFmpeg Vulkan output enabled: GPU-resident frames only; no CPU fallback.");
+			print_verbose(decode_policy == DECODE_PREFER_GPU ?
+							"FFmpeg Vulkan output enabled: GPU-resident frames; software restart fallback explicitly allowed." :
+							"FFmpeg Vulkan output enabled: GPU-resident frames only; no CPU fallback.");
 		} else {
 			print_verbose("FFmpeg Vulkan device bridge initialized. GPU frame output is disabled.");
 		}
 	} else if (vulkan_output_enabled) {
-		ERR_FAIL_V_MSG(ERR_UNAVAILABLE, "Vulkan video output requested, but this codec or RenderingDevice is unsupported. No CPU fallback is allowed.");
+		gpu_failure_reason = vformat("Vulkan decoding is unavailable for codec %s or the active RenderingDevice.", avcodec_get_name(codec_params.codec_id));
+		if (decode_policy != DECODE_PREFER_GPU) {
+			ERR_PRINT(gpu_failure_reason + " CPU fallback is not enabled.");
+		}
+		return ERR_UNAVAILABLE;
 	}
 #endif
 
 	int open_codec_result = avcodec_open2(video_codec_context, decoder, nullptr);
+	if (open_codec_result < 0 && vulkan_output_enabled && decode_policy == DECODE_PREFER_GPU) {
+		gpu_failure_reason = vformat("Opening Vulkan decoder %s failed: %s", decoder->name, ffmpeg_get_error_message(open_codec_result));
+		return FAILED;
+	}
 	ERR_FAIL_COND_V_MSG(open_codec_result < 0, FAILED, vformat("Error trying to open %s codec: %s", decoder->name, ffmpeg_get_error_message(open_codec_result)));
 
 	print_line("Succesfully initialized video decoder:", decoder->long_name);
@@ -838,6 +853,7 @@ void VideoDecoder::_read_decoded_frames(AVFrame *p_received_frame) {
 			decoded_frames_mutex->lock();
 			if (!skip_current_outputs.is_set()) {
 				decoded_frames.push_back(gpu_frame);
+				decoded_backend.set(BACKEND_VULKAN);
 			}
 			decoded_frames_mutex->unlock();
 			continue;
@@ -850,6 +866,7 @@ void VideoDecoder::_read_decoded_frames(AVFrame *p_received_frame) {
 			decoded_frames_mutex->lock();
 			if (!skip_current_outputs.is_set()) {
 				decoded_frames.push_back(yuv_frame);
+				decoded_backend.set(BACKEND_SOFTWARE);
 			}
 			decoded_frames_mutex->unlock();
 			continue;
@@ -917,11 +934,13 @@ void VideoDecoder::_read_decoded_frames(AVFrame *p_received_frame) {
 		}
 		decoded_frames_mutex->lock();
 		decoded_frames.push_back(memnew(DecodedFrame(frame_time, tex)));
+		decoded_backend.set(BACKEND_SOFTWARE);
 		decoded_frames_mutex->unlock();
 #else
 		decoded_frames_mutex->lock();
 		if (!skip_current_outputs.is_set()) {
 			decoded_frames.push_back(memnew(DecodedFrame(frame_time, image)));
+			decoded_backend.set(BACKEND_SOFTWARE);
 		}
 		decoded_frames_mutex->unlock();
 #endif
@@ -1184,17 +1203,17 @@ void VideoDecoder::seek(double p_time, bool p_wait, bool p_preserve_preroll) {
 void VideoDecoder::start_decoding() {
 	ERR_FAIL_COND_MSG(thread != nullptr, "Cannot start decoding once already started");
 #if defined(FFMPEG_ENGINE_MODULE) && !defined(FFMPEG_GPU_DECODE_ENABLED)
-	if (ProjectSettings::get_singleton()->get_setting("rendering/rendering_device/vulkan/video_decode_output", false).operator bool()) {
+	if (gpu_output_requested) {
 		decoder_state = DecoderState::FAULTED;
-		ERR_PRINT("Vulkan video output requires an engine built with Vulkan Video decoding support (FFmpeg 9 or newer in ffmpeg_path). No CPU fallback is allowed.");
+		gpu_failure_reason = "This engine was built without Vulkan Video decoding support.";
+		if (decode_policy != DECODE_PREFER_GPU) {
+			ERR_PRINT(gpu_failure_reason + " CPU fallback is not enabled.");
+		}
 		return;
 	}
 #endif
 	if (format_context == nullptr) {
-		bool probe_stream_info = true;
-#ifdef FFMPEG_GPU_DECODE_ENABLED
-		probe_stream_info = !GLOBAL_GET("rendering/rendering_device/vulkan/video_decode_output").operator bool();
-#endif
+		bool probe_stream_info = !gpu_output_requested;
 		prepare_decoding(probe_stream_info);
 		Error codec_context_create_error = recreate_codec_context();
 
@@ -1278,8 +1297,13 @@ int VideoDecoder::get_audio_channel_count() const {
 	return 0;
 }
 
-VideoDecoder::VideoDecoder(Ref<FileAccess> p_file) {
+VideoDecoder::VideoDecoder(Ref<FileAccess> p_file, DecodePolicy p_policy) {
 	video_file = p_file;
+	decode_policy = p_policy;
+#ifndef GDEXTENSION
+	gpu_output_requested = decode_policy == DECODE_PREFER_GPU || decode_policy == DECODE_REQUIRE_GPU ||
+			(decode_policy == DECODE_DEFAULT && ProjectSettings::get_singleton()->get_setting("rendering/rendering_device/vulkan/video_decode_output", false).operator bool());
+#endif
 	available_textures_mutex.instantiate();
 	hw_transfer_frames_mutex.instantiate();
 	scaler_frames_mutex.instantiate();

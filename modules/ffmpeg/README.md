@@ -69,13 +69,60 @@ cancelled by lag recovery. Explicit music-clock discontinuities still seek immed
 `get_playback_timing()` also reports `recovering`, `last_clock_seek_reason`,
 `playing`, `seeking`, `decoder_state`, and `stop_reason`. Clock lateness alone never stops
 external-clock playback. Actual Vulkan decoder/conversion faults remain fatal
-and produce an explicit error, rather than silently switching to CPU decoding.
+under strict policies. Only `DECODE_PREFER_GPU` explicitly enables software recovery.
 
 In Project Heartbeat, gameplay connects this through `VideoPlayerOffset.gd` to
 Shinobu's song clock using the same compensation as chart timing. Editor preview
 and older engines retain their existing behavior.
 
 See [`tests/music_clock`](tests/music_clock/README.md) for regressions.
+
+### Decode backend reporting and opt-in software fallback
+
+Configure `FFmpegVideoStream.decode_policy` **before assigning the stream to the
+player** (changes only affect newly created playback instances):
+
+```gdscript
+var stream := FFmpegVideoStream.new()
+stream.file = video_path
+stream.decode_policy = FFmpegVideoStream.DECODE_PREFER_GPU
+video_player.stream = stream
+video_player.play()
+
+var playback = video_player.get_stream_playback()
+print(playback.get_decode_backend()) # "pending", "vulkan", or "software"
+print(playback.is_using_gpu_decoding())
+print(playback.get_decode_fallback_reason()) # empty unless fallback occurred
+```
+
+Backend reporting reflects frames actually produced by the decoder, not whether
+the device supports Vulkan, whether the output is `Texture2DRD`, or whether a GPU
+YUV conversion shader is running. `"pending"` means no output frame has been
+decoded yet. Query `video_player.is_playing()` separately for playback state.
+Timing diagnostics also include `decode_backend` and `decode_fallback_reason`.
+
+| Policy | Behavior |
+| --- | --- |
+| `DECODE_DEFAULT` | Preserve project settings: software with `video_decode_output=false`, strict GPU-only with it enabled. This remains the default. |
+| `DECODE_SOFTWARE_ONLY` | Software decoding, even if global GPU output is enabled. |
+| `DECODE_PREFER_GPU` | Explicitly request GPU output; recreate a software decoder if unavailable or if GPU decoding/conversion fails. |
+| `DECODE_REQUIRE_GPU` | Explicitly require GPU output; unsupported configurations fail without fallback. |
+
+Explicit GPU policies still require `video_decode=true` **before device creation**
+and compatible FFmpeg/driver support. They do not require the global
+`video_decode_output` setting, since the per-stream policy opts into output.
+
+Fallback never downloads GPU frames: it releases the old decoder, creates a
+fresh software decoder, and switches to the existing software rendering path.
+Runtime fallback preserves the playback/music clock, seeks to its current
+position, and lets in-flight GPU resources retire through fence-delayed cleanup.
+The player refreshes its texture and audio resampler for the new backend.
+A brief freeze is possible; rendering-device loss is not guaranteed recoverable.
+Once on software, a playback instance does not automatically retry GPU decoding.
+Recreate playback to retry.
+
+These controls are engine-module-only; GDExtension behavior is unchanged.
+See [`tests/decode_policy`](tests/decode_policy/README.md).
 
 ### FFmpeg configuration
 
@@ -126,8 +173,9 @@ distinct images; other drivers are untested.
 This initial path supports H.264/HEVC, progressive 8-bit or 10-bit SDR 4:2:0, BT.601/BT.709,
 and full/limited range. It rejects HDR/BT.2020, unsupported color matrices,
 cropped/interlaced frames, unsupported image layouts/formats, and unavailable Vulkan
-devices. GPU output never downloads or converts pixel data on the CPU and
-never falls back to software decoding. Stream-info software probing is also
+devices. GPU output never downloads or converts pixel data on the CPU.
+Strict/default GPU-output policies never fall back; `DECODE_PREFER_GPU`
+explicitly allows a separate software decoder instead. Stream-info software probing is also
 disabled in this mode, so containers must supply sufficient codec metadata.
 GDExtension behavior is unchanged.
 

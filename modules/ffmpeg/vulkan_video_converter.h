@@ -19,6 +19,7 @@ class VulkanVideoConverter : public RefCounted {
 
 public:
 #ifdef FFMPEG_GPU_TESTS_ENABLED
+	void test_force_failure() { failed.set(); }
 	static Dictionary get_statistics(RID p_texture = RID());
 	static void enable_color_validation();
 #endif

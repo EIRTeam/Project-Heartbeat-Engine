@@ -43,7 +43,7 @@ cp LICENSE.txt COPYRIGHT.txt "$package/licenses/"
 cp ../modules/ffmpeg/LICENSE "$package/licenses/FFmpeg-module-MIT.txt"
 cp "$work/ffmpeg/COPYING.LGPLv3" "$package/licenses/FFmpeg-LGPLv3.txt"
 cp "$work/ffmpeg/COPYING.GPLv3" "$package/licenses/FFmpeg-GPLv3-reference.txt"
-cp -a ../modules/ffmpeg/tests/vulkan_decode ../modules/ffmpeg/tests/vulkan_playback ../modules/ffmpeg/tests/music_clock "$package/tests/"
+cp -a ../modules/ffmpeg/tests/vulkan_decode ../modules/ffmpeg/tests/vulkan_playback ../modules/ffmpeg/tests/music_clock ../modules/ffmpeg/tests/decode_policy "$package/tests/"
 cp ../misc/linux_build_container/vulkan_tester/TESTING.md "$package/"
 printf '%s\n' "FFmpeg commit: $ffmpeg_commit" "Build baseline: Ubuntu 22.04 (glibc 2.35)" \
     "Engine sources: supplied checkout snapshot" > "$package/BUILD-INFO.txt"
