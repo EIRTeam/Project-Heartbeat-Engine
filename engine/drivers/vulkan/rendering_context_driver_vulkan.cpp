@@ -696,6 +696,10 @@ Error RenderingContextDriverVulkan::_initialize_instance() {
 	// version, devices can still support newer versions of Vulkan. The exception is when we're on Vulkan 1.0, we should not set this
 	// to anything but 1.0. Note that this value is only used by validation layers to warn us about version issues.
 	uint32_t application_api_version = instance_api_version == VK_API_VERSION_1_0 ? VK_API_VERSION_1_0 : VK_API_VERSION_1_2;
+	if (GLOBAL_GET("rendering/rendering_device/vulkan/video_decode").operator bool() &&
+			instance_api_version >= VK_API_VERSION_1_3) {
+		application_api_version = VK_API_VERSION_1_3;
+	}
 
 	CharString cs = GLOBAL_GET("application/config/name").operator String().utf8();
 	VkApplicationInfo app_info = {};
@@ -704,6 +708,7 @@ Error RenderingContextDriverVulkan::_initialize_instance() {
 	app_info.pEngineName = GODOT_VERSION_NAME;
 	app_info.engineVersion = VK_MAKE_VERSION(GODOT_VERSION_MAJOR, GODOT_VERSION_MINOR, GODOT_VERSION_PATCH);
 	app_info.apiVersion = application_api_version;
+	instance_requested_api_version = application_api_version;
 
 	TightLocalVector<const char *> enabled_layer_names;
 	if (_use_validation_layers()) {

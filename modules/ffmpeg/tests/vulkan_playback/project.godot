@@ -1,0 +1,13 @@
+config_version=5
+
+[application]
+config/name="FFmpeg Vulkan synchronized display diagnostic"
+
+[display]
+window/size/viewport_width=640
+window/size/viewport_height=480
+
+[rendering]
+renderer/rendering_method="forward_plus"
+rendering_device/vulkan/video_decode=true
+rendering_device/vulkan/video_decode_output=true

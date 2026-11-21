@@ -8,7 +8,7 @@ New-Item -ItemType Directory buildeps
 
 # Windows ffmpeg
 Write-Output "Downloading ffmpeg"
-C:\ProgramData\chocolatey\lib\Wget\tools\wget.exe https://github.com/EIRTeam/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl-godot.tar.xz -O "buildeps/ffmpeg.tar.xz"
+C:\ProgramData\chocolatey\lib\Wget\tools\wget.exe https://github.com/EIRTeam/FFmpeg-Builds/releases/download/godot-9.0/ffmpeg-master-latest-win64-lgpl-godot.tar.xz -O "buildeps/ffmpeg.tar.xz"
 
 7z x -obuildeps buildeps/ffmpeg.tar.xz
 7z x -obuildeps buildeps/ffmpeg.tar

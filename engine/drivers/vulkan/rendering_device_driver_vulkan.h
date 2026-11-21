@@ -151,6 +151,11 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	HashSet<CharString> enabled_device_extension_names;
 	TightLocalVector<TightLocalVector<Queue>> queue_families;
 	TightLocalVector<VkQueueFamilyProperties> queue_family_properties;
+	uint32_t video_decode_queue_family_index = UINT32_MAX;
+	uint32_t video_decode_aux_queue_family_index = UINT32_MAX;
+	VkVideoCodecOperationFlagsKHR video_decode_codec_ops = 0;
+	bool video_decode_timeline_semaphore_support = false;
+	bool video_decode_synchronization_2_support = false;
 	RDD::Capabilities device_capabilities;
 	SubgroupCapabilities subgroup_capabilities;
 	MultiviewCapabilities multiview_capabilities;
@@ -405,12 +410,22 @@ private:
 	// ----- BUFFER -----
 
 	struct CommandBufferInfo {
+		struct TimelineDependency {
+			VkSemaphore semaphore;
+			uint64_t wait_value;
+			uint64_t signal_value;
+		};
 		VkCommandBuffer vk_command_buffer = VK_NULL_HANDLE;
+		LocalVector<TimelineDependency> timeline_dependencies;
 		Framebuffer *active_framebuffer = nullptr;
 		RenderPassInfo *active_render_pass = nullptr;
 	};
 
 public:
+	// Engine-only external image interop. Dependencies belong to this exact
+	// command buffer, not an arbitrary subsequent frame/queue submission.
+	VkCommandBuffer command_buffer_get_vulkan_handle(CommandBufferID p_cmd_buffer) const;
+	bool command_buffer_add_timeline_dependency(CommandBufferID p_cmd_buffer, VkSemaphore p_semaphore, uint64_t p_wait_value, uint64_t p_signal_value);
 	virtual CommandBufferID command_buffer_create(CommandPoolID p_cmd_pool) override final;
 	virtual bool command_buffer_begin(CommandBufferID p_cmd_buffer) override final;
 	virtual bool command_buffer_begin_secondary(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, uint32_t p_subpass, FramebufferID p_framebuffer) override final;
@@ -791,6 +806,8 @@ public:
 
 	virtual void set_object_name(ObjectType p_type, ID p_driver_id, const String &p_name) override final;
 	virtual uint64_t get_resource_native_handle(DriverResource p_type, ID p_driver_id) override final;
+	virtual void video_decode_queue_lock(uint32_t p_queue_family, uint32_t p_queue_index) override final;
+	virtual void video_decode_queue_unlock(uint32_t p_queue_family, uint32_t p_queue_index) override final;
 	virtual uint64_t get_total_memory_used() override final;
 	virtual uint64_t get_lazily_memory_used() override final;
 	virtual uint64_t limit_get(Limit p_limit) override final;

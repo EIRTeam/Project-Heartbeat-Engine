@@ -15,6 +15,12 @@ def configure(env):
 def get_opts(platform):
     return [
         ("ffmpeg_path", "FFmpeg path", ""),
+        (
+            "ffmpeg_gpu_decode",
+            "Compile Vulkan Video decoding support (auto, yes, no). auto enables it when ffmpeg_path has FFmpeg 9 or newer",
+            "auto",
+        ),
+        ("ffmpeg_gpu_tests", "Expose the GPU-resident decode diagnostics (engine module only)", "no"),
     ]
 
 

@@ -1,0 +1,8 @@
+config_version=5
+
+[application]
+config/name="FFmpeg Vulkan frame-only diagnostic"
+
+[rendering]
+renderer/rendering_method="forward_plus"
+rendering_device/vulkan/video_decode=true

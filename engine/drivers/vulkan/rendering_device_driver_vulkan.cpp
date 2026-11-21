@@ -586,6 +586,13 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 	_register_requested_device_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_NV_RAY_TRACING_VALIDATION_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, false);
+	if (GLOBAL_GET("rendering/rendering_device/vulkan/video_decode").operator bool() &&
+			context_driver->instance_get_api_version() >= VK_API_VERSION_1_3) {
+		_register_requested_device_extension(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME, false);
+		_register_requested_device_extension(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME, false);
+		_register_requested_device_extension(VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME, false);
+		_register_requested_device_extension(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME, false);
+	}
 
 	// We don't actually use this extension, but some runtime components on some platforms
 	// can and will fill the validation layers with useless info otherwise if not enabled.
@@ -911,7 +918,6 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		VkPhysicalDevice16BitStorageFeaturesKHR storage_feature = {};
 		VkPhysicalDeviceMultiviewFeatures multiview_features = {};
 		VkPhysicalDevicePipelineCreationCacheControlFeatures pipeline_cache_control_features = {};
-		VkPhysicalDeviceVulkanMemoryModelFeatures memory_model_features = {};
 		VkPhysicalDeviceAccelerationStructureFeaturesKHR acceleration_structure_features = {};
 		VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracing_pipeline_features = {};
 		VkPhysicalDeviceSynchronization2FeaturesKHR sync_2_features = {};
@@ -970,16 +976,11 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			next_features = &multiview_features;
 		}
 
-		if (enabled_device_extension_names.has(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME)) {
+		if (physical_device_properties.apiVersion < VK_API_VERSION_1_3 &&
+				enabled_device_extension_names.has(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME)) {
 			pipeline_cache_control_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES;
 			pipeline_cache_control_features.pNext = next_features;
 			next_features = &pipeline_cache_control_features;
-		}
-
-		if (enabled_device_extension_names.has(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
-			memory_model_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES;
-			memory_model_features.pNext = next_features;
-			next_features = &memory_model_features;
 		}
 
 		if (enabled_device_extension_names.has(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)) {
@@ -1000,18 +1001,26 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			next_features = &raytracing_validation_features;
 		}
 
-		if (enabled_device_extension_names.has(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
+		if (physical_device_properties.apiVersion < VK_API_VERSION_1_3 &&
+				enabled_device_extension_names.has(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
 			sync_2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
 			sync_2_features.pNext = next_features;
 			next_features = &sync_2_features;
 		}
 
 		VkPhysicalDeviceFeatures2 device_features_2 = {};
+		VkPhysicalDeviceVulkan13Features device_features_vk_1_3 = {};
 		device_features_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+		if (physical_device_properties.apiVersion >= VK_API_VERSION_1_3) {
+			device_features_vk_1_3.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+			device_features_vk_1_3.pNext = next_features;
+			next_features = &device_features_vk_1_3;
+		}
 		device_features_2.pNext = next_features;
 		functions.GetPhysicalDeviceFeatures2(physical_device, &device_features_2);
 
 		if (use_1_2_features) {
+			video_decode_timeline_semaphore_support = device_features_vk_1_2.timelineSemaphore;
 #ifdef MACOS_ENABLED
 			ERR_FAIL_COND_V_MSG(!device_features_vk_1_2.shaderSampledImageArrayNonUniformIndexing, ERR_CANT_CREATE, "Your GPU doesn't support shaderSampledImageArrayNonUniformIndexing which is required to use the Vulkan-based renderers in Godot.");
 #endif
@@ -1038,6 +1047,11 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 				vulkan_memory_model_support = vulkan_memory_model_features.vulkanMemoryModel;
 				vulkan_memory_model_device_scope_support = vulkan_memory_model_features.vulkanMemoryModelDeviceScope;
 			}
+		}
+		if (physical_device_properties.apiVersion >= VK_API_VERSION_1_3) {
+			video_decode_synchronization_2_support = device_features_vk_1_3.synchronization2;
+		} else if (enabled_device_extension_names.has(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
+			video_decode_synchronization_2_support = sync_2_features.synchronization2;
 		}
 
 		if (enabled_device_extension_names.has(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME)) {
@@ -1074,7 +1088,9 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		}
 
 		if (enabled_device_extension_names.has(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME)) {
-			pipeline_cache_control_support = pipeline_cache_control_features.pipelineCreationCacheControl;
+			pipeline_cache_control_support = physical_device_properties.apiVersion >= VK_API_VERSION_1_3 ?
+					device_features_vk_1_3.pipelineCreationCacheControl :
+					pipeline_cache_control_features.pipelineCreationCacheControl;
 		}
 
 		if (enabled_device_extension_names.has(VK_EXT_DEVICE_FAULT_EXTENSION_NAME)) {
@@ -1307,10 +1323,11 @@ Error RenderingDeviceDriverVulkan::_add_queue_create_info(LocalVector<VkDeviceQu
 	queue_families.resize(queue_family_count);
 
 	VkQueueFlags queue_flags_mask = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
-	const uint32_t max_queue_count_per_family = 1;
+	const uint32_t max_queue_count_per_family = 2;
 	static const float queue_priorities[max_queue_count_per_family] = {};
 	for (uint32_t i = 0; i < queue_family_count; i++) {
-		if ((queue_family_properties[i].queueFlags & queue_flags_mask) == 0) {
+		const bool is_reserved_video_decode_queue = video_decode_queue_family_index == i;
+		if ((queue_family_properties[i].queueFlags & queue_flags_mask) == 0 && !is_reserved_video_decode_queue) {
 			// We ignore creating queues in families that don't support any of the operations we require.
 			continue;
 		}
@@ -1318,7 +1335,7 @@ Error RenderingDeviceDriverVulkan::_add_queue_create_info(LocalVector<VkDeviceQu
 		VkDeviceQueueCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		create_info.queueFamilyIndex = i;
-		create_info.queueCount = MIN(queue_family_properties[i].queueCount, max_queue_count_per_family);
+		create_info.queueCount = i == video_decode_aux_queue_family_index ? 2 : 1;
 		create_info.pQueuePriorities = queue_priorities;
 		r_queue_create_info.push_back(create_info);
 
@@ -1337,15 +1354,18 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 	}
 
 	void *create_info_next = nullptr;
+	const bool enable_1_2_features = physical_device_properties.apiVersion >= VK_API_VERSION_1_2;
 	VkPhysicalDeviceShaderFloat16Int8FeaturesKHR shader_features = {};
-	shader_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR;
-	shader_features.pNext = create_info_next;
-	shader_features.shaderFloat16 = shader_capabilities.shader_float16_is_supported;
-	shader_features.shaderInt8 = shader_capabilities.shader_int8_is_supported;
-	create_info_next = &shader_features;
+	if (!enable_1_2_features && enabled_device_extension_names.has(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME)) {
+		shader_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR;
+		shader_features.pNext = create_info_next;
+		shader_features.shaderFloat16 = shader_capabilities.shader_float16_is_supported;
+		shader_features.shaderInt8 = shader_capabilities.shader_int8_is_supported;
+		create_info_next = &shader_features;
+	}
 
 	VkPhysicalDeviceBufferDeviceAddressFeaturesKHR buffer_device_address_features = {};
-	if (buffer_device_address_support) {
+	if (buffer_device_address_support && !enable_1_2_features) {
 		buffer_device_address_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
 		buffer_device_address_features.pNext = create_info_next;
 		buffer_device_address_features.bufferDeviceAddress = buffer_device_address_support;
@@ -1353,7 +1373,7 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 	}
 
 	VkPhysicalDeviceVulkanMemoryModelFeaturesKHR vulkan_memory_model_features = {};
-	if (vulkan_memory_model_support && vulkan_memory_model_device_scope_support) {
+	if (vulkan_memory_model_support && vulkan_memory_model_device_scope_support && !enable_1_2_features) {
 		vulkan_memory_model_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR;
 		vulkan_memory_model_features.pNext = create_info_next;
 		vulkan_memory_model_features.vulkanMemoryModel = vulkan_memory_model_support;
@@ -1390,7 +1410,7 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 	}
 
 	VkPhysicalDevicePipelineCreationCacheControlFeatures pipeline_cache_control_features = {};
-	if (pipeline_cache_control_support) {
+	if (pipeline_cache_control_support && physical_device_properties.apiVersion < VK_API_VERSION_1_3) {
 		pipeline_cache_control_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES;
 		pipeline_cache_control_features.pNext = create_info_next;
 		pipeline_cache_control_features.pipelineCreationCacheControl = pipeline_cache_control_support;
@@ -1444,7 +1464,6 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 	VkPhysicalDeviceVulkan11Features vulkan_1_1_features = {};
 	VkPhysicalDevice16BitStorageFeaturesKHR storage_features = {};
 	VkPhysicalDeviceMultiviewFeatures multiview_features = {};
-	const bool enable_1_2_features = physical_device_properties.apiVersion >= VK_API_VERSION_1_2;
 	if (enable_1_2_features) {
 		// In Vulkan 1.2 and newer we use a newer struct to enable various features.
 		vulkan_1_1_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
@@ -1481,6 +1500,35 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 			multiview_features.multiviewTessellationShader = multiview_capabilities.tessellation_shader_is_supported;
 			create_info_next = &multiview_features;
 		}
+	}
+
+	VkPhysicalDeviceVulkan12Features vulkan_1_2_features = {};
+	if (enable_1_2_features) {
+		vulkan_1_2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+		vulkan_1_2_features.pNext = create_info_next;
+		vulkan_1_2_features.shaderFloat16 = shader_capabilities.shader_float16_is_supported;
+		vulkan_1_2_features.shaderInt8 = shader_capabilities.shader_int8_is_supported;
+		vulkan_1_2_features.bufferDeviceAddress = buffer_device_address_support;
+		vulkan_1_2_features.vulkanMemoryModel = vulkan_memory_model_support;
+		vulkan_1_2_features.vulkanMemoryModelDeviceScope = vulkan_memory_model_device_scope_support;
+		vulkan_1_2_features.timelineSemaphore = video_decode_queue_family_index != UINT32_MAX && video_decode_timeline_semaphore_support;
+		create_info_next = &vulkan_1_2_features;
+	}
+
+	const bool enable_1_3_features = physical_device_properties.apiVersion >= VK_API_VERSION_1_3;
+	VkPhysicalDeviceVulkan13Features vulkan_1_3_features = {};
+	VkPhysicalDeviceSynchronization2FeaturesKHR sync_2_features = {};
+	if (enable_1_3_features) {
+		vulkan_1_3_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+		vulkan_1_3_features.pNext = create_info_next;
+		vulkan_1_3_features.synchronization2 = video_decode_queue_family_index != UINT32_MAX && video_decode_synchronization_2_support;
+		vulkan_1_3_features.pipelineCreationCacheControl = pipeline_cache_control_support;
+		create_info_next = &vulkan_1_3_features;
+	} else if (video_decode_queue_family_index != UINT32_MAX && video_decode_synchronization_2_support) {
+		sync_2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+		sync_2_features.pNext = create_info_next;
+		sync_2_features.synchronization2 = VK_TRUE;
+		create_info_next = &sync_2_features;
 	}
 
 	VkDeviceCreateInfo create_info = {};
@@ -1832,6 +1880,11 @@ Error RenderingDeviceDriverVulkan::initialize(uint32_t p_device_index, uint32_t 
 	context_device = context_driver->device_get(p_device_index);
 	physical_device = context_driver->physical_device_get(p_device_index);
 	frame_count = p_frame_count;
+	video_decode_queue_family_index = UINT32_MAX;
+	video_decode_aux_queue_family_index = UINT32_MAX;
+	video_decode_codec_ops = 0;
+	video_decode_timeline_semaphore_support = false;
+	video_decode_synchronization_2_support = false;
 
 	// Copy the queue family properties the context already retrieved.
 	uint32_t queue_family_count = context_driver->queue_family_get_count(p_device_index);
@@ -1850,6 +1903,78 @@ Error RenderingDeviceDriverVulkan::initialize(uint32_t p_device_index, uint32_t 
 
 	err = _check_device_capabilities();
 	ERR_FAIL_COND_V_MSG(err != OK, err, "Couldn't initialize Vulkan device capabilities. This may be caused by an incompatible or outdated graphics driver.");
+
+	// FFmpeg requires Vulkan 1.3. Reserve a dedicated video queue so decoder
+	// submissions never race Godot's graphics/compute queue submissions.
+	if (video_decode_timeline_semaphore_support && video_decode_synchronization_2_support &&
+			context_driver->instance_get_api_version() >= VK_API_VERSION_1_3 &&
+			physical_device_properties.apiVersion >= VK_API_VERSION_1_3 &&
+			enabled_device_extension_names.has(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME) &&
+			enabled_device_extension_names.has(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME)) {
+		uint32_t family_count = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties2(physical_device, &family_count, nullptr);
+		TightLocalVector<VkQueueFamilyProperties2> family_properties_2;
+		TightLocalVector<VkQueueFamilyVideoPropertiesKHR> video_properties;
+		family_properties_2.resize(family_count);
+		video_properties.resize(family_count);
+		for (uint32_t i = 0; i < family_count; i++) {
+			family_properties_2[i] = {};
+			family_properties_2[i].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+			video_properties[i] = {};
+			video_properties[i].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_VIDEO_PROPERTIES_KHR;
+			family_properties_2[i].pNext = &video_properties[i];
+		}
+		vkGetPhysicalDeviceQueueFamilyProperties2(physical_device, &family_count, family_properties_2.ptr());
+
+		const bool h264_enabled = enabled_device_extension_names.has(VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME);
+		const bool h265_enabled = enabled_device_extension_names.has(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME);
+		const VkVideoCodecOperationFlagsKHR enabled_decode_ops =
+				(h264_enabled ? VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR : 0) |
+				(h265_enabled ? VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR : 0);
+		for (uint32_t i = 0; i < family_count && i < queue_family_properties.size(); i++) {
+			const VkQueueFlags ordinary_flags = queue_family_properties[i].queueFlags &
+					(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
+			const VkVideoCodecOperationFlagsKHR decode_ops = video_properties[i].videoCodecOperations & enabled_decode_ops;
+			if (GLOBAL_GET("rendering/rendering_device/vulkan/video_decode").operator bool()) {
+				print_verbose(vformat("Vulkan Video queue family %d: flags=0x%x, decode_ops=0x%x, enabled_ops=0x%x, queues=%d.",
+						i, queue_family_properties[i].queueFlags, video_properties[i].videoCodecOperations,
+						enabled_decode_ops, queue_family_properties[i].queueCount));
+			}
+			if (ordinary_flags == 0 && decode_ops != 0 && queue_family_properties[i].queueCount > 0) {
+				video_decode_queue_family_index = i;
+				video_decode_codec_ops = decode_ops;
+				break;
+			}
+		}
+	}
+	if (video_decode_queue_family_index != UINT32_MAX) {
+		// FFmpeg initializes compute and transfer pools even for decode-only
+		// frames. Reserve queue 0; the renderer keeps queue 1 in this family.
+		for (uint32_t i = 0; i < queue_family_properties.size(); i++) {
+			const VkQueueFlags required = VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
+			if (i != video_decode_queue_family_index &&
+					(queue_family_properties[i].queueFlags & required) == required &&
+					queue_family_properties[i].queueCount >= 2) {
+				video_decode_aux_queue_family_index = i;
+				break;
+			}
+		}
+		if (video_decode_aux_queue_family_index == UINT32_MAX) {
+			print_verbose("Vulkan Video unavailable: no private compute/transfer queue can be reserved for FFmpeg frame pools.");
+			video_decode_queue_family_index = UINT32_MAX;
+			video_decode_codec_ops = 0;
+		}
+	}
+	if (GLOBAL_GET("rendering/rendering_device/vulkan/video_decode").operator bool() &&
+			video_decode_queue_family_index == UINT32_MAX) {
+		print_verbose(vformat("Vulkan Video decode queue unavailable: Vulkan %d.%d, timeline=%d, synchronization2=%d, video_queue_ext=%d, decode_queue_ext=%d, H.264 ext=%d, H.265 ext=%d.",
+				device_capabilities.version_major, device_capabilities.version_minor,
+				video_decode_timeline_semaphore_support, video_decode_synchronization_2_support,
+				enabled_device_extension_names.has(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME),
+				enabled_device_extension_names.has(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME),
+				enabled_device_extension_names.has(VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME),
+				enabled_device_extension_names.has(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME)));
+	}
 
 	LocalVector<VkDeviceQueueCreateInfo> queue_create_info;
 	err = _add_queue_create_info(queue_create_info);
@@ -3113,6 +3238,11 @@ RDD::CommandQueueFamilyID RenderingDeviceDriverVulkan::command_queue_family_get(
 	VkQueueFlags picked_queue_flags = VK_QUEUE_FLAG_BITS_MAX_ENUM;
 	uint32_t picked_family_index = UINT_MAX;
 	for (uint32_t i = 0; i < queue_family_properties.size(); i++) {
+		if (i == video_decode_queue_family_index) {
+			// Keep the FFmpeg video queue exclusive to the decoder. In particular,
+			// do not let RenderingDevice route transfer work to it.
+			continue;
+		}
 		if (queue_families[i].is_empty()) {
 			// Ignore empty queue families.
 			continue;
@@ -3153,6 +3283,9 @@ RDD::CommandQueueID RenderingDeviceDriverVulkan::command_queue_create(CommandQue
 	uint32_t picked_queue_index = UINT_MAX;
 	uint32_t picked_virtual_count = UINT_MAX;
 	for (uint32_t i = 0; i < queue_family.size(); i++) {
+		if (family_index == video_decode_aux_queue_family_index && i == 0) {
+			continue; // Reserved for FFmpeg; never submit renderer work here.
+		}
 		if (queue_family[i].virtual_count < picked_virtual_count) {
 			picked_queue_index = i;
 			picked_virtual_count = queue_family[i].virtual_count;
@@ -3260,7 +3393,70 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		submit_info.pSignalSemaphores = signal_semaphores.ptr();
 
 		device_queue.submit_mutex.lock();
-		err = vkQueueSubmit(device_queue.queue, 1, &submit_info, vk_fence);
+		bool external_timeline_sync = false;
+		for (uint32_t i = 0; i < p_cmd_buffers.size(); i++) {
+			const CommandBufferInfo *info = (const CommandBufferInfo *)p_cmd_buffers[i].id;
+			external_timeline_sync |= !info->timeline_dependencies.is_empty();
+		}
+		if (external_timeline_sync) {
+			// Keep waits/signals paired with the command buffer that uses the
+			// external image. A frame-global signal can release FFmpeg too soon
+			// when the graph splits its work into several command buffers.
+			LocalVector<VkSubmitInfo2> submits;
+			LocalVector<VkCommandBufferSubmitInfo> commands;
+			LocalVector<LocalVector<VkSemaphoreSubmitInfo>> waits;
+			LocalVector<LocalVector<VkSemaphoreSubmitInfo>> signals;
+			uint32_t count = p_cmd_buffers.size();
+			submits.resize(count);
+			commands.resize(count);
+			waits.resize(count);
+			signals.resize(count);
+			for (uint32_t i = 0; i < count; i++) {
+				if (i == 0) {
+					for (VkSemaphore semaphore : wait_semaphores) {
+						VkSemaphoreSubmitInfo wait = {};
+						wait.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+						wait.semaphore = semaphore;
+						wait.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+						waits[i].push_back(wait);
+					}
+				}
+				if (i == count - 1) {
+					for (VkSemaphore semaphore : signal_semaphores) {
+						VkSemaphoreSubmitInfo signal = {};
+						signal.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+						signal.semaphore = semaphore;
+						signal.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+						signals[i].push_back(signal);
+					}
+				}
+				const CommandBufferInfo *info = (const CommandBufferInfo *)p_cmd_buffers[i].id;
+				for (const CommandBufferInfo::TimelineDependency &dependency : info->timeline_dependencies) {
+					VkSemaphoreSubmitInfo wait = {};
+					wait.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+					wait.semaphore = dependency.semaphore;
+					wait.value = dependency.wait_value;
+					wait.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+					waits[i].push_back(wait);
+					wait.value = dependency.signal_value;
+					signals[i].push_back(wait);
+				}
+				commands[i] = {};
+				commands[i].sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+				commands[i].commandBuffer = info->vk_command_buffer;
+				submits[i] = {};
+				submits[i].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+				submits[i].waitSemaphoreInfoCount = waits[i].size();
+				submits[i].pWaitSemaphoreInfos = waits[i].ptr();
+				submits[i].signalSemaphoreInfoCount = signals[i].size();
+				submits[i].pSignalSemaphoreInfos = signals[i].ptr();
+				submits[i].commandBufferInfoCount = 1;
+				submits[i].pCommandBufferInfos = &commands[i];
+			}
+			err = vkQueueSubmit2(device_queue.queue, submits.size(), submits.ptr(), vk_fence);
+		} else {
+			err = vkQueueSubmit(device_queue.queue, 1, &submit_info, vk_fence);
+		}
 		device_queue.submit_mutex.unlock();
 
 		if (err == VK_ERROR_DEVICE_LOST) {
@@ -3458,8 +3654,29 @@ RDD::CommandBufferID RenderingDeviceDriverVulkan::command_buffer_create(CommandP
 	return CommandBufferID(command_buffer);
 }
 
+VkCommandBuffer RenderingDeviceDriverVulkan::command_buffer_get_vulkan_handle(CommandBufferID p_cmd_buffer) const {
+	return ((const CommandBufferInfo *)p_cmd_buffer.id)->vk_command_buffer;
+}
+
+bool RenderingDeviceDriverVulkan::command_buffer_add_timeline_dependency(CommandBufferID p_cmd_buffer, VkSemaphore p_semaphore, uint64_t p_wait_value, uint64_t p_signal_value) {
+	ERR_FAIL_COND_V(video_decode_queue_family_index == UINT32_MAX || p_semaphore == VK_NULL_HANDLE || p_signal_value <= p_wait_value, false);
+	CommandBufferInfo *info = (CommandBufferInfo *)p_cmd_buffer.id;
+	for (CommandBufferInfo::TimelineDependency &dependency : info->timeline_dependencies) {
+		if (dependency.semaphore == p_semaphore) {
+			// A second read of the same image can share the original wait and
+			// extend the final signal. Never wait on this submission's own signal.
+			ERR_FAIL_COND_V(p_wait_value != dependency.signal_value, false);
+			dependency.signal_value = p_signal_value;
+			return true;
+		}
+	}
+	info->timeline_dependencies.push_back({ p_semaphore, p_wait_value, p_signal_value });
+	return true;
+}
+
 bool RenderingDeviceDriverVulkan::command_buffer_begin(CommandBufferID p_cmd_buffer) {
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)(p_cmd_buffer.id);
+	command_buffer->timeline_dependencies.clear();
 
 	VkCommandBufferBeginInfo cmd_buf_begin_info = {};
 	cmd_buf_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -7225,6 +7442,35 @@ uint64_t RenderingDeviceDriverVulkan::get_resource_native_handle(DriverResource 
 		case DRIVER_RESOURCE_QUEUE_FAMILY: {
 			return uint32_t(p_driver_id.id) - 1;
 		}
+		case DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_QUEUE: {
+			if (video_decode_queue_family_index >= queue_families.size() ||
+					queue_families[video_decode_queue_family_index].is_empty()) {
+				return 0;
+			}
+			return (uint64_t)queue_families[video_decode_queue_family_index][0].queue;
+		}
+		case DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_QUEUE_FAMILY: {
+			return video_decode_queue_family_index == UINT32_MAX ? 0 : video_decode_queue_family_index;
+		}
+		case DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_CODEC_OPS: {
+			return video_decode_codec_ops;
+		}
+		case DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_TIMELINE_SEMAPHORE: {
+			return video_decode_timeline_semaphore_support && video_decode_queue_family_index != UINT32_MAX;
+		}
+		case DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_SYNCHRONIZATION_2: {
+			return video_decode_synchronization_2_support && video_decode_queue_family_index != UINT32_MAX;
+		}
+		case DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_AUX_QUEUE: {
+			if (video_decode_aux_queue_family_index >= queue_families.size() ||
+					queue_families[video_decode_aux_queue_family_index].is_empty()) {
+				return 0;
+			}
+			return (uint64_t)queue_families[video_decode_aux_queue_family_index][0].queue;
+		}
+		case DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_AUX_QUEUE_FAMILY: {
+			return video_decode_aux_queue_family_index == UINT32_MAX ? 0 : video_decode_aux_queue_family_index;
+		}
 		case DRIVER_RESOURCE_TEXTURE: {
 			const TextureInfo *tex_info = (const TextureInfo *)p_driver_id.id;
 			return (uint64_t)tex_info->vk_view_create_info.image;
@@ -7247,6 +7493,20 @@ uint64_t RenderingDeviceDriverVulkan::get_resource_native_handle(DriverResource 
 		default: {
 			return 0;
 		}
+	}
+}
+
+void RenderingDeviceDriverVulkan::video_decode_queue_lock(uint32_t p_queue_family, uint32_t p_queue_index) {
+	if ((p_queue_family == video_decode_queue_family_index || p_queue_family == video_decode_aux_queue_family_index) && p_queue_index == 0 &&
+			p_queue_family < queue_families.size() && !queue_families[p_queue_family].is_empty()) {
+		queue_families[p_queue_family][p_queue_index].submit_mutex.lock();
+	}
+}
+
+void RenderingDeviceDriverVulkan::video_decode_queue_unlock(uint32_t p_queue_family, uint32_t p_queue_index) {
+	if ((p_queue_family == video_decode_queue_family_index || p_queue_family == video_decode_aux_queue_family_index) && p_queue_index == 0 &&
+			p_queue_family < queue_families.size() && !queue_families[p_queue_family].is_empty()) {
+		queue_families[p_queue_family][p_queue_index].submit_mutex.unlock();
 	}
 }
 

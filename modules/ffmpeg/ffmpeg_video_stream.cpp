@@ -29,6 +29,9 @@
 /**************************************************************************/
 
 #include "ffmpeg_video_stream.h"
+#if defined(FFMPEG_GPU_DECODE_ENABLED) && !defined(GDEXTENSION)
+#include "vulkan_video_converter.h"
+#endif
 #include <iterator>
 
 #ifdef GDEXTENSION
@@ -81,6 +84,7 @@ RDTextureFormatC tfc_from_rdtf(Ref<RDTextureFormat> p_texture_format) {
 typedef int64_t ComputeListID;
 #define TEXTURE_FORMAT_COMPAT(tf) tfc_from_rdtf(tf);
 #else
+#include "core/os/os.h"
 #include "servers/rendering/rendering_device_binds.h"
 #include "servers/rendering/rendering_server.h"
 #include "core/object/callable_mp.h"
@@ -95,8 +99,207 @@ typedef RD::ComputeListID ComputeListID;
 
 #define FREE_RD_RID(rid) RS::get_singleton()->get_rendering_device()->free_rid(rid);
 
+void FFmpegVideoStreamPlayback::_bind_methods() {
+#ifndef GDEXTENSION
+	ClassDB::bind_method(D_METHOD("set_playback_clock", "clock"), &FFmpegVideoStreamPlayback::set_playback_clock);
+	ClassDB::bind_method(D_METHOD("get_playback_clock"), &FFmpegVideoStreamPlayback::get_playback_clock);
+	ClassDB::bind_method(D_METHOD("set_clock_recovery_tolerance", "seconds"), &FFmpegVideoStreamPlayback::set_clock_recovery_tolerance);
+	ClassDB::bind_method(D_METHOD("get_clock_recovery_tolerance"), &FFmpegVideoStreamPlayback::get_clock_recovery_tolerance);
+	ClassDB::bind_method(D_METHOD("get_playback_timing"), &FFmpegVideoStreamPlayback::get_playback_timing);
+	ClassDB::bind_method(D_METHOD("get_decode_backend"), &FFmpegVideoStreamPlayback::get_decode_backend);
+	ClassDB::bind_method(D_METHOD("is_using_gpu_decoding"), &FFmpegVideoStreamPlayback::is_using_gpu_decoding);
+	ClassDB::bind_method(D_METHOD("get_decode_fallback_reason"), &FFmpegVideoStreamPlayback::get_decode_fallback_reason);
+#ifdef FFMPEG_GPU_TESTS_ENABLED
+	ClassDB::bind_method(D_METHOD("test_force_gpu_failure"), &FFmpegVideoStreamPlayback::test_force_gpu_failure);
+#endif
+#endif
+}
+
+#ifndef GDEXTENSION
+void FFmpegVideoStreamPlayback::set_playback_clock(const Callable &p_clock) {
+	ERR_FAIL_COND_MSG(playing, "Configure the video playback clock before play(), or after stop().");
+	ERR_FAIL_COND_MSG(!p_clock.is_null() && !p_clock.is_valid(), "Video playback clock must be a valid Callable.");
+	playback_clock = p_clock;
+	clock_initialized = false;
+	clock_lag_since_usec = 0;
+}
+
+Callable FFmpegVideoStreamPlayback::get_playback_clock() const {
+	return playback_clock;
+}
+
+String FFmpegVideoStreamPlayback::get_decode_backend() const {
+	if (decoder.is_null()) {
+		return "pending";
+	}
+	switch (decoder->get_decode_backend()) {
+		case VideoDecoder::BACKEND_VULKAN:
+			return "vulkan";
+		case VideoDecoder::BACKEND_SOFTWARE:
+			return "software";
+		default:
+			return "pending";
+	}
+}
+
+bool FFmpegVideoStreamPlayback::is_using_gpu_decoding() const {
+	return get_decode_backend() == "vulkan" && decoder->get_decoder_state() != VideoDecoder::FAULTED;
+}
+
+String FFmpegVideoStreamPlayback::get_decode_fallback_reason() const {
+	return decode_fallback_reason;
+}
+
+bool FFmpegVideoStreamPlayback::_fallback_to_software(const String &p_reason) {
+	const bool resume = playing;
+	available_frames.clear();
+	available_audio_frames.clear();
+	last_frame.unref();
+	last_frame_image.unref();
+	// Join the old decoder before reusing its input. GPU jobs retain their
+	// own AVFrames/converter until the renderer's fences complete.
+	decoder.unref();
+	source_file->seek(0);
+	decoder = Ref<VideoDecoder>(memnew(VideoDecoder(source_file, VideoDecoder::DECODE_SOFTWARE_ONLY)));
+	decoder->start_decoding();
+	decode_fallback_reason = p_reason;
+	if (decoder->get_decoder_state() == VideoDecoder::FAULTED) {
+		stop_reason = "software fallback initialization failed";
+		playing = false;
+		ERR_PRINT(stop_reason);
+		return false;
+	}
+	_initialize_output();
+	decoder->seek(MAX(0.0, playback_position), false, !playback_clock.is_null());
+	just_seeked = playback_clock.is_null();
+	clock_lag_since_usec = 0;
+	playing = resume;
+	print_verbose("FFmpeg switched to software decoding: " + p_reason);
+	return true;
+}
+
+#ifdef FFMPEG_GPU_TESTS_ENABLED
+void FFmpegVideoStreamPlayback::test_force_gpu_failure() {
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+	ERR_FAIL_COND(vulkan_converter.is_null());
+	static_cast<VulkanVideoConverter *>(vulkan_converter.ptr())->test_force_failure();
+#endif
+}
+#endif
+
+void FFmpegVideoStreamPlayback::set_clock_recovery_tolerance(double p_seconds) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_seconds) || p_seconds < 0.1 || p_seconds > 30.0,
+			"Video clock recovery tolerance must be between 0.1 and 30 seconds.");
+	clock_recovery_tolerance = p_seconds;
+	clock_lag_since_usec = 0;
+}
+
+double FFmpegVideoStreamPlayback::get_clock_recovery_tolerance() const {
+	return clock_recovery_tolerance;
+}
+
+Dictionary FFmpegVideoStreamPlayback::get_playback_timing() const {
+	Dictionary result;
+	result["external_clock"] = !playback_clock.is_null();
+	result["decode_backend"] = get_decode_backend();
+	result["decode_fallback_reason"] = decode_fallback_reason;
+	result["clock_time"] = playback_position / 1000.0;
+	result["has_frame"] = last_frame.is_valid();
+	result["selected_frame_time"] = last_frame.is_valid() ? last_frame->get_time() / 1000.0 : 0.0;
+	result["selected_frame_lateness"] = last_frame.is_valid() ? (playback_position - last_frame->get_time()) / 1000.0 : 0.0;
+	result["dropped_frames"] = dropped_frame_count;
+	result["clock_seeks"] = clock_seek_count;
+	result["last_clock_seek_reason"] = last_clock_seek_reason;
+	result["clock_recovery_tolerance"] = clock_recovery_tolerance;
+	result["recovering"] = clock_lag_since_usec != 0;
+	result["playing"] = playing;
+	result["stop_reason"] = stop_reason;
+	result["decoder_state"] = decoder.is_valid() ? int(decoder->get_decoder_state()) : int(VideoDecoder::STOPPED);
+	result["seeking"] = decoder.is_valid() && decoder->is_seeking();
+	result["queued_frames"] = available_frames.size();
+	return result;
+}
+
+void FFmpegVideoStreamPlayback::_seek_to_clock(const String &p_reason) {
+	seek_into_sync();
+	// Retain the last frame before the seek target, too. A paused clock may
+	// never reach the next frame's PTS, so choosing only >= target is wrong.
+	last_clock_seek_usec = OS::get_singleton()->get_ticks_usec();
+	clock_seek_count++;
+	clock_lag_since_usec = 0;
+	last_clock_seek_reason = p_reason;
+	print_verbose(vformat("FFmpeg music-clock recovery: %s; seeking to %.3f seconds.", p_reason, playback_position / 1000.0));
+	just_seeked = false;
+}
+
+void FFmpegVideoStreamPlayback::_recover_clock_if_needed() {
+	// Present/drop already-decoded frames first. An old queue head does not
+	// mean the decoder needs to be reset, especially after a game-thread hitch.
+	bool future_frame_ready = !available_frames.is_empty() && available_frames.front()->get()->get_time() > playback_position;
+	double lateness = playback_position - get_current_frame_time();
+	if (future_frame_ready || decoder->is_seeking() || playback_position < 0.0 || playback_position >= decoder->get_duration() ||
+			decoder->get_decoder_state() == VideoDecoder::END_OF_STREAM ||
+			lateness <= clock_recovery_tolerance * 1000.0) {
+		clock_lag_since_usec = 0;
+		return;
+	}
+	uint64_t now = OS::get_singleton()->get_ticks_usec();
+	if (clock_lag_since_usec == 0) {
+		clock_lag_since_usec = now;
+	}
+	// Give late decoding a full second to catch up, and never cancel a slow
+	// recovery seek every half-second while it is still decoding its preroll.
+	if (now - clock_lag_since_usec >= 1000000 && now - last_clock_seek_usec >= 2000000) {
+		_seek_to_clock("persistent decode lag");
+	}
+}
+
+bool FFmpegVideoStreamPlayback::_update_playback_clock() {
+	Variant time;
+	Callable::CallError error;
+	playback_clock.callp(nullptr, 0, time, error);
+	if (error.error != Callable::CallError::CALL_OK ||
+			(time.get_type() != Variant::FLOAT && time.get_type() != Variant::INT) ||
+			!Math::is_finite(double(time))) {
+		ERR_PRINT("Video playback clock failed or returned a non-finite/non-numeric time. Playback stopped.");
+		stop_reason = "invalid music clock";
+		playing = false;
+		return false;
+	}
+	double target = double(time) * 1000.0;
+	if (!Math::is_finite(target)) {
+		playing = false;
+		ERR_PRINT("Video playback clock time overflowed. Playback stopped.");
+		stop_reason = "music clock overflow";
+		return false;
+	}
+	uint64_t now = OS::get_singleton()->get_ticks_usec();
+	double elapsed_ms = clock_initialized ? (now - last_clock_sample_usec) / 1000.0 : 0.0;
+	// Audio cursor/latency estimates can move back slightly. Hold rather than
+	// repeatedly seeking on small corrections; real rewinds still seek.
+	if (clock_initialized && target < last_clock_position && target >= last_clock_position - 50.0) {
+		target = last_clock_position;
+	}
+	bool discontinuity = clock_initialized ?
+			(target < last_clock_position - 50.0 || target - last_clock_position > MAX(500.0, elapsed_ms * 4.0 + 50.0)) :
+			Math::abs(target - playback_position) > 500.0;
+	playback_position = target;
+	if (discontinuity) {
+		_seek_to_clock("music clock discontinuity");
+	}
+	last_clock_position = target;
+	last_clock_sample_usec = now;
+	clock_initialized = true;
+	return true;
+}
+#endif
+
 void FFmpegVideoStreamPlayback::seek_into_sync() {
-	decoder->seek(playback_position);
+	bool preserve_preroll = false;
+#ifndef GDEXTENSION
+	preserve_preroll = !playback_clock.is_null();
+#endif
+	decoder->seek(MAX(0.0, playback_position), false, preserve_preroll);
 	Vector<Ref<DecodedFrame>> decoded_frames;
 	for (Ref<DecodedFrame> df : available_frames) {
 		decoded_frames.push_back(df);
@@ -137,10 +340,49 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 	if (paused || !playing) {
 		return;
 	}
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+	if (vulkan_converter.is_valid() &&
+			(static_cast<VulkanVideoConverter *>(vulkan_converter.ptr())->has_failed() || decoder->get_decoder_state() == VideoDecoder::FAULTED)) {
+		const String failure = decoder->get_decoder_state() == VideoDecoder::FAULTED ? "Vulkan decoder fault" : "Vulkan conversion failure";
+		if (decode_policy == VideoDecoder::DECODE_PREFER_GPU) {
+			if (playback_clock.is_null()) {
+				playback_position += p_delta * 1000.0;
+			} else if (!_update_playback_clock()) {
+				return;
+			}
+			_fallback_to_software(failure);
+			// Let VideoStreamPlayer switch texture/audio formats before any
+			// software audio is mixed into the old backend's resampler.
+			return;
+		} else {
+			stop_reason = failure;
+			ERR_PRINT(vformat("FFmpeg playback stopped: %s. This is not a clock-lateness timeout; CPU fallback is not enabled.", stop_reason));
+			playing = false;
+			return;
+		}
+	}
+#endif
 
-	playback_position += p_delta * 1000.0f;
+	bool external_clock = false;
+#ifndef GDEXTENSION
+	external_clock = !playback_clock.is_null();
+	if (external_clock && !_update_playback_clock()) {
+		return;
+	}
+#endif
+	if (!external_clock) {
+		playback_position += p_delta * 1000.0f;
+	}
 
-	if (decoder->get_decoder_state() == VideoDecoder::DecoderState::END_OF_STREAM && available_frames.size() == 0) {
+	// Collect before selecting a frame, not one update after it was due.
+	// Keep both producer and consumer queues bounded when the clock pauses.
+	if (available_frames.size() < 3) {
+		for (Ref<DecodedFrame> frame : decoder->get_decoded_frames()) {
+			available_frames.push_back(frame);
+		}
+	}
+
+	if (!external_clock && decoder->get_decoder_state() == VideoDecoder::DecoderState::END_OF_STREAM && available_frames.size() == 0) {
 		// if at the end of the stream but our playback enters a valid time region again, a seek operation is required to get the decoder back on track.
 		if (playback_position < decoder->get_last_decoded_frame_time()) {
 			seek_into_sync();
@@ -161,17 +403,16 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 		}
 	}
 
-	if (out_of_sync) {
+	if (out_of_sync && !external_clock) {
 		print_line(vformat("Video too far out of sync (%.2f), seeking to %.2f", peek_frame->get_time(), playback_position));
 		seek_into_sync();
 	}
-
 	double frame_time = get_current_frame_time();
 
 	bool got_new_frame = false;
 
 	List<Ref<DecodedFrame>>::Element *next_frame = available_frames.front();
-	while (next_frame && (check_next_frame_valid(next_frame->get()) || just_seeked)) {
+	while (next_frame && (external_clock ? next_frame->get()->get_time() <= playback_position : (check_next_frame_valid(next_frame->get()) || just_seeked))) {
 		ZoneNamedN(__frame_receive, "frame_receive", true);
 
 		just_seeked = false;
@@ -179,6 +420,11 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 		if (last_frame.is_valid()) {
 			decoder->return_frame(last_frame);
 		}
+#ifndef GDEXTENSION
+		if (got_new_frame) {
+			dropped_frame_count++;
+		}
+#endif
 		last_frame = next_frame->get();
 		last_frame_image = last_frame->get_image();
 #ifdef FFMPEG_MT_GPU_UPLOAD
@@ -190,6 +436,11 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 	}
 #ifndef FFMPEG_MT_GPU_UPLOAD
 	if (got_new_frame) {
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+		if (last_frame->get_format() == FFmpegFrameFormat::VULKAN) {
+			static_cast<VulkanVideoConverter *>(vulkan_converter.ptr())->convert(last_frame->get_vulkan_frame());
+		} else
+#endif
 		// YUV conversion
 		if (last_frame->get_format() == FFmpegFrameFormat::YUV420P || last_frame->get_format() == FFmpegFrameFormat::YUVA420P) {
 			Ref<Image> y_plane = last_frame->get_yuv_image_plane(0);
@@ -219,10 +470,18 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 	}
 #endif
 
-	if (available_frames.size() == 0) {
-		for (Ref<DecodedFrame> frame : decoder->get_decoded_frames()) {
-			available_frames.push_back(frame);
+	// The external music player owns audio. Drain but never enqueue embedded
+	// audio into VideoStreamPlayer's resampler while following its clock.
+	if (external_clock) {
+#ifndef GDEXTENSION
+		_recover_clock_if_needed();
+#endif
+		available_audio_frames.clear();
+		decoder->get_decoded_audio_frames();
+		if (frame_time != get_current_frame_time()) {
+			frames_processed++;
 		}
+		return;
 	}
 
 	Ref<DecodedAudioFrame> peek_audio_frame;
@@ -253,7 +512,9 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 #ifdef GDEXTENSION
 		mix_audio(sample_count, audio_frame->get_sample_data(), 0);
 #else
-		mix_callback(mix_udata, audio_frame->get_sample_data().ptr(), sample_count);
+		if (mix_callback != nullptr) {
+			mix_callback(mix_udata, audio_frame->get_sample_data().ptr(), sample_count);
+		}
 #endif
 		next_audio_frame = next_audio_frame->next();
 		available_audio_frames.pop_front();
@@ -271,15 +532,41 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 	}
 }
 
-Error FFmpegVideoStreamPlayback::load(Ref<FileAccess> p_file_access) {
-	decoder = Ref<VideoDecoder>(memnew(VideoDecoder(p_file_access)));
+Error FFmpegVideoStreamPlayback::load(Ref<FileAccess> p_file_access, VideoDecoder::DecodePolicy p_policy) {
+#ifndef GDEXTENSION
+	source_file = p_file_access;
+	decode_policy = p_policy;
+#endif
+	decoder = Ref<VideoDecoder>(memnew(VideoDecoder(p_file_access, p_policy)));
 
 	decoder->start_decoding();
-	Vector2i size = decoder->get_size();
 	if (decoder->get_decoder_state() == VideoDecoder::FAULTED) {
+#ifndef GDEXTENSION
+		if (decode_policy == VideoDecoder::DECODE_PREFER_GPU) {
+			String reason = decoder->get_gpu_failure_reason();
+			return _fallback_to_software(reason.is_empty() ? "GPU decoder initialization failed." : reason) ? OK : FAILED;
+		}
+#endif
 		return FAILED;
 	}
+	_initialize_output();
+	return OK;
+}
 
+void FFmpegVideoStreamPlayback::_initialize_output() {
+	yuv_converter.unref();
+	yuv_texture.unref();
+	vulkan_converter.unref();
+	texture.unref();
+	const Vector2i size = decoder->get_size();
+
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+	if (decoder->get_frame_format() == FFmpegFrameFormat::VULKAN) {
+		Ref<VulkanVideoConverter> converter;
+		converter.instantiate();
+		vulkan_converter = converter;
+	} else
+#endif
 	if (decoder->get_frame_format() == FFmpegFrameFormat::YUV420P || decoder->get_frame_format() == FFmpegFrameFormat::YUVA420P) {
 		yuv_converter.instantiate();
 		yuv_converter->set_frame_size(size);
@@ -291,7 +578,6 @@ Error FFmpegVideoStreamPlayback::load(Ref<FileAccess> p_file_access) {
 		texture = ImageTexture::create_from_image(Image::create_empty(size.x, size.y, false, Image::FORMAT_RGBA8));
 #endif
 	}
-	return OK;
 }
 
 bool FFmpegVideoStreamPlayback::is_paused_internal() const {
@@ -313,6 +599,16 @@ void FFmpegVideoStreamPlayback::play_internal() {
 	}
 	clear();
 	playback_position = 0;
+#ifndef GDEXTENSION
+	clock_initialized = false;
+	last_clock_sample_usec = 0;
+	last_clock_seek_usec = 0;
+	clock_lag_since_usec = 0;
+	clock_seek_count = 0;
+	dropped_frame_count = 0;
+	last_clock_seek_reason = String();
+	stop_reason = String();
+#endif
 	decoder->seek(0, true);
 	just_seeked = true;
 	playing = true;
@@ -324,16 +620,25 @@ void FFmpegVideoStreamPlayback::stop_internal() {
 		playback_position = 0.0f;
 		decoder->seek(playback_position, true);
 		just_seeked = true;
-		texture.unref();
 	}
 	if (yuv_converter.is_valid()) {
 		yuv_converter->clear_output_texture();
 	}
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+	if (vulkan_converter.is_valid()) {
+		static_cast<VulkanVideoConverter *>(vulkan_converter.ptr())->clear();
+	}
+#endif
 	playing = false;
 }
 
 void FFmpegVideoStreamPlayback::seek_internal(double p_time) {
-	decoder->seek(p_time * 1000.0f);
+	bool preserve_preroll = false;
+#ifndef GDEXTENSION
+	preserve_preroll = !playback_clock.is_null();
+	clock_initialized = false;
+#endif
+	decoder->seek(MAX(0.0, p_time * 1000.0), false, preserve_preroll);
 	just_seeked = true;
 	available_frames.clear();
 	available_audio_frames.clear();
@@ -348,6 +653,11 @@ Ref<Texture2D> FFmpegVideoStreamPlayback::get_texture_internal() const {
 #ifdef FFMPEG_MT_GPU_UPLOAD
 	return last_frame_texture;
 #else
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+	if (vulkan_converter.is_valid()) {
+		return static_cast<VulkanVideoConverter *>(vulkan_converter.ptr())->get_texture();
+	}
+#endif
 	if (yuv_converter.is_valid()) {
 		return yuv_converter->get_output_texture();
 	}
@@ -561,6 +871,11 @@ Error YUVGPUConverter::_ensure_output_texture() {
 	Ref<RDTextureFormat> out_texture_format_c = out_texture_format.get_texture_format();
 #else
 	RD::TextureFormat out_texture_format_c = out_texture_format;
+	// Texture2DRD's canvas representation also creates an sRGB sampling view.
+	// CPU-decoded YUV output needs the same mutable-format declaration as the
+	// Vulkan decoder's converted RGBA output.
+	out_texture_format_c.shareable_formats.push_back(RD::DATA_FORMAT_R8G8B8A8_UNORM);
+	out_texture_format_c.shareable_formats.push_back(RD::DATA_FORMAT_R8G8B8A8_SRGB);
 	RD::TextureView texture_view;
 #endif
 	out_texture->set_texture_rd_rid(rd->texture_create(out_texture_format_c, texture_view));

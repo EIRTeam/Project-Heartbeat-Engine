@@ -2,6 +2,7 @@
 from misc.utility.scons_hints import *
 
 import gdextension_build.ffmpeg_download as ffmpeg_download
+from misc.utility.color import print_info
 
 Import("env")
 
@@ -19,6 +20,35 @@ excluded = []
 sources = [x for x in Glob("*.cpp") if str(x) not in excluded]
 
 ffmpeg_path = env["ffmpeg_path"]
+
+# Vulkan Video decoding is compiled in when ffmpeg_path holds FFmpeg 9 or newer
+# (avutil 61). Whether the library was built with Vulkan is only known at
+# runtime; without it, playback stays on the software path. The GDExtension has
+# its own SConstruct and never enables this.
+gpu_decode = env.get("ffmpeg_gpu_decode", "auto")
+if gpu_decode not in ("auto", "yes", "no"):
+    raise RuntimeError("ffmpeg_gpu_decode must be auto, yes or no")
+gpu_decode_unsupported = None
+if env["platform"] not in ("linuxbsd", "windows") or env["arch"] != "x86_64":
+    gpu_decode_unsupported = "it is only supported on x86_64 Linux and Windows"
+elif not env["vulkan"]:
+    gpu_decode_unsupported = "it requires a Vulkan-enabled engine build"
+elif int(ffmpeg_download.get_ffmpeg_versions(ffmpeg_path)["avutil"]) < 61:
+    gpu_decode_unsupported = f"it requires FFmpeg 9 or newer in ffmpeg_path ({ffmpeg_path})"
+if gpu_decode == "yes" and gpu_decode_unsupported:
+    raise RuntimeError(f"ffmpeg_gpu_decode=yes, but {gpu_decode_unsupported}")
+gpu_decode_enabled = gpu_decode != "no" and not gpu_decode_unsupported
+if gpu_decode_enabled:
+    env_ffmpeg.Append(CPPDEFINES=["FFMPEG_GPU_DECODE_ENABLED"])
+elif gpu_decode == "auto":
+    print_info(f"FFmpeg: Vulkan Video decoding not compiled in, because {gpu_decode_unsupported}.")
+if env.get("ffmpeg_gpu_tests", "no") == "yes":
+    if not gpu_decode_enabled:
+        raise RuntimeError("ffmpeg_gpu_tests=yes requires Vulkan Video decoding support (see ffmpeg_gpu_decode)")
+    env_ffmpeg.Append(CPPDEFINES=["FFMPEG_GPU_TESTS_ENABLED"])
+
+# This define is intentionally absent from the GDExtension SConstruct.
+env_ffmpeg.Append(CPPDEFINES=["FFMPEG_ENGINE_MODULE"])
 
 env_ffmpeg.Prepend(CPPPATH=f"{ffmpeg_path}/include")
 env_ffmpeg.Prepend(CPPDEFINES="ENABLE_STREAM_INFO")
@@ -64,6 +94,10 @@ else:
     ffmpeg_install_action = ffmpeg_download.ffmpeg_install(env_ffmpeg, "#bin", ffmpeg_path)
 
 env_ffmpeg.GLSL_HEADER("yuv_to_rgb.glsl")
+if gpu_decode_enabled:
+    env_ffmpeg.GLSL_HEADER("vulkan_yuv_to_rgb.glsl")
+    if env.get("ffmpeg_gpu_tests", "no") == "yes":
+        env_ffmpeg.GLSL_HEADER("vulkan_validate_rgb.glsl")
 env_ffmpeg.Depends(Glob("*.glsl.gen.h"), ["#glsl_builders.py"])
 
 # env_ffmpeg.Append(CPPDEFINES=["FFMPEG_MT_GPU_UPLOAD"])
