@@ -67,6 +67,7 @@ enum FFmpegFrameFormat {
 	RGBA8,
 	YUV420P,
 	YUVA420P,
+	VULKAN,
 };
 
 class DecodedFrame : public RefCounted {
@@ -74,9 +75,14 @@ class DecodedFrame : public RefCounted {
 	Ref<ImageTexture> texture;
 	Ref<Image> image;
 	Ref<Image> yuv_images[4];
-	FFmpegFrameFormat format;
+	FFmpegFrameFormat format = FFmpegFrameFormat::RGBA8;
+	Ref<FFmpegFrame> vulkan_frame;
 
 public:
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+	DecodedFrame(double p_time, Ref<FFmpegFrame> p_frame);
+	Ref<FFmpegFrame> get_vulkan_frame() const { return vulkan_frame; }
+#endif
 	Ref<ImageTexture> get_texture() const;
 	void set_texture(const Ref<ImageTexture> &p_texture);
 	Ref<Image> get_image() const { return image; };
@@ -110,6 +116,7 @@ struct AVStream;
 struct AVIOContext;
 struct AVFormatContext;
 struct AVCodecContext;
+struct AVBufferRef;
 struct AVCodec;
 struct AVFrame;
 struct AVPacket;
@@ -151,14 +158,20 @@ private:
 	AVFormatContext *format_context = nullptr;
 	AVCodecContext *video_codec_context = nullptr;
 	AVCodecContext *audio_codec_context = nullptr;
+	AVBufferRef *vulkan_device_context = nullptr;
 	bool input_opened = false;
 	bool has_audio = false;
 	bool hw_decoding_allowed = false;
+	bool vulkan_output_enabled = false;
 	double video_time_base_in_seconds;
 	double audio_time_base_in_seconds;
 	double duration;
 	double skip_output_until_time = -1.0;
+	bool preserve_seek_preroll = false;
+	Ref<FFmpegFrame> seek_preroll_frame;
+	double seek_preroll_time = 0.0;
 	SafeFlag skip_current_outputs;
+	SafeFlag seek_in_progress;
 	SafeNumeric<float> last_decoded_frame_time;
 	Ref<FileAccess> video_file;
 	BitField<HardwareVideoDecoder> target_hw_video_decoders = HardwareVideoDecoder::ANY;
@@ -178,10 +191,13 @@ private:
 
 	static int _read_packet_callback(void *p_opaque, uint8_t *p_buf, int p_buf_size);
 	static int64_t _stream_seek_callback(void *p_opaque, int64_t p_offset, int p_whence);
-	void prepare_decoding();
+	void prepare_decoding(bool p_probe_stream_info = true);
 	Error recreate_codec_context();
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+	bool _initialize_vulkan_device_context(int p_codec_id);
+#endif
 
-	void _seek_command(double p_target_timestamp);
+	void _seek_command(double p_target_timestamp, bool p_preserve_preroll);
 	static void _thread_func(void *userdata);
 	void _decode_next_frame(AVPacket *p_packet, AVFrame *p_receive_frame);
 	int _send_packet(AVCodecContext *p_codec_context, AVFrame *p_receive_frame, AVPacket *p_packet);
@@ -198,10 +214,16 @@ private:
 	String _codec_id_to_preferred_decoder_name(int p_codec_id) const;
 
 public:
+#ifdef FFMPEG_GPU_TESTS_ENABLED
+	// Synchronous diagnostic: caller must keep RenderingDevice alive until return.
+	static Error test_vulkan_decode(const String &p_path);
+	static Dictionary test_vulkan_output_stats(RID p_texture = RID());
+	static void test_vulkan_color_validation();
+#endif
 	struct AvailableDecoderInfo {
 		Ref<FFmpegCodec> codec;
 	};
-	void seek(double p_time, bool p_wait = false);
+	void seek(double p_time, bool p_wait = false, bool p_preserve_preroll = false);
 	void start_decoding();
 	void return_frames(Vector<Ref<DecodedFrame>> p_frames);
 	void return_frame(Ref<DecodedFrame> p_frame);
@@ -210,6 +232,7 @@ public:
 	DecoderState get_decoder_state() const;
 	double get_last_decoded_frame_time() const;
 	bool is_running() const;
+	bool is_seeking() const { return seek_in_progress.is_set(); }
 	double get_duration() const;
 	Vector2i get_size() const;
 	int get_audio_mix_rate() const;

@@ -935,6 +935,8 @@ public:
 
 	virtual void set_object_name(ObjectType p_type, ID p_driver_id, const String &p_name) = 0;
 	virtual uint64_t get_resource_native_handle(DriverResource p_type, ID p_driver_id) = 0;
+	virtual void video_decode_queue_lock(uint32_t p_queue_family, uint32_t p_queue_index) {}
+	virtual void video_decode_queue_unlock(uint32_t p_queue_family, uint32_t p_queue_index) {}
 	virtual uint64_t get_total_memory_used() = 0;
 	virtual uint64_t get_lazily_memory_used() = 0;
 	virtual uint64_t limit_get(Limit p_limit) = 0;

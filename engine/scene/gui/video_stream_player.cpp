@@ -328,6 +328,10 @@ void VideoStreamPlayer::set_stream(const Ref<VideoStream> &p_stream) {
 	}
 }
 
+Ref<VideoStreamPlayback> VideoStreamPlayer::get_stream_playback() const {
+	return playback;
+}
+
 Ref<VideoStream> VideoStreamPlayer::get_stream() const {
 	return stream;
 }
@@ -528,6 +532,7 @@ void VideoStreamPlayer::_validate_property(PropertyInfo &p_property) const {
 void VideoStreamPlayer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_stream", "stream"), &VideoStreamPlayer::set_stream);
 	ClassDB::bind_method(D_METHOD("get_stream"), &VideoStreamPlayer::get_stream);
+	ClassDB::bind_method(D_METHOD("get_stream_playback"), &VideoStreamPlayer::get_stream_playback);
 
 	ClassDB::bind_method(D_METHOD("play"), &VideoStreamPlayer::play);
 	ClassDB::bind_method(D_METHOD("stop"), &VideoStreamPlayer::stop);

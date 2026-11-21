@@ -260,6 +260,10 @@ void RenderingServerDefault::_init() {
 }
 
 void RenderingServerDefault::_finish() {
+	if (RenderingDevice::get_singleton() != nullptr) {
+		RenderingDevice::get_singleton()->drain_retained_resources();
+	}
+
 	if (test_cube.is_valid()) {
 		free_rid(test_cube);
 	}
@@ -297,6 +301,11 @@ void RenderingServerDefault::finish() {
 			server_task_id = WorkerThreadPool::INVALID_TASK_ID;
 		}
 		server_thread = Thread::MAIN_ID;
+		// The render worker is gone. Device destruction and its final fence
+		// drain run on the main thread after RenderingServer has finished.
+		if (RenderingDevice::get_singleton() != nullptr) {
+			RenderingDevice::get_singleton()->make_current();
+		}
 	} else {
 		_finish();
 	}

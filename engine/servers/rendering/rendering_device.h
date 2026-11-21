@@ -316,6 +316,10 @@ public:
 	};
 
 	Error driver_callback_add(RDD::DriverCallback p_callback, void *p_userdata, VectorView<CallbackResource> p_resources);
+	// C++ only. Keeps callback userdata/external GPU resources alive through
+	// this frame's fence, including shutdown and command-buffer splitting.
+	void retain_until_frame_complete(const Ref<RefCounted> &p_resource);
+	void drain_retained_resources();
 
 	/*****************/
 	/**** TEXTURE ****/
@@ -1779,6 +1783,7 @@ private:
 	// when the frame is cycled.
 
 	struct Frame {
+		Vector<Ref<RefCounted>> retained_resources;
 		// List in usage order, from last to free to first to free.
 		List<Buffer> buffers_to_dispose_of;
 		List<Texture> textures_to_dispose_of;
@@ -1956,6 +1961,23 @@ public:
 	bool is_composite_alpha_supported() const;
 
 	uint64_t get_driver_resource(DriverResource p_resource, RID p_rid = RID(), uint64_t p_index = 0);
+
+	struct VulkanVideoDecodeDeviceInfo {
+		uint64_t instance = 0;
+		uint64_t physical_device = 0;
+		uint64_t logical_device = 0;
+		uint64_t decode_queue = 0;
+		uint64_t auxiliary_queue = 0;
+		uint32_t decode_queue_family = 0;
+		uint32_t auxiliary_queue_family = 0;
+		uint32_t rendering_queue_family = 0;
+		uint32_t codec_operations = 0;
+		bool timeline_semaphore_enabled = false;
+		bool synchronization_2_enabled = false;
+	};
+	bool get_vulkan_video_decode_device_info(VulkanVideoDecodeDeviceInfo &r_info) const;
+	void vulkan_video_decode_queue_lock(uint32_t p_queue_family, uint32_t p_queue_index);
+	void vulkan_video_decode_queue_unlock(uint32_t p_queue_family, uint32_t p_queue_index);
 
 	String get_driver_and_device_memory_report() const;
 

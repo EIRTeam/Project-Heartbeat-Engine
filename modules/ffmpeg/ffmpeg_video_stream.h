@@ -130,7 +130,26 @@ class FFmpegVideoStreamPlayback : public VideoStreamPlayback {
 	bool playing = false;
 	bool just_seeked = false;
 
+#ifndef GDEXTENSION
+	Callable playback_clock;
+	bool clock_initialized = false;
+	double last_clock_position = 0.0;
+	uint64_t last_clock_sample_usec = 0;
+	uint64_t last_clock_seek_usec = 0;
+	uint64_t clock_lag_since_usec = 0;
+	double clock_recovery_tolerance = 1.5;
+	uint64_t clock_seek_count = 0;
+	uint64_t dropped_frame_count = 0;
+	String last_clock_seek_reason;
+	String stop_reason;
+	bool _update_playback_clock();
+	void _seek_to_clock(const String &p_reason);
+	void _recover_clock_if_needed();
+#endif
+
 	Ref<YUVGPUConverter> yuv_converter;
+	// Opaque so this header has the same layout for other engine modules.
+	Ref<RefCounted> vulkan_converter;
 
 private:
 	bool is_paused_internal() const;
@@ -148,9 +167,18 @@ private:
 
 protected:
 	void clear();
-	static void _bind_methods() {}; // Required by GDExtension, do not remove
+	static void _bind_methods();
 
 public:
+#ifndef GDEXTENSION
+	// Main-thread callback returning the authoritative media time in seconds.
+	// Configure while stopped; empty Callable restores standalone playback.
+	void set_playback_clock(const Callable &p_clock);
+	Callable get_playback_clock() const;
+	void set_clock_recovery_tolerance(double p_seconds);
+	double get_clock_recovery_tolerance() const;
+	Dictionary get_playback_timing() const;
+#endif
 	Error load(Ref<FileAccess> p_file_access);
 
 	STREAM_FUNC_REDIRECT_0_CONST(bool, is_paused);
@@ -172,7 +200,13 @@ class FFmpegVideoStream : public VideoStream {
 	GDCLASS(FFmpegVideoStream, VideoStream);
 
 protected:
-	static void _bind_methods() {}; // Required by GDExtension, do not remove
+	static void _bind_methods() {
+#ifdef FFMPEG_GPU_TESTS_ENABLED
+		ClassDB::bind_static_method("FFmpegVideoStream", D_METHOD("test_vulkan_decode", "path"), &VideoDecoder::test_vulkan_decode);
+		ClassDB::bind_static_method("FFmpegVideoStream", D_METHOD("test_vulkan_output_stats", "texture"), &VideoDecoder::test_vulkan_output_stats, DEFVAL(RID()));
+		ClassDB::bind_static_method("FFmpegVideoStream", D_METHOD("test_vulkan_color_validation"), &VideoDecoder::test_vulkan_color_validation);
+#endif
+	}; // Required by GDExtension, do not remove
 	Ref<VideoStreamPlayback> instantiate_playback_internal() {
 		Ref<FileAccess> fa = FileAccess::open(get_file(), FileAccess::READ);
 		if (!fa.is_valid()) {
