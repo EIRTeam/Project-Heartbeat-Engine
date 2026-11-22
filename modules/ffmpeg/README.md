@@ -103,7 +103,7 @@ Timing diagnostics also include `decode_backend` and `decode_fallback_reason`.
 
 | Policy | Behavior |
 | --- | --- |
-| `DECODE_DEFAULT` | Preserve project settings: software with `video_decode_output=false`, strict GPU-only with it enabled. This remains the default. |
+| `DECODE_DEFAULT` | Use `multimedia/ffmpeg/default_decode_policy`. This remains the stream default. |
 | `DECODE_SOFTWARE_ONLY` | Software decoding, even if global GPU output is enabled. |
 | `DECODE_PREFER_GPU` | Explicitly request GPU output; recreate a software decoder if unavailable or if GPU decoding/conversion fails. |
 | `DECODE_REQUIRE_GPU` | Explicitly require GPU output; unsupported configurations fail without fallback. |
@@ -111,6 +111,25 @@ Timing diagnostics also include `decode_backend` and `decode_fallback_reason`.
 Explicit GPU policies still require `video_decode=true` **before device creation**
 and compatible FFmpeg/driver support. They do not require the global
 `video_decode_output` setting, since the per-stream policy opts into output.
+
+Set **Project Settings → Multimedia → FFmpeg → Default Decode Policy** to
+**Existing behavior**, **Software only**, **Prefer GPU**, or **Require GPU**.
+Existing behavior is the default and preserves the old `video_decode_output`
+behavior: software when disabled, strict GPU-only when enabled. The setting's
+integer values match the stream policy constants; explicit per-stream policies
+override it.
+
+The project default can change at runtime:
+
+```gdscript
+ProjectSettings.set_setting("multimedia/ffmpeg/default_decode_policy", FFmpegVideoStream.DECODE_PREFER_GPU)
+```
+
+Changes apply only to newly created playback instances, not active playback.
+Recreate playback (for example, clear and reassign the player's stream) to apply
+a change; stopping and playing alone does not recreate playback.
+`video_decode` still requires a restart because it controls Vulkan device
+capabilities. Keep it enabled at startup if runtime GPU selection is needed.
 
 Fallback never downloads GPU frames: it releases the old decoder, creates a
 fresh software decoder, and switches to the existing software rendering path.

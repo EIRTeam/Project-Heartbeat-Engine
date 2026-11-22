@@ -50,9 +50,40 @@ func _run() -> void:
 	var h264: String = args[0]
 	var unsupported: String = args[1]
 	var scenario: String = args[2]
+	var policy_setting := "multimedia/ffmpeg/default_decode_policy"
+	_check(ProjectSettings.has_setting(policy_setting), "project decode policy is not registered")
+	_check(int(ProjectSettings.get_setting(policy_setting)) == FFmpegVideoStream.DECODE_DEFAULT, "project default does not preserve existing behavior")
+	# Runtime changes affect new playback, not already instantiated playback.
+	ProjectSettings.set_setting(policy_setting, FFmpegVideoStream.DECODE_SOFTWARE_ONLY)
+	var default_player := _player(h264, FFmpegVideoStream.DECODE_DEFAULT)
+	default_player.play()
+	await _wait_backend(default_player, "software")
+	ProjectSettings.set_setting(policy_setting, FFmpegVideoStream.DECODE_REQUIRE_GPU)
+	default_player.stop()
+	default_player.play()
+	await _wait_backend(default_player, "software")
+	await _dispose(default_player)
+	# An explicit software policy overrides a strict GPU project default.
+	default_player = _player(h264, FFmpegVideoStream.DECODE_SOFTWARE_ONLY)
+	default_player.play()
+	await _wait_backend(default_player, "software")
+	await _dispose(default_player)
+	# Newly created default playback picks up Prefer GPU, including fallback.
+	ProjectSettings.set_setting(policy_setting, FFmpegVideoStream.DECODE_PREFER_GPU)
+	default_player = _player(unsupported, FFmpegVideoStream.DECODE_DEFAULT)
+	default_player.play()
+	await _wait_backend(default_player, "software")
+	_check(not str(default_player.get_stream_playback().call("get_decode_fallback_reason")).is_empty(), "project Prefer GPU did not report fallback")
+	await _dispose(default_player)
+	ProjectSettings.set_setting(policy_setting, FFmpegVideoStream.DECODE_DEFAULT)
 	if scenario.begins_with("strict"):
-		for policy in [FFmpegVideoStream.DECODE_REQUIRE_GPU, FFmpegVideoStream.DECODE_DEFAULT]:
-			var player := _player(unsupported, policy)
+		for policies in [
+			[FFmpegVideoStream.DECODE_REQUIRE_GPU, FFmpegVideoStream.DECODE_DEFAULT],
+			[FFmpegVideoStream.DECODE_DEFAULT, FFmpegVideoStream.DECODE_DEFAULT],
+			[FFmpegVideoStream.DECODE_DEFAULT, FFmpegVideoStream.DECODE_REQUIRE_GPU],
+		]:
+			ProjectSettings.set_setting(policy_setting, policies[1])
+			var player := _player(unsupported, policies[0])
 			_check(player.get_stream_playback() == null, "strict policy silently fell back")
 			player.queue_free()
 	elif scenario == "software_device" or scenario == "compiled_out":
@@ -84,7 +115,9 @@ func _run() -> void:
 		player.play()
 		await _wait_backend(player, "software")
 		await _dispose(player)
-		# An explicit policy opts into output even without the global output flag.
+		# An explicit policy overrides a software project default and opts into
+		# output even without the global output flag.
+		ProjectSettings.set_setting(policy_setting, FFmpegVideoStream.DECODE_SOFTWARE_ONLY)
 		player = _player(h264, FFmpegVideoStream.DECODE_PREFER_GPU)
 		var playback := player.get_stream_playback()
 		playback.call("set_playback_clock", _music_time)
@@ -104,6 +137,18 @@ func _run() -> void:
 			else:
 				_check(false, "runtime fallback test requires ffmpeg_gpu_tests=yes")
 		await _dispose(player)
+		# A project GPU policy also opts into output. Changing the default while
+		# it is active must not disable its runtime software recovery.
+		ProjectSettings.set_setting(policy_setting, FFmpegVideoStream.DECODE_PREFER_GPU)
+		player = _player(h264, FFmpegVideoStream.DECODE_DEFAULT)
+		player.play()
+		if await _wait_backend(player, "vulkan"):
+			ProjectSettings.set_setting(policy_setting, FFmpegVideoStream.DECODE_REQUIRE_GPU)
+			player.get_stream_playback().call("test_force_gpu_failure")
+			await _wait_backend(player, "software")
+			_check(not str(player.get_stream_playback().call("get_decode_fallback_reason")).is_empty(), "project policy runtime fallback reason missing")
+		await _dispose(player)
+		ProjectSettings.set_setting(policy_setting, FFmpegVideoStream.DECODE_DEFAULT)
 		# Standalone playback also hands embedded audio to a fresh resampler
 		# and continues its timeline instead of restarting from zero.
 		player = _player(h264, FFmpegVideoStream.DECODE_PREFER_GPU)

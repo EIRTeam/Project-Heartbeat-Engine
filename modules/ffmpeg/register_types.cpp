@@ -34,6 +34,7 @@
 #include "gdextension_build/gdex_print.h"
 #include <godot_cpp/classes/resource_loader.hpp>
 #else
+#include "core/config/project_settings.h"
 #include "core/object/class_db.h"
 #include "core/string/print_string.h"
 #include "ffmpeg_stream_info.h"
@@ -84,6 +85,10 @@ void initialize_ffmpeg_module(ModuleInitializationLevel p_level) {
 		return;
 	}
 	print_codecs();
+
+#ifndef GDEXTENSION
+	GLOBAL_DEF_BASIC(PropertyInfo(Variant::INT, "multimedia/ffmpeg/default_decode_policy", PROPERTY_HINT_ENUM, "Existing behavior,Software only,Prefer GPU,Require GPU"), VideoDecoder::DECODE_DEFAULT);
+#endif
 
 #if defined(ENABLE_STREAM_INFO) && !defined(GDEXTENSION)
 	GDREGISTER_CLASS(FFmpegStreamInfo);

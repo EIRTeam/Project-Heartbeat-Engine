@@ -61,7 +61,7 @@ def main():
             and f"DECODE_POLICY_TEST scenario={scenario} result=PASS" in records
             and not errors
             and not re.search(r"VUID-|SYNC-HAZARD|Validation Error|result=FAIL", output)
-            and (not scenario.startswith("strict") or expected_strict_errors == 2)
+            and (not scenario.startswith("strict") or expected_strict_errors == 3)
             and (not validate or re.search(r'Insert(?:ed device| instance) layer "VK_LAYER_KHRONOS_validation"', output))
         )
         print(f"{scenario}: {'PASS' if passed else 'FAIL'} (see {args.logs / (scenario + '.log')})")

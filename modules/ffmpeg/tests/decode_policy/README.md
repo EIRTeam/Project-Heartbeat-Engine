@@ -18,10 +18,14 @@ The runner checks:
 - Explicit software-only decoding on a GPU-capable device, with no fallback reason.
 - Unsupported-codec fallback with a nonempty reason.
 - Project-default software behavior when global GPU output is disabled.
+- Runtime project-default changes for new playback, with existing playback
+  retaining its policy across stop/play.
+- Explicit stream overrides of software and strict GPU project defaults.
+- Project Prefer GPU initialization/runtime fallback and project Require GPU rejection.
 - H.264 Vulkan backend reporting, not just GPU texture/conversion detection.
 - Simulated GPU conversion failure, software restart at the current music-clock
   time, continued playback, and replacement of the player's cached GPU texture.
-- Strict/default rejection of unsupported GPU codecs (only those two expected
+- Strict/default rejection of unsupported GPU codecs (only those three expected
   engine errors are allowed in the strict test).
 - Software fallback when no RenderingDevice exists, using OpenGL, including
   stop/play of RGBA software output.

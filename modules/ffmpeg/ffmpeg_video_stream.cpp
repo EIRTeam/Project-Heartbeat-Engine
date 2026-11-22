@@ -84,10 +84,11 @@ RDTextureFormatC tfc_from_rdtf(Ref<RDTextureFormat> p_texture_format) {
 typedef int64_t ComputeListID;
 #define TEXTURE_FORMAT_COMPAT(tf) tfc_from_rdtf(tf);
 #else
+#include "core/config/project_settings.h"
+#include "core/object/callable_mp.h"
 #include "core/os/os.h"
 #include "servers/rendering/rendering_device_binds.h"
 #include "servers/rendering/rendering_server.h"
-#include "core/object/callable_mp.h"
 typedef RD::TextureFormat RDTextureFormatC;
 typedef RD::TextureView RDTextureViewC;
 #define TEXTURE_FORMAT_COMPAT(tf) tf;
@@ -534,6 +535,14 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 
 Error FFmpegVideoStreamPlayback::load(Ref<FileAccess> p_file_access, VideoDecoder::DecodePolicy p_policy) {
 #ifndef GDEXTENSION
+	if (p_policy == VideoDecoder::DECODE_DEFAULT) {
+		const int project_policy = GLOBAL_GET("multimedia/ffmpeg/default_decode_policy");
+		if (project_policy >= VideoDecoder::DECODE_DEFAULT && project_policy <= VideoDecoder::DECODE_REQUIRE_GPU) {
+			p_policy = VideoDecoder::DecodePolicy(project_policy);
+		} else {
+			WARN_PRINT("Invalid FFmpeg default decode policy; preserving existing behavior.");
+		}
+	}
 	source_file = p_file_access;
 	decode_policy = p_policy;
 #endif
