@@ -24,6 +24,12 @@
 				Returns the video stream's name, or [code]"&lt;No Stream&gt;"[/code] if no video stream is assigned.
 			</description>
 		</method>
+		<method name="get_stream_playback" qualifiers="const">
+			<return type="VideoStreamPlayback" />
+			<description>
+				Returns the active playback instance, or [code]null[/code] if no stream is loaded. Stream-specific playback controls, such as an FFmpeg external music clock, can be configured on this instance before calling [method play]. Replacing [member stream] creates a new playback instance.
+			</description>
+		</method>
 		<method name="get_video_texture" qualifiers="const">
 			<return type="Texture2D" />
 			<description>

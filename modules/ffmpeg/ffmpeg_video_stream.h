@@ -130,7 +130,30 @@ class FFmpegVideoStreamPlayback : public VideoStreamPlayback {
 	bool playing = false;
 	bool just_seeked = false;
 
+#ifndef GDEXTENSION
+	Callable playback_clock;
+	bool clock_initialized = false;
+	double last_clock_position = 0.0;
+	uint64_t last_clock_sample_usec = 0;
+	uint64_t last_clock_seek_usec = 0;
+	uint64_t clock_lag_since_usec = 0;
+	double clock_recovery_tolerance = 1.5;
+	uint64_t clock_seek_count = 0;
+	uint64_t dropped_frame_count = 0;
+	String last_clock_seek_reason;
+	String stop_reason;
+	VideoDecoder::DecodePolicy decode_policy = VideoDecoder::DECODE_DEFAULT;
+	Ref<FileAccess> source_file;
+	String decode_fallback_reason;
+	bool _fallback_to_software(const String &p_reason);
+	bool _update_playback_clock();
+	void _seek_to_clock(const String &p_reason);
+	void _recover_clock_if_needed();
+#endif
+
 	Ref<YUVGPUConverter> yuv_converter;
+	// Opaque so this header has the same layout for other engine modules.
+	Ref<RefCounted> vulkan_converter;
 
 private:
 	bool is_paused_internal() const;
@@ -140,6 +163,7 @@ private:
 	void play_internal();
 	void stop_internal();
 	void seek_internal(double p_time);
+	void _initialize_output();
 	double get_length_internal() const;
 	Ref<Texture2D> get_texture_internal() const;
 	double get_playback_position_internal() const;
@@ -148,10 +172,25 @@ private:
 
 protected:
 	void clear();
-	static void _bind_methods() {}; // Required by GDExtension, do not remove
+	static void _bind_methods();
 
 public:
-	Error load(Ref<FileAccess> p_file_access);
+#ifndef GDEXTENSION
+	// Main-thread callback returning the authoritative media time in seconds.
+	// Configure while stopped; empty Callable restores standalone playback.
+	void set_playback_clock(const Callable &p_clock);
+	Callable get_playback_clock() const;
+	void set_clock_recovery_tolerance(double p_seconds);
+	double get_clock_recovery_tolerance() const;
+	Dictionary get_playback_timing() const;
+	String get_decode_backend() const;
+	bool is_using_gpu_decoding() const;
+	String get_decode_fallback_reason() const;
+#ifdef FFMPEG_GPU_TESTS_ENABLED
+	void test_force_gpu_failure();
+#endif
+#endif
+	Error load(Ref<FileAccess> p_file_access, VideoDecoder::DecodePolicy p_policy = VideoDecoder::DECODE_DEFAULT);
 
 	STREAM_FUNC_REDIRECT_0_CONST(bool, is_paused);
 	STREAM_FUNC_REDIRECT_1(void, update, double, p_delta);
@@ -171,8 +210,25 @@ public:
 class FFmpegVideoStream : public VideoStream {
 	GDCLASS(FFmpegVideoStream, VideoStream);
 
+	VideoDecoder::DecodePolicy decode_policy = VideoDecoder::DECODE_DEFAULT;
+
 protected:
-	static void _bind_methods() {}; // Required by GDExtension, do not remove
+	static void _bind_methods() {
+#ifndef GDEXTENSION
+		ClassDB::bind_method(D_METHOD("set_decode_policy", "policy"), &FFmpegVideoStream::set_decode_policy);
+		ClassDB::bind_method(D_METHOD("get_decode_policy"), &FFmpegVideoStream::get_decode_policy);
+		ADD_PROPERTY(PropertyInfo(Variant::INT, "decode_policy", PROPERTY_HINT_ENUM, "Project default,Software only,Prefer GPU,Require GPU"), "set_decode_policy", "get_decode_policy");
+		ClassDB::bind_integer_constant(get_class_static(), StringName(), "DECODE_DEFAULT", VideoDecoder::DECODE_DEFAULT);
+		ClassDB::bind_integer_constant(get_class_static(), StringName(), "DECODE_SOFTWARE_ONLY", VideoDecoder::DECODE_SOFTWARE_ONLY);
+		ClassDB::bind_integer_constant(get_class_static(), StringName(), "DECODE_PREFER_GPU", VideoDecoder::DECODE_PREFER_GPU);
+		ClassDB::bind_integer_constant(get_class_static(), StringName(), "DECODE_REQUIRE_GPU", VideoDecoder::DECODE_REQUIRE_GPU);
+#endif
+#ifdef FFMPEG_GPU_TESTS_ENABLED
+		ClassDB::bind_static_method("FFmpegVideoStream", D_METHOD("test_vulkan_decode", "path"), &VideoDecoder::test_vulkan_decode);
+		ClassDB::bind_static_method("FFmpegVideoStream", D_METHOD("test_vulkan_output_stats", "texture"), &VideoDecoder::test_vulkan_output_stats, DEFVAL(RID()));
+		ClassDB::bind_static_method("FFmpegVideoStream", D_METHOD("test_vulkan_color_validation"), &VideoDecoder::test_vulkan_color_validation);
+#endif
+	}; // Required by GDExtension, do not remove
 	Ref<VideoStreamPlayback> instantiate_playback_internal() {
 		Ref<FileAccess> fa = FileAccess::open(get_file(), FileAccess::READ);
 		if (!fa.is_valid()) {
@@ -180,13 +236,18 @@ protected:
 		}
 		Ref<FFmpegVideoStreamPlayback> pb;
 		pb.instantiate();
-		if (pb->load(fa) != OK) {
+		if (pb->load(fa, decode_policy) != OK) {
 			return nullptr;
 		}
 		return pb;
 	}
 
 public:
+	void set_decode_policy(int p_policy) {
+		ERR_FAIL_COND(p_policy < VideoDecoder::DECODE_DEFAULT || p_policy > VideoDecoder::DECODE_REQUIRE_GPU);
+		decode_policy = VideoDecoder::DecodePolicy(p_policy);
+	}
+	int get_decode_policy() const { return decode_policy; }
 	STREAM_FUNC_REDIRECT_0(Ref<VideoStreamPlayback>, instantiate_playback);
 };
 

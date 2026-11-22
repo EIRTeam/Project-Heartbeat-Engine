@@ -1235,6 +1235,12 @@ Error RenderingDevice::driver_callback_add(RDD::DriverCallback p_callback, void 
 	return OK;
 }
 
+void RenderingDevice::retain_until_frame_complete(const Ref<RefCounted> &p_resource) {
+	ERR_RENDER_THREAD_GUARD();
+	frames[frame].retained_resources.push_back(p_resource);
+	frames_pending_resources_for_processing = frames.size();
+}
+
 String RenderingDevice::get_perf_report() const {
 	String perf_report_text;
 	perf_report_text += " gpu:" + String::num_int64(gpu_copy_count);
@@ -8029,6 +8035,14 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 	if (frames_pending_resources_for_processing > 0u) {
 		--frames_pending_resources_for_processing;
 	}
+	// External owners can free RD textures still sampled by *newer* frames.
+	// Release them only after this disposal pass, so newly enqueued frees
+	// receive a full frame-delay cycle instead of being destroyed immediately.
+	Vector<Ref<RefCounted>> completed_resources;
+	SWAP(completed_resources, frames[p_frame].retained_resources);
+	if (!completed_resources.is_empty()) {
+		frames_pending_resources_for_processing = frames.size();
+	}
 }
 
 uint32_t RenderingDevice::get_frame_delay() const {
@@ -8727,6 +8741,9 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 		case DRIVER_RESOURCE_LOGICAL_DEVICE:
 		case DRIVER_RESOURCE_PHYSICAL_DEVICE:
 		case DRIVER_RESOURCE_TOPMOST_OBJECT:
+		case DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_QUEUE:
+		case DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_QUEUE_FAMILY:
+		case DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_CODEC_OPS:
 			break;
 		case DRIVER_RESOURCE_COMMAND_QUEUE:
 			driver_id = main_queue.id;
@@ -8789,6 +8806,32 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 	}
 
 	return driver->get_resource_native_handle(p_resource, driver_id);
+}
+
+bool RenderingDevice::get_vulkan_video_decode_device_info(VulkanVideoDecodeDeviceInfo &r_info) const {
+	r_info = {};
+	r_info.instance = driver->get_resource_native_handle(DRIVER_RESOURCE_TOPMOST_OBJECT, RDD::ID());
+	r_info.physical_device = driver->get_resource_native_handle(DRIVER_RESOURCE_PHYSICAL_DEVICE, RDD::ID());
+	r_info.logical_device = driver->get_resource_native_handle(DRIVER_RESOURCE_LOGICAL_DEVICE, RDD::ID());
+	r_info.decode_queue = driver->get_resource_native_handle(DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_QUEUE, RDD::ID());
+	r_info.decode_queue_family = driver->get_resource_native_handle(DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_QUEUE_FAMILY, RDD::ID());
+	r_info.auxiliary_queue = driver->get_resource_native_handle(DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_AUX_QUEUE, RDD::ID());
+	r_info.auxiliary_queue_family = driver->get_resource_native_handle(DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_AUX_QUEUE_FAMILY, RDD::ID());
+	r_info.rendering_queue_family = driver->get_resource_native_handle(DRIVER_RESOURCE_QUEUE_FAMILY, main_queue_family);
+	r_info.codec_operations = driver->get_resource_native_handle(DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_CODEC_OPS, RDD::ID());
+	r_info.timeline_semaphore_enabled = driver->get_resource_native_handle(DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_TIMELINE_SEMAPHORE, RDD::ID());
+	r_info.synchronization_2_enabled = driver->get_resource_native_handle(DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_SYNCHRONIZATION_2, RDD::ID());
+	return r_info.instance != 0 && r_info.physical_device != 0 && r_info.logical_device != 0 &&
+			r_info.decode_queue != 0 && r_info.auxiliary_queue != 0 && r_info.codec_operations != 0 &&
+			r_info.timeline_semaphore_enabled && r_info.synchronization_2_enabled;
+}
+
+void RenderingDevice::vulkan_video_decode_queue_lock(uint32_t p_queue_family, uint32_t p_queue_index) {
+	driver->video_decode_queue_lock(p_queue_family, p_queue_index);
+}
+
+void RenderingDevice::vulkan_video_decode_queue_unlock(uint32_t p_queue_family, uint32_t p_queue_index) {
+	driver->video_decode_queue_unlock(p_queue_family, p_queue_index);
 }
 
 String RenderingDevice::get_driver_and_device_memory_report() const {
@@ -8866,6 +8909,28 @@ uint64_t RenderingDevice::limit_get(Limit p_limit) const {
 	return driver->limit_get(p_limit);
 }
 
+void RenderingDevice::drain_retained_resources() {
+	ERR_RENDER_THREAD_GUARD();
+
+	bool has_retained_resources = false;
+	for (const Frame &pending_frame : frames) {
+		has_retained_resources |= !pending_frame.retained_resources.is_empty();
+	}
+	if (!has_retained_resources) {
+		return;
+	}
+
+	// Owners may use RenderingServer during destruction. Drain them before
+	// the server's texture storage is torn down, not just at RD finalization.
+	_flush_and_stall_for_all_frames(false);
+	for (Frame &finished_frame : frames) {
+		Vector<Ref<RefCounted>> completed_resources;
+		SWAP(completed_resources, finished_frame.retained_resources);
+		completed_resources.clear();
+	}
+	_begin_frame();
+}
+
 void RenderingDevice::finalize() {
 	ERR_RENDER_THREAD_GUARD();
 
@@ -8877,6 +8942,12 @@ void RenderingDevice::finalize() {
 	// Wait for transfer workers to finish.
 	_submit_transfer_workers();
 	_wait_for_transfer_workers();
+
+	// Release external GPU owners while the device and its RID owners are
+	// still valid. Their destructors may enqueue ordinary RD resource frees.
+	for (Frame &finished_frame : frames) {
+		finished_frame.retained_resources.clear();
+	}
 
 	// Delete everything the graph has created.
 	draw_graph.finalize();
@@ -9267,6 +9338,9 @@ void RenderingDevice::_bind_methods() {
 	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_BUFFER);
 	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_COMPUTE_PIPELINE);
 	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_RENDER_PIPELINE);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_QUEUE);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_QUEUE_FAMILY);
+	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_VIDEO_DECODE_CODEC_OPS);
 #ifndef DISABLE_DEPRECATED
 	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_DEVICE);
 	BIND_ENUM_CONSTANT(DRIVER_RESOURCE_VULKAN_PHYSICAL_DEVICE);

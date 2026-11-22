@@ -28,6 +28,10 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#if defined(FFMPEG_GPU_DECODE_ENABLED) && !defined(GDEXTENSION)
+#include "drivers/vulkan/godot_vulkan.h"
+#endif
+
 #include "video_decoder.h"
 #include "ffmpeg_frame.h"
 
@@ -36,6 +40,10 @@ extern "C" {
 #include "libavcodec/codec.h"
 #include "libavcodec/codec_id.h"
 #include "libavformat/avformat.h"
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+#include "libavutil/hwcontext.h"
+#include "libavutil/hwcontext_vulkan.h"
+#endif
 #include "libswresample/swresample.h"
 #include "libswscale/swscale.h"
 }
@@ -49,9 +57,15 @@ extern "C" {
 #include "gdextension_build/gdex_print.h"
 #include <godot_cpp/classes/rendering_server.hpp>
 #else
+#include "core/config/project_settings.h"
 #include "servers/rendering/rendering_server.h"
 #include "core/object/callable_mp.h"
 #include "core/os/os.h"
+#endif
+
+#if defined(FFMPEG_GPU_DECODE_ENABLED) && !defined(GDEXTENSION)
+#include "servers/rendering/rendering_device.h"
+#include "vulkan_video_converter.h"
 #endif
 
 extern "C" {
@@ -60,6 +74,309 @@ extern "C" {
 }
 
 const int MAX_PENDING_FRAMES = 3;
+
+#if defined(FFMPEG_GPU_DECODE_ENABLED) && !defined(GDEXTENSION)
+static void _ffmpeg_vulkan_queue_lock(AVHWDeviceContext *p_device_context, uint32_t p_queue_family, uint32_t p_queue_index) {
+	RenderingDevice *rd = static_cast<RenderingDevice *>(p_device_context->user_opaque);
+	if (rd != nullptr) {
+		rd->vulkan_video_decode_queue_lock(p_queue_family, p_queue_index);
+	}
+}
+
+static void _ffmpeg_vulkan_queue_unlock(AVHWDeviceContext *p_device_context, uint32_t p_queue_family, uint32_t p_queue_index) {
+	RenderingDevice *rd = static_cast<RenderingDevice *>(p_device_context->user_opaque);
+	if (rd != nullptr) {
+		rd->vulkan_video_decode_queue_unlock(p_queue_family, p_queue_index);
+	}
+}
+
+bool VideoDecoder::_initialize_vulkan_device_context(int p_codec_id) {
+#if !FF_API_VULKAN_SYNC_QUEUES
+	print_verbose("FFmpeg Vulkan bridge requires caller-provided queue locking; this FFmpeg API cannot safely share the reserved queues.");
+	return false;
+#endif
+	if (p_codec_id != AV_CODEC_ID_H264 && p_codec_id != AV_CODEC_ID_HEVC) {
+		print_verbose(vformat("FFmpeg Vulkan bridge skipped unsupported codec ID %d.", p_codec_id));
+		return false;
+	}
+
+	RenderingServer *rendering_server = RenderingServer::get_singleton();
+	if (rendering_server == nullptr) {
+		print_verbose("FFmpeg Vulkan bridge unavailable: RenderingServer is not initialized.");
+		return false;
+	}
+	RenderingDevice *rd = rendering_server->get_rendering_device();
+	if (rd == nullptr) {
+		print_verbose("FFmpeg Vulkan bridge unavailable: no Vulkan RenderingDevice is active.");
+		return false;
+	}
+
+	RenderingDevice::VulkanVideoDecodeDeviceInfo device_info;
+	if (!rd->get_vulkan_video_decode_device_info(device_info)) {
+		print_verbose("FFmpeg Vulkan bridge unavailable: the RenderingDevice has no dedicated Vulkan decode queue with required synchronization support.");
+		return false;
+	}
+
+	const VkVideoCodecOperationFlagBitsKHR codec_operation = p_codec_id == AV_CODEC_ID_H264 ?
+			VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR :
+			VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR;
+	if ((device_info.codec_operations & codec_operation) == 0) {
+		print_verbose(vformat("FFmpeg Vulkan bridge unavailable: codec %s is not supported by the reserved decode queue.",
+				avcodec_get_name(static_cast<AVCodecID>(p_codec_id))));
+		return false;
+	}
+
+	av_buffer_unref(&vulkan_device_context);
+	vulkan_device_context = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_VULKAN);
+	if (vulkan_device_context == nullptr) {
+		print_verbose("FFmpeg Vulkan bridge unavailable: av_hwdevice_ctx_alloc() failed.");
+		return false;
+	}
+
+	AVHWDeviceContext *device_context = reinterpret_cast<AVHWDeviceContext *>(vulkan_device_context->data);
+	AVVulkanDeviceContext *vulkan_context = static_cast<AVVulkanDeviceContext *>(device_context->hwctx);
+	// FFmpeg's external-device init requires a loader callback; it only loads
+	// libvulkan itself when it is also creating the Vulkan device.
+	vulkan_context->get_proc_addr = vkGetInstanceProcAddr;
+	vulkan_context->inst = reinterpret_cast<VkInstance>(device_info.instance);
+	vulkan_context->phys_dev = reinterpret_cast<VkPhysicalDevice>(device_info.physical_device);
+	vulkan_context->act_dev = reinterpret_cast<VkDevice>(device_info.logical_device);
+	vulkan_context->device_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+	static VkPhysicalDeviceVulkan13Features enabled_vulkan_1_3_features = [] {
+		VkPhysicalDeviceVulkan13Features features = {};
+		features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+		features.synchronization2 = VK_TRUE;
+		return features;
+	}();
+	static VkPhysicalDeviceVulkan12Features enabled_vulkan_1_2_features = [] {
+		VkPhysicalDeviceVulkan12Features features = {};
+		features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+		features.pNext = &enabled_vulkan_1_3_features;
+		features.timelineSemaphore = VK_TRUE;
+		return features;
+	}();
+	vulkan_context->device_features.pNext = &enabled_vulkan_1_2_features;
+
+	static const char *const h264_extensions[] = {
+		VK_KHR_VIDEO_QUEUE_EXTENSION_NAME,
+		VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME,
+		VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME,
+	};
+	static const char *const h265_extensions[] = {
+		VK_KHR_VIDEO_QUEUE_EXTENSION_NAME,
+		VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME,
+		VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME,
+	};
+	if (p_codec_id == AV_CODEC_ID_H264) {
+		vulkan_context->enabled_dev_extensions = h264_extensions;
+		vulkan_context->nb_enabled_dev_extensions = std::size(h264_extensions);
+	} else {
+		vulkan_context->enabled_dev_extensions = h265_extensions;
+		vulkan_context->nb_enabled_dev_extensions = std::size(h265_extensions);
+	}
+
+	vulkan_context->qf[0].idx = device_info.decode_queue_family;
+	vulkan_context->qf[0].num = 1;
+	vulkan_context->qf[0].flags = VK_QUEUE_VIDEO_DECODE_BIT_KHR;
+	vulkan_context->qf[0].video_caps = codec_operation;
+	vulkan_context->qf[1].idx = device_info.auxiliary_queue_family;
+	vulkan_context->qf[1].num = 1;
+	vulkan_context->qf[1].flags = static_cast<VkQueueFlagBits>(VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT);
+	// Include the renderer family in concurrent image sharing, but don't
+	// offer its queues for FFmpeg compute/transfer submissions.
+	vulkan_context->qf[2].idx = device_info.rendering_queue_family;
+	vulkan_context->qf[2].num = 1;
+	vulkan_context->qf[2].flags = VK_QUEUE_GRAPHICS_BIT;
+	vulkan_context->nb_qf = 3;
+
+	device_context->user_opaque = rd;
+#if FF_API_VULKAN_SYNC_QUEUES
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#else
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+	vulkan_context->lock_queue = _ffmpeg_vulkan_queue_lock;
+	vulkan_context->unlock_queue = _ffmpeg_vulkan_queue_unlock;
+#ifdef _MSC_VER
+#pragma warning(pop)
+#else
+#pragma GCC diagnostic pop
+#endif
+#endif
+
+	const int init_result = av_hwdevice_ctx_init(vulkan_device_context);
+	if (init_result < 0) {
+		print_verbose(vformat("FFmpeg Vulkan bridge initialization failed: %s", ffmpeg_get_error_message(init_result)));
+		av_buffer_unref(&vulkan_device_context);
+		return false;
+	}
+	return true;
+}
+
+#endif
+
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+static AVPixelFormat _vulkan_only_format(AVCodecContext *, const AVPixelFormat *p_formats) {
+	for (; *p_formats != AV_PIX_FMT_NONE; p_formats++) {
+		if (*p_formats == AV_PIX_FMT_VULKAN) {
+			return *p_formats;
+		}
+	}
+	return AV_PIX_FMT_NONE; // Never let failed hardware initialization retry in software.
+}
+#endif
+
+#ifdef FFMPEG_GPU_TESTS_ENABLED
+void VideoDecoder::test_vulkan_color_validation() {
+	VulkanVideoConverter::enable_color_validation();
+}
+
+Dictionary VideoDecoder::test_vulkan_output_stats(RID p_texture) {
+	return VulkanVideoConverter::get_statistics(p_texture);
+}
+
+Error VideoDecoder::test_vulkan_decode(const String &p_path) {
+	if (!GLOBAL_GET("rendering/rendering_device/vulkan/video_decode").operator bool()) {
+		return ERR_UNAVAILABLE;
+	}
+	// Import on the caller thread before launching workers. Both workers join
+	// before their decoders (and all device/frame references) are destroyed.
+	Ref<VideoDecoder> decoders[2];
+	for (int i = 0; i < 2; i++) {
+		Ref<FileAccess> file = FileAccess::open(p_path, FileAccess::READ);
+		if (file.is_null()) {
+			return ERR_CANT_OPEN;
+		}
+		decoders[i] = memnew(VideoDecoder(file));
+		VideoDecoder *decoder = decoders[i].ptr();
+		// Use container metadata only: find_stream_info may invoke a software
+		// decoder to probe frames before the Vulkan-only codec is installed.
+		decoder->prepare_decoding(false);
+		if (!decoder->video_stream || !decoder->_initialize_vulkan_device_context(decoder->video_stream->codecpar->codec_id)) {
+			return ERR_UNAVAILABLE;
+		}
+		const AVCodec *codec = avcodec_find_decoder(decoder->video_stream->codecpar->codec_id);
+		if (!codec) {
+			return ERR_UNAVAILABLE;
+		}
+		decoder->video_codec_context = avcodec_alloc_context3(codec);
+		AVCodecContext *context = decoder->video_codec_context;
+		if (!context || avcodec_parameters_to_context(context, decoder->video_stream->codecpar) < 0) {
+			return FAILED;
+		}
+		context->hw_device_ctx = av_buffer_ref(decoder->vulkan_device_context);
+		context->get_format = _vulkan_only_format;
+		context->thread_count = 1;
+		if (!context->hw_device_ctx || avcodec_open2(context, codec, nullptr) < 0) {
+			return FAILED;
+		}
+	}
+
+	Error results[2] = { FAILED, FAILED };
+	auto run = [&](int p_index) {
+		VideoDecoder *decoder = decoders[p_index].ptr();
+		AVCodecContext *context = decoder->video_codec_context;
+		AVHWDeviceContext *device = reinterpret_cast<AVHWDeviceContext *>(decoder->vulkan_device_context->data);
+		AVVulkanDeviceContext *vk = static_cast<AVVulkanDeviceContext *>(device->hwctx);
+		PFN_vkWaitSemaphores wait_semaphores = reinterpret_cast<PFN_vkWaitSemaphores>(
+				vk->get_proc_addr(vk->inst, "vkWaitSemaphores"));
+		AVPacket *packet = av_packet_alloc();
+		AVFrame *frame = av_frame_alloc();
+		AVFrame *retained[4] = {};
+		int frame_count = 0;
+		bool valid = packet && frame && wait_semaphores;
+		auto receive = [&]() {
+			int result;
+			while ((result = avcodec_receive_frame(context, frame)) >= 0) {
+				if (frame->format != AV_PIX_FMT_VULKAN || !frame->hw_frames_ctx || !frame->data[0]) {
+					return AVERROR(EINVAL);
+				}
+				AVHWFramesContext *frames = reinterpret_cast<AVHWFramesContext *>(frame->hw_frames_ctx->data);
+				AVVulkanFramesContext *frames_vk = static_cast<AVVulkanFramesContext *>(frames->hwctx);
+				AVVkFrame *gpu = reinterpret_cast<AVVkFrame *>(frame->data[0]);
+				// Read metadata only; no mapping, download, swscale or CPU pixels.
+				VkSemaphore semaphores[AV_NUM_DATA_POINTERS] = {};
+				uint64_t values[AV_NUM_DATA_POINTERS] = {};
+				frames_vk->lock_frame(frames, gpu);
+				bool complete = gpu->img[0] != VK_NULL_HANDLE && gpu->sem[0] != VK_NULL_HANDLE;
+				for (int plane = 0; plane < AV_NUM_DATA_POINTERS; plane++) {
+					semaphores[plane] = gpu->sem[plane];
+					values[plane] = gpu->sem_value[plane];
+				}
+				frames_vk->unlock_frame(frames, gpu);
+				// The retained frame keeps the semaphore alive. Do not hold its
+				// metadata lock while waiting for work already submitted.
+				for (int plane = 0; complete && plane < AV_NUM_DATA_POINTERS && semaphores[plane]; plane++) {
+					VkSemaphoreWaitInfo wait = {};
+					wait.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
+					wait.semaphoreCount = 1;
+					wait.pSemaphores = &semaphores[plane];
+					wait.pValues = &values[plane];
+					complete = wait_semaphores(vk->act_dev, &wait, 5000000000ULL) == VK_SUCCESS;
+				}
+				if (!complete) {
+					return AVERROR(EIO);
+				}
+				int slot = frame_count % 4;
+				av_frame_free(&retained[slot]);
+				retained[slot] = av_frame_clone(frame);
+				if (!retained[slot]) {
+					return AVERROR(ENOMEM);
+				}
+				frame_count++;
+				av_frame_unref(frame);
+			}
+			return result;
+		};
+		for (int pass = 0; valid && pass < 3; pass++) {
+			int start_count = frame_count;
+			int read = 0;
+			int packets = 0;
+			while (valid && (read = av_read_frame(decoder->format_context, packet)) >= 0) {
+				if (++packets > 100000) {
+					valid = false;
+				} else if (packet->stream_index == decoder->video_stream->index) {
+					int sent = avcodec_send_packet(context, packet);
+					int received = receive();
+					valid = sent >= 0 && (received == AVERROR(EAGAIN) || received == AVERROR_EOF);
+				}
+				av_packet_unref(packet);
+				if (pass == 2 && frame_count > start_count) {
+					break; // Stop mid-stream without draining, then destroy the codec.
+				}
+			}
+			if (pass == 2) {
+				valid = valid && frame_count > start_count;
+			} else if (valid && read == AVERROR_EOF) {
+				int sent = avcodec_send_packet(context, nullptr);
+				int received = receive();
+				valid = sent >= 0 && received == AVERROR_EOF && frame_count > start_count;
+			} else {
+				valid = false;
+			}
+			if (valid && pass < 2) {
+				avcodec_flush_buffers(context);
+				valid = av_seek_frame(decoder->format_context, decoder->video_stream->index, 0, AVSEEK_FLAG_BACKWARD) >= 0;
+			}
+		}
+		for (AVFrame *&held : retained) {
+			av_frame_free(&held);
+		}
+		av_frame_free(&frame);
+		av_packet_free(&packet);
+		results[p_index] = valid ? OK : FAILED;
+		print_line(vformat("VULKAN_DECODE_TEST decoder=%d frames=%d result=%s", p_index, frame_count, valid ? "PASS" : "FAIL"));
+	};
+	std::thread first(run, 0);
+	std::thread second(run, 1);
+	first.join();
+	second.join();
+	return results[0] == OK && results[1] == OK ? OK : FAILED;
+}
+#endif
 
 bool is_hardware_pixel_format(AVPixelFormat p_fmt) {
 	switch (p_fmt) {
@@ -113,7 +430,7 @@ int64_t VideoDecoder::_stream_seek_callback(void *p_opaque, int64_t p_offset, in
 	return decoder->video_file->get_position();
 }
 
-void VideoDecoder::prepare_decoding() {
+void VideoDecoder::prepare_decoding(bool p_probe_stream_info) {
 	if (io_context) {
 		avio_seek(io_context, 0, SEEK_SET);
 	} else {
@@ -139,8 +456,10 @@ void VideoDecoder::prepare_decoding() {
 
 	AVCodec *codec = nullptr;
 
-	int find_stream_info_result = avformat_find_stream_info(format_context, nullptr);
-	ERR_FAIL_COND_MSG(find_stream_info_result < 0, vformat("Error finding stream info: %s", ffmpeg_get_error_message(find_stream_info_result)));
+	if (p_probe_stream_info) {
+		int find_stream_info_result = avformat_find_stream_info(format_context, nullptr);
+		ERR_FAIL_COND_MSG(find_stream_info_result < 0, vformat("Error finding stream info: %s", ffmpeg_get_error_message(find_stream_info_result)));
+	}
 
 	int stream_index = av_find_best_stream(format_context, AVMEDIA_TYPE_VIDEO, -1, -1, (const AVCodec **)&codec, 0);
 
@@ -157,7 +476,7 @@ void VideoDecoder::prepare_decoding() {
 					print_line(vformat("No default decoder for '%s', retrying with '%s'.",
 							avcodec_get_name(unsupported_id), fallback_name));
 					avformat_close_input(&format_context);
-					prepare_decoding();
+					prepare_decoding(p_probe_stream_info);
 					return;
 				}
 			}
@@ -176,7 +495,7 @@ void VideoDecoder::prepare_decoding() {
 				forced_video_codec = avcodec_find_decoder_by_name(preferred_decoder_name.utf8().get_data());
 				if (forced_video_codec != nullptr) {
 					avformat_close_input(&format_context);
-					prepare_decoding();
+					prepare_decoding(p_probe_stream_info);
 					return;
 				}
 			}
@@ -203,6 +522,9 @@ Error VideoDecoder::recreate_codec_context() {
 		return ERR_BUG;
 	}
 
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+	av_buffer_unref(&vulkan_device_context);
+#endif
 	AVCodecParameters codec_params = *video_stream->codecpar;
 	// YUV conversion needs rendering device
 	bool has_rendering_device = RenderingServer::get_singleton()->get_rendering_device() != nullptr;
@@ -232,7 +554,42 @@ Error VideoDecoder::recreate_codec_context() {
 
 	video_codec_context->thread_count = 0;
 
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+	const bool video_decode_enabled = GLOBAL_GET("rendering/rendering_device/vulkan/video_decode").operator bool();
+	vulkan_output_enabled = gpu_output_requested;
+	if (vulkan_output_enabled && !video_decode_enabled) {
+		gpu_failure_reason = "Vulkan Video device creation is disabled (video_decode=false).";
+		if (decode_policy != DECODE_PREFER_GPU) {
+			ERR_PRINT(gpu_failure_reason);
+		}
+		return ERR_UNAVAILABLE;
+	}
+	if (decode_policy != DECODE_SOFTWARE_ONLY && video_decode_enabled && _initialize_vulkan_device_context(codec_params.codec_id)) {
+		if (vulkan_output_enabled) {
+			video_codec_context->hw_device_ctx = av_buffer_ref(vulkan_device_context);
+			ERR_FAIL_NULL_V(video_codec_context->hw_device_ctx, ERR_OUT_OF_MEMORY);
+			video_codec_context->get_format = _vulkan_only_format;
+			frame_format = FFmpegFrameFormat::VULKAN;
+			print_verbose(decode_policy == DECODE_PREFER_GPU ?
+							"FFmpeg Vulkan output enabled: GPU-resident frames; software restart fallback explicitly allowed." :
+							"FFmpeg Vulkan output enabled: GPU-resident frames only; no CPU fallback.");
+		} else {
+			print_verbose("FFmpeg Vulkan device bridge initialized. GPU frame output is disabled.");
+		}
+	} else if (vulkan_output_enabled) {
+		gpu_failure_reason = vformat("Vulkan decoding is unavailable for codec %s or the active RenderingDevice.", avcodec_get_name(codec_params.codec_id));
+		if (decode_policy != DECODE_PREFER_GPU) {
+			ERR_PRINT(gpu_failure_reason + " CPU fallback is not enabled.");
+		}
+		return ERR_UNAVAILABLE;
+	}
+#endif
+
 	int open_codec_result = avcodec_open2(video_codec_context, decoder, nullptr);
+	if (open_codec_result < 0 && vulkan_output_enabled && decode_policy == DECODE_PREFER_GPU) {
+		gpu_failure_reason = vformat("Opening Vulkan decoder %s failed: %s", decoder->name, ffmpeg_get_error_message(open_codec_result));
+		return FAILED;
+	}
 	ERR_FAIL_COND_V_MSG(open_codec_result < 0, FAILED, vformat("Error trying to open %s codec: %s", decoder->name, ffmpeg_get_error_message(open_codec_result)));
 
 	print_line("Succesfully initialized video decoder:", decoder->long_name);
@@ -262,7 +619,8 @@ Error VideoDecoder::recreate_codec_context() {
 	return OK;
 }
 
-void VideoDecoder::_seek_command(double p_target_timestamp) {
+void VideoDecoder::_seek_command(double p_target_timestamp, bool p_preserve_preroll) {
+	seek_in_progress.set();
 	avcodec_flush_buffers(video_codec_context);
 	av_seek_frame(format_context, video_stream->index, (long)(p_target_timestamp / video_time_base_in_seconds / 1000.0), AVSEEK_FLAG_BACKWARD);
 	// No need to seek the audio stream separately since it is seeked automatically with the video stream
@@ -271,6 +629,8 @@ void VideoDecoder::_seek_command(double p_target_timestamp) {
 		avcodec_flush_buffers(audio_codec_context);
 	}
 	skip_output_until_time = p_target_timestamp;
+	preserve_seek_preroll = p_preserve_preroll;
+	seek_preroll_frame.unref();
 	decoder_state = DecoderState::READY;
 	skip_current_outputs.clear();
 }
@@ -310,6 +670,9 @@ void VideoDecoder::_thread_func(void *userdata) {
 			case END_OF_STREAM: {
 				// While at the end of the stream, avoid attempting to read further as this comes with a non-negligible overhead.
 				// A Seek() operation will trigger a state change, allowing decoding to potentially start again.
+				OS::get_singleton()->delay_usec(50000);
+			} break;
+			case FAULTED: {
 				OS::get_singleton()->delay_usec(50000);
 			} break;
 			default: {
@@ -360,6 +723,7 @@ void VideoDecoder::_decode_next_frame(AVPacket *p_packet, AVFrame *p_receive_fra
 		if (has_audio) {
 			_send_packet(audio_codec_context, p_receive_frame, nullptr);
 		}
+		seek_in_progress.clear();
 		if (looping) {
 			seek(0);
 		} else {
@@ -392,6 +756,9 @@ int VideoDecoder::_send_packet(AVCodecContext *p_codec_context, AVFrame *p_recei
 		}
 	} else if (p_codec_context == video_codec_context) {
 		print_line(vformat("Failed to send avcodec packet: %s", ffmpeg_get_error_message(send_packet_result)));
+		if (vulkan_output_enabled && send_packet_result != AVERROR_EOF) {
+			decoder_state = DecoderState::FAULTED;
+		}
 	}
 
 	return send_packet_result;
@@ -400,13 +767,32 @@ int VideoDecoder::_send_packet(AVCodecContext *p_codec_context, AVFrame *p_recei
 void VideoDecoder::_read_decoded_frames(AVFrame *p_received_frame) {
 	Ref<Image> image;
 	PackedByteArray unwrapped_frame;
+	Ref<FFmpegFrame> pending_frame;
 	while (true) {
 		ZoneScopedN("Video decoder read decoded frame");
-		int receive_frame_result = avcodec_receive_frame(video_codec_context, p_received_frame);
+		int receive_frame_result = 0;
+		bool emit_final_preroll = false;
+		if (pending_frame.is_valid()) {
+			av_frame_move_ref(p_received_frame, pending_frame->get_frame());
+			pending_frame.unref();
+		} else {
+			receive_frame_result = avcodec_receive_frame(video_codec_context, p_received_frame);
+		}
+		if (receive_frame_result == AVERROR_EOF && preserve_seek_preroll && seek_preroll_frame.is_valid()) {
+			// A frozen clock in the last frame's interval must still get an image.
+			av_frame_move_ref(p_received_frame, seek_preroll_frame->get_frame());
+			seek_preroll_frame.unref();
+			preserve_seek_preroll = false;
+			receive_frame_result = 0;
+			emit_final_preroll = true;
+		}
 
 		if (receive_frame_result < 0) {
 			if (receive_frame_result != -EAGAIN && receive_frame_result != AVERROR_EOF) {
 				print_line(vformat("Failed to receive frame from avcodec: %s", ffmpeg_get_error_message(receive_frame_result)));
+				if (vulkan_output_enabled) {
+					decoder_state = DecoderState::FAULTED;
+				}
 			}
 
 			break;
@@ -416,8 +802,34 @@ void VideoDecoder::_read_decoded_frames(AVFrame *p_received_frame) {
 		int64_t frame_timestamp = p_received_frame->best_effort_timestamp != AV_NOPTS_VALUE ? p_received_frame->best_effort_timestamp : p_received_frame->pts;
 		double frame_time = (frame_timestamp - video_stream->start_time) * video_time_base_in_seconds * 1000.0;
 
-		if (skip_output_until_time > frame_time || skip_current_outputs.is_set()) {
+		if (skip_current_outputs.is_set()) {
 			continue;
+		}
+		if (!emit_final_preroll && skip_output_until_time > frame_time) {
+			if (preserve_seek_preroll) {
+				if (seek_preroll_frame.is_null()) {
+					seek_preroll_frame.instantiate();
+				}
+				av_frame_unref(seek_preroll_frame->get_frame());
+				av_frame_move_ref(seek_preroll_frame->get_frame(), p_received_frame);
+				seek_preroll_time = frame_time;
+			}
+			continue;
+		}
+		// We have decoded through the seek target (or the final image at EOF).
+		// Catch-up must not keep cancelling long-GOP preroll before this point.
+		seek_in_progress.clear();
+		if (preserve_seek_preroll) {
+			if (seek_preroll_frame.is_valid()) {
+				// Emit only the closest preceding image, then this future image.
+				// This works for variable frame rates without guessing a duration.
+				pending_frame.instantiate();
+				av_frame_move_ref(pending_frame->get_frame(), p_received_frame);
+				av_frame_move_ref(p_received_frame, seek_preroll_frame->get_frame());
+				frame_time = seek_preroll_time;
+				seek_preroll_frame.unref();
+			}
+			preserve_seek_preroll = false;
 		}
 
 		Ref<FFmpegFrame> frame;
@@ -430,12 +842,31 @@ void VideoDecoder::_read_decoded_frames(AVFrame *p_received_frame) {
 
 		last_decoded_frame_time.set(frame_time);
 
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+		if (vulkan_output_enabled) {
+			if (frame->get_frame()->format != AV_PIX_FMT_VULKAN) {
+				decoder_state = DecoderState::FAULTED;
+				ERR_PRINT("Vulkan video output rejected a non-Vulkan frame. No CPU fallback is allowed.");
+				break;
+			}
+			Ref<DecodedFrame> gpu_frame = memnew(DecodedFrame(frame_time, frame));
+			decoded_frames_mutex->lock();
+			if (!skip_current_outputs.is_set()) {
+				decoded_frames.push_back(gpu_frame);
+				decoded_backend.set(BACKEND_VULKAN);
+			}
+			decoded_frames_mutex->unlock();
+			continue;
+		}
+#endif
+
 		if (frame_format == FFmpegFrameFormat::YUV420P || frame_format == FFmpegFrameFormat::YUVA420P) {
 			// Special path for YUV images
 			Ref<DecodedFrame> yuv_frame = _unwrap_yuv_frame(frame_time, frame, frame_format);
 			decoded_frames_mutex->lock();
 			if (!skip_current_outputs.is_set()) {
 				decoded_frames.push_back(yuv_frame);
+				decoded_backend.set(BACKEND_SOFTWARE);
 			}
 			decoded_frames_mutex->unlock();
 			continue;
@@ -503,11 +934,13 @@ void VideoDecoder::_read_decoded_frames(AVFrame *p_received_frame) {
 		}
 		decoded_frames_mutex->lock();
 		decoded_frames.push_back(memnew(DecodedFrame(frame_time, tex)));
+		decoded_backend.set(BACKEND_SOFTWARE);
 		decoded_frames_mutex->unlock();
 #else
 		decoded_frames_mutex->lock();
 		if (!skip_current_outputs.is_set()) {
 			decoded_frames.push_back(memnew(DecodedFrame(frame_time, image)));
+			decoded_backend.set(BACKEND_SOFTWARE);
 		}
 		decoded_frames_mutex->unlock();
 #endif
@@ -748,7 +1181,8 @@ String VideoDecoder::_codec_id_to_preferred_decoder_name(int p_codec_id) const {
 	return String();
 }
 
-void VideoDecoder::seek(double p_time, bool p_wait) {
+void VideoDecoder::seek(double p_time, bool p_wait, bool p_preserve_preroll) {
+	seek_in_progress.set();
 	decoded_frames_mutex->lock();
 	audio_buffer_mutex->lock();
 
@@ -760,16 +1194,27 @@ void VideoDecoder::seek(double p_time, bool p_wait) {
 	decoded_frames_mutex->unlock();
 	audio_buffer_mutex->unlock();
 	if (p_wait) {
-		decoder_commands.push_and_sync(this, &VideoDecoder::_seek_command, p_time);
+		decoder_commands.push_and_sync(this, &VideoDecoder::_seek_command, p_time, p_preserve_preroll);
 	} else {
-		decoder_commands.push(this, &VideoDecoder::_seek_command, p_time);
+		decoder_commands.push(this, &VideoDecoder::_seek_command, p_time, p_preserve_preroll);
 	}
 }
 
 void VideoDecoder::start_decoding() {
 	ERR_FAIL_COND_MSG(thread != nullptr, "Cannot start decoding once already started");
+#if defined(FFMPEG_ENGINE_MODULE) && !defined(FFMPEG_GPU_DECODE_ENABLED)
+	if (gpu_output_requested) {
+		decoder_state = DecoderState::FAULTED;
+		gpu_failure_reason = "This engine was built without Vulkan Video decoding support.";
+		if (decode_policy != DECODE_PREFER_GPU) {
+			ERR_PRINT(gpu_failure_reason + " CPU fallback is not enabled.");
+		}
+		return;
+	}
+#endif
 	if (format_context == nullptr) {
-		prepare_decoding();
+		bool probe_stream_info = !gpu_output_requested;
+		prepare_decoding(probe_stream_info);
 		Error codec_context_create_error = recreate_codec_context();
 
 		if (video_stream == nullptr || codec_context_create_error != OK) {
@@ -788,6 +1233,11 @@ void VideoDecoder::return_frames(Vector<Ref<DecodedFrame>> p_frames) {
 }
 
 void VideoDecoder::return_frame(Ref<DecodedFrame> p_frame) {
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+	if (p_frame->get_format() == FFmpegFrameFormat::VULKAN) {
+		return; // AVFrame references are released only by their actual owners.
+	}
+#endif
 	available_textures_mutex->lock();
 	available_textures.push_back(p_frame->get_texture());
 	available_textures_mutex->unlock();
@@ -847,8 +1297,13 @@ int VideoDecoder::get_audio_channel_count() const {
 	return 0;
 }
 
-VideoDecoder::VideoDecoder(Ref<FileAccess> p_file) {
+VideoDecoder::VideoDecoder(Ref<FileAccess> p_file, DecodePolicy p_policy) {
 	video_file = p_file;
+	decode_policy = p_policy;
+#ifndef GDEXTENSION
+	gpu_output_requested = decode_policy == DECODE_PREFER_GPU || decode_policy == DECODE_REQUIRE_GPU ||
+			(decode_policy == DECODE_DEFAULT && ProjectSettings::get_singleton()->get_setting("rendering/rendering_device/vulkan/video_decode_output", false).operator bool());
+#endif
 	available_textures_mutex.instantiate();
 	hw_transfer_frames_mutex.instantiate();
 	scaler_frames_mutex.instantiate();
@@ -870,6 +1325,9 @@ VideoDecoder::~VideoDecoder() {
 	if (video_codec_context != nullptr) {
 		avcodec_free_context(&video_codec_context);
 	}
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+	av_buffer_unref(&vulkan_device_context);
+#endif
 
 	if (audio_codec_context != nullptr) {
 		avcodec_free_context(&audio_codec_context);
@@ -888,6 +1346,12 @@ VideoDecoder::~VideoDecoder() {
 		avio_context_free(&io_context);
 	}
 }
+
+#ifdef FFMPEG_GPU_DECODE_ENABLED
+DecodedFrame::DecodedFrame(double p_time, Ref<FFmpegFrame> p_frame) :
+		time(p_time), format(FFmpegFrameFormat::VULKAN), vulkan_frame(p_frame) {
+}
+#endif
 
 DecodedFrame::DecodedFrame(double p_time, Ref<ImageTexture> p_texture) {
 	time = p_time;

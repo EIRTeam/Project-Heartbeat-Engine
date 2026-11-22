@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import tarfile
 import urllib.request
@@ -16,25 +17,59 @@ ffmpeg_versions = {
     "swscale": "7",
 }
 
+ffmpeg_version_macros = {
+    "avcodec": "LIBAVCODEC_VERSION_MAJOR",
+    "avfilter": "LIBAVFILTER_VERSION_MAJOR",
+    "avformat": "LIBAVFORMAT_VERSION_MAJOR",
+    "avutil": "LIBAVUTIL_VERSION_MAJOR",
+    "swresample": "LIBSWRESAMPLE_VERSION_MAJOR",
+    "swscale": "LIBSWSCALE_VERSION_MAJOR",
+}
 
-def get_ffmpeg_install_targets(env, target_dir):
+
+def get_ffmpeg_versions(source_dir):
+    """Library ABI majors of the FFmpeg build in source_dir, read from its headers.
+
+    Falls back to the pinned download's versions while that is not extracted yet."""
+    versions = {}
+    for lib, macro in ffmpeg_version_macros.items():
+        for header in ("version_major.h", "version.h"):
+            try:
+                with open(os.path.join(source_dir, "include", f"lib{lib}", header), encoding="utf-8") as version_file:
+                    match = re.search(rf"^#define\s+{macro}\s+(\d+)", version_file.read(), re.MULTILINE)
+            except OSError:
+                continue
+            if match:
+                versions[lib] = match.group(1)
+                break
+    if not versions:
+        return dict(ffmpeg_versions)
+    missing = sorted(set(ffmpeg_version_macros) - set(versions))
+    if missing:
+        raise RuntimeError(f"Could not determine the ABI version of {', '.join(missing)} from {source_dir}")
+    return versions
+
+
+def get_ffmpeg_install_targets(env, target_dir, source_dir):
+    versions = get_ffmpeg_versions(source_dir)
     if env["platform"] == "linuxbsd" or env["platform"] == "linux":
-        return [os.path.join(target_dir, f"lib{lib}.so.{version}") for lib, version in ffmpeg_versions.items()]
+        return [os.path.join(target_dir, f"lib{lib}.so.{version}") for lib, version in versions.items()]
     elif env["platform"] == "android":
-        return [os.path.join(target_dir, f"lib{lib}.so") for lib in ffmpeg_versions]
+        return [os.path.join(target_dir, f"lib{lib}.so") for lib in versions]
     elif env["platform"] == "macos":
-        return [os.path.join(target_dir, f"lib{lib}.dylib") for lib in ffmpeg_versions]
+        return [os.path.join(target_dir, f"lib{lib}.dylib") for lib in versions]
     else:
-        return [os.path.join(target_dir, f"{lib}-{version}.dll") for lib, version in ffmpeg_versions.items()]
+        return [os.path.join(target_dir, f"{lib}-{version}.dll") for lib, version in versions.items()]
 
 
 def get_ffmpeg_install_sources(env, source_dir):
+    versions = get_ffmpeg_versions(source_dir)
     if env["platform"] in ("linuxbsd", "linux", "android"):
-        return [os.path.join(source_dir, f"lib/lib{lib}.so") for lib in ffmpeg_versions]
+        return [os.path.join(source_dir, f"lib/lib{lib}.so") for lib in versions]
     elif env["platform"] == "macos":
-        return [os.path.join(source_dir, f"lib/lib{lib}.dylib") for lib in ffmpeg_versions]
+        return [os.path.join(source_dir, f"lib/lib{lib}.dylib") for lib in versions]
     else:
-        return [os.path.join(source_dir, f"bin/{lib}-{version}.dll") for lib, version in ffmpeg_versions.items()]
+        return [os.path.join(source_dir, f"bin/{lib}-{version}.dll") for lib, version in versions.items()]
 
 
 def get_download_url(env):
@@ -78,11 +113,12 @@ def _ffmpeg_emitter(target, source, env):
         dst = os.path.dirname(target[0])
     else:
         dst = os.path.dirname(target[0].get_path())
+    versions = get_ffmpeg_versions(dst)
     target += get_ffmpeg_install_sources(env, dst)
     if env["platform"] == "windows":
-        target += [os.path.join(dst, f"lib/{lib}.lib") for lib, version in ffmpeg_versions.items()]
+        target += [os.path.join(dst, f"lib/{lib}.lib") for lib in versions]
     else:
-        target += [os.path.join(dst, f"lib/lib{lib}.so") for lib, version in ffmpeg_versions.items()]
+        target += [os.path.join(dst, f"lib/lib{lib}.so") for lib in versions]
 
     emitter_headers = [
         "libavcodec/codec.h",
@@ -112,4 +148,4 @@ def ffmpeg_download_builder(env, target, source):
 
 
 def ffmpeg_install(env, target, source):
-    return env.InstallAs(get_ffmpeg_install_targets(env, target), get_ffmpeg_install_sources(env, source))
+    return env.InstallAs(get_ffmpeg_install_targets(env, target, source), get_ffmpeg_install_sources(env, source))
