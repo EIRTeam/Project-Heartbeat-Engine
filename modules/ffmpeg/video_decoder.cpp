@@ -544,9 +544,8 @@ Error VideoDecoder::recreate_codec_context() {
 		avcodec_free_context(&video_codec_context);
 	}
 	video_codec_context = avcodec_alloc_context3(decoder);
-	video_codec_context->pkt_timebase = video_stream->time_base;
-
 	ERR_FAIL_COND_V_MSG(video_codec_context == nullptr, FAILED, vformat("Couldn't allocate codec context: %s", decoder->name));
+	video_codec_context->pkt_timebase = video_stream->time_base;
 
 	int param_copy_result = avcodec_parameters_to_context(video_codec_context, &codec_params);
 
