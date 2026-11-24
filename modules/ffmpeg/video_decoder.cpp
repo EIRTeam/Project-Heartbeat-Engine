@@ -586,9 +586,11 @@ Error VideoDecoder::recreate_codec_context() {
 #endif
 
 	int open_codec_result = avcodec_open2(video_codec_context, decoder, nullptr);
-	if (open_codec_result < 0 && vulkan_output_enabled && decode_policy == DECODE_PREFER_GPU) {
+	if (open_codec_result < 0 && vulkan_output_enabled) {
 		gpu_failure_reason = vformat("Opening Vulkan decoder %s failed: %s", decoder->name, ffmpeg_get_error_message(open_codec_result));
-		return FAILED;
+		if (decode_policy == DECODE_PREFER_GPU) {
+			return FAILED;
+		}
 	}
 	ERR_FAIL_COND_V_MSG(open_codec_result < 0, FAILED, vformat("Error trying to open %s codec: %s", decoder->name, ffmpeg_get_error_message(open_codec_result)));
 

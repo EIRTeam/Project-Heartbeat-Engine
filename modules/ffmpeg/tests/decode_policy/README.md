@@ -22,6 +22,9 @@ The runner checks:
   retaining its policy across stop/play.
 - Explicit stream overrides of software and strict GPU project defaults.
 - Project Prefer GPU initialization/runtime fallback and project Require GPU rejection.
+- Deferred, main-thread, once-only GPU failure signals and persistent failure queries.
+- Strict GPU failures retain inert playback; play/stop/seek are safe and neither
+  emit `finished` nor automatically loop. Successful fallback is not terminal failure.
 - H.264 Vulkan backend reporting, not just GPU texture/conversion detection.
 - Simulated GPU conversion failure, software restart at the current music-clock
   time, continued playback, and replacement of the player's cached GPU texture.

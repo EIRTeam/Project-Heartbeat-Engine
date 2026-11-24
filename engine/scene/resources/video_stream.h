@@ -68,6 +68,8 @@ public:
 	virtual void play();
 
 	virtual bool is_playing() const;
+	// Failure is not normal end-of-stream and must not trigger looping/finished.
+	virtual bool has_playback_failed() const { return false; }
 
 	virtual void set_paused(bool p_paused);
 	virtual bool is_paused() const;

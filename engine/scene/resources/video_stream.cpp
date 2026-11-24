@@ -35,6 +35,7 @@
 // VideoStreamPlayback starts here.
 
 void VideoStreamPlayback::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("has_playback_failed"), &VideoStreamPlayback::has_playback_failed);
 	ClassDB::bind_method(D_METHOD("mix_audio", "num_frames", "buffer", "offset"), &VideoStreamPlayback::mix_audio, DEFVAL(PackedFloat32Array()), DEFVAL(0));
 	GDVIRTUAL_BIND(_stop);
 	GDVIRTUAL_BIND(_play);

@@ -145,6 +145,10 @@ class FFmpegVideoStreamPlayback : public VideoStreamPlayback {
 	VideoDecoder::DecodePolicy decode_policy = VideoDecoder::DECODE_DEFAULT;
 	Ref<FileAccess> source_file;
 	String decode_fallback_reason;
+	String gpu_failure_reason;
+	bool playback_failed = false;
+	void _report_gpu_failure(const String &p_reason);
+	void _stop_failed_playback(const String &p_reason);
 	bool _fallback_to_software(const String &p_reason);
 	bool _update_playback_clock();
 	void _seek_to_clock(const String &p_reason);
@@ -186,6 +190,9 @@ public:
 	String get_decode_backend() const;
 	bool is_using_gpu_decoding() const;
 	String get_decode_fallback_reason() const;
+	bool has_gpu_playback_failed() const;
+	String get_gpu_failure_reason() const;
+	bool has_playback_failed() const override { return playback_failed; }
 #ifdef FFMPEG_GPU_TESTS_ENABLED
 	void test_force_gpu_failure();
 #endif

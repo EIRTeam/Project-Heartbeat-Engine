@@ -102,6 +102,7 @@ typedef RD::ComputeListID ComputeListID;
 
 void FFmpegVideoStreamPlayback::_bind_methods() {
 #ifndef GDEXTENSION
+	ClassDB::bind_method(D_METHOD("update", "delta"), &FFmpegVideoStreamPlayback::update);
 	ClassDB::bind_method(D_METHOD("set_playback_clock", "clock"), &FFmpegVideoStreamPlayback::set_playback_clock);
 	ClassDB::bind_method(D_METHOD("get_playback_clock"), &FFmpegVideoStreamPlayback::get_playback_clock);
 	ClassDB::bind_method(D_METHOD("set_clock_recovery_tolerance", "seconds"), &FFmpegVideoStreamPlayback::set_clock_recovery_tolerance);
@@ -110,6 +111,9 @@ void FFmpegVideoStreamPlayback::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_decode_backend"), &FFmpegVideoStreamPlayback::get_decode_backend);
 	ClassDB::bind_method(D_METHOD("is_using_gpu_decoding"), &FFmpegVideoStreamPlayback::is_using_gpu_decoding);
 	ClassDB::bind_method(D_METHOD("get_decode_fallback_reason"), &FFmpegVideoStreamPlayback::get_decode_fallback_reason);
+	ClassDB::bind_method(D_METHOD("has_gpu_playback_failed"), &FFmpegVideoStreamPlayback::has_gpu_playback_failed);
+	ClassDB::bind_method(D_METHOD("get_gpu_failure_reason"), &FFmpegVideoStreamPlayback::get_gpu_failure_reason);
+	ADD_SIGNAL(MethodInfo("gpu_playback_failed", PropertyInfo(Variant::STRING, "reason")));
 #ifdef FFMPEG_GPU_TESTS_ENABLED
 	ClassDB::bind_method(D_METHOD("test_force_gpu_failure"), &FFmpegVideoStreamPlayback::test_force_gpu_failure);
 #endif
@@ -151,6 +155,37 @@ String FFmpegVideoStreamPlayback::get_decode_fallback_reason() const {
 	return decode_fallback_reason;
 }
 
+bool FFmpegVideoStreamPlayback::has_gpu_playback_failed() const {
+	return !gpu_failure_reason.is_empty();
+}
+
+String FFmpegVideoStreamPlayback::get_gpu_failure_reason() const {
+	return gpu_failure_reason;
+}
+
+void FFmpegVideoStreamPlayback::_report_gpu_failure(const String &p_reason) {
+	if (has_gpu_playback_failed()) {
+		return;
+	}
+	gpu_failure_reason = p_reason;
+	// Initialization runs before the caller can connect to this playback.
+	// Runtime failure handlers must not reenter update() or run on the render thread.
+	call_deferred("emit_signal", "gpu_playback_failed", gpu_failure_reason);
+}
+
+void FFmpegVideoStreamPlayback::_stop_failed_playback(const String &p_reason) {
+	playback_failed = true;
+	stop_reason = p_reason;
+	clear();
+	yuv_converter.unref();
+	yuv_texture.unref();
+	vulkan_converter.unref();
+	texture.unref();
+	// Join the decoder and release its inputs; failed playback stays queryable.
+	decoder.unref();
+	source_file.unref();
+}
+
 bool FFmpegVideoStreamPlayback::_fallback_to_software(const String &p_reason) {
 	const bool resume = playing;
 	available_frames.clear();
@@ -165,13 +200,12 @@ bool FFmpegVideoStreamPlayback::_fallback_to_software(const String &p_reason) {
 	decoder->start_decoding();
 	decode_fallback_reason = p_reason;
 	if (decoder->get_decoder_state() == VideoDecoder::FAULTED) {
-		stop_reason = "software fallback initialization failed";
-		playing = false;
+		_stop_failed_playback("software fallback initialization failed");
 		ERR_PRINT(stop_reason);
 		return false;
 	}
 	_initialize_output();
-	decoder->seek(MAX(0.0, playback_position), false, !playback_clock.is_null());
+	decoder->seek(MAX(0.0, playback_position), false, paused || !playback_clock.is_null());
 	just_seeked = playback_clock.is_null();
 	clock_lag_since_usec = 0;
 	playing = resume;
@@ -204,6 +238,8 @@ Dictionary FFmpegVideoStreamPlayback::get_playback_timing() const {
 	result["external_clock"] = !playback_clock.is_null();
 	result["decode_backend"] = get_decode_backend();
 	result["decode_fallback_reason"] = decode_fallback_reason;
+	result["gpu_failure_reason"] = gpu_failure_reason;
+	result["playback_failed"] = playback_failed;
 	result["clock_time"] = playback_position / 1000.0;
 	result["has_frame"] = last_frame.is_valid();
 	result["selected_frame_time"] = last_frame.is_valid() ? last_frame->get_time() / 1000.0 : 0.0;
@@ -296,9 +332,9 @@ bool FFmpegVideoStreamPlayback::_update_playback_clock() {
 #endif
 
 void FFmpegVideoStreamPlayback::seek_into_sync() {
-	bool preserve_preroll = false;
+	bool preserve_preroll = paused;
 #ifndef GDEXTENSION
-	preserve_preroll = !playback_clock.is_null();
+	preserve_preroll |= !playback_clock.is_null();
 #endif
 	decoder->seek(MAX(0.0, playback_position), false, preserve_preroll);
 	Vector<Ref<DecodedFrame>> decoded_frames;
@@ -338,17 +374,18 @@ const char *const upd_str = "update_internal";
 void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 	ZoneScopedN("update_internal");
 
-	if (paused || !playing) {
+	if (!playing) {
 		return;
 	}
 #ifdef FFMPEG_GPU_DECODE_ENABLED
 	if (vulkan_converter.is_valid() &&
 			(static_cast<VulkanVideoConverter *>(vulkan_converter.ptr())->has_failed() || decoder->get_decoder_state() == VideoDecoder::FAULTED)) {
 		const String failure = decoder->get_decoder_state() == VideoDecoder::FAULTED ? "Vulkan decoder fault" : "Vulkan conversion failure";
+		_report_gpu_failure(failure);
 		if (decode_policy == VideoDecoder::DECODE_PREFER_GPU) {
-			if (playback_clock.is_null()) {
+			if (!paused && playback_clock.is_null()) {
 				playback_position += p_delta * 1000.0;
-			} else if (!_update_playback_clock()) {
+			} else if (!paused && !_update_playback_clock()) {
 				return;
 			}
 			_fallback_to_software(failure);
@@ -356,9 +393,7 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 			// software audio is mixed into the old backend's resampler.
 			return;
 		} else {
-			stop_reason = failure;
-			ERR_PRINT(vformat("FFmpeg playback stopped: %s. This is not a clock-lateness timeout; CPU fallback is not enabled.", stop_reason));
-			playing = false;
+			_stop_failed_playback(failure);
 			return;
 		}
 	}
@@ -367,11 +402,12 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 	bool external_clock = false;
 #ifndef GDEXTENSION
 	external_clock = !playback_clock.is_null();
-	if (external_clock && !_update_playback_clock()) {
+	if (!paused && external_clock && !_update_playback_clock()) {
 		return;
 	}
 #endif
-	if (!external_clock) {
+	// Paused updates service decoding and presentation, never the timeline.
+	if (!paused && !external_clock) {
 		playback_position += p_delta * 1000.0f;
 	}
 
@@ -383,7 +419,7 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 		}
 	}
 
-	if (!external_clock && decoder->get_decoder_state() == VideoDecoder::DecoderState::END_OF_STREAM && available_frames.size() == 0) {
+	if (!paused && !external_clock && decoder->get_decoder_state() == VideoDecoder::DecoderState::END_OF_STREAM && available_frames.size() == 0) {
 		// if at the end of the stream but our playback enters a valid time region again, a seek operation is required to get the decoder back on track.
 		if (playback_position < decoder->get_last_decoded_frame_time()) {
 			seek_into_sync();
@@ -404,7 +440,7 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 		}
 	}
 
-	if (out_of_sync && !external_clock) {
+	if (out_of_sync && !paused && !external_clock) {
 		print_line(vformat("Video too far out of sync (%.2f), seeking to %.2f", peek_frame->get_time(), playback_position));
 		seek_into_sync();
 	}
@@ -413,7 +449,7 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 	bool got_new_frame = false;
 
 	List<Ref<DecodedFrame>>::Element *next_frame = available_frames.front();
-	while (next_frame && (external_clock ? next_frame->get()->get_time() <= playback_position : (check_next_frame_valid(next_frame->get()) || just_seeked))) {
+	while (next_frame && ((external_clock || paused) ? next_frame->get()->get_time() <= playback_position : (check_next_frame_valid(next_frame->get()) || just_seeked))) {
 		ZoneNamedN(__frame_receive, "frame_receive", true);
 
 		just_seeked = false;
@@ -470,6 +506,16 @@ void FFmpegVideoStreamPlayback::update_internal(double p_delta) {
 		}
 	}
 #endif
+
+	if (paused) {
+		// Keep embedded audio queued for resume. Do not mix it, recover clock
+		// lag, or finish playback while priming the frame at the frozen time.
+		buffering = decoder->is_running() && available_frames.is_empty();
+		if (got_new_frame) {
+			frames_processed++;
+		}
+		return;
+	}
 
 	// The external music player owns audio. Drain but never enqueue embedded
 	// audio into VideoStreamPlayer's resampler while following its clock.
@@ -551,9 +597,18 @@ Error FFmpegVideoStreamPlayback::load(Ref<FileAccess> p_file_access, VideoDecode
 	decoder->start_decoding();
 	if (decoder->get_decoder_state() == VideoDecoder::FAULTED) {
 #ifndef GDEXTENSION
+		const String reason = decoder->get_gpu_failure_reason();
+		if (!reason.is_empty()) {
+			_report_gpu_failure(reason);
+			if (decode_policy == VideoDecoder::DECODE_PREFER_GPU) {
+				_fallback_to_software(reason);
+			} else {
+				_stop_failed_playback(reason);
+			}
+			return OK;
+		}
 		if (decode_policy == VideoDecoder::DECODE_PREFER_GPU) {
-			String reason = decoder->get_gpu_failure_reason();
-			return _fallback_to_software(reason.is_empty() ? "GPU decoder initialization failed." : reason) ? OK : FAILED;
+			return _fallback_to_software("GPU decoder initialization failed.") ? OK : FAILED;
 		}
 #endif
 		return FAILED;
@@ -602,6 +657,11 @@ void FFmpegVideoStreamPlayback::set_paused_internal(bool p_paused) {
 }
 
 void FFmpegVideoStreamPlayback::play_internal() {
+#ifndef GDEXTENSION
+	if (playback_failed) {
+		return;
+	}
+#endif
 	if (decoder->get_decoder_state() == VideoDecoder::FAULTED) {
 		playing = false;
 		return;
@@ -642,9 +702,12 @@ void FFmpegVideoStreamPlayback::stop_internal() {
 }
 
 void FFmpegVideoStreamPlayback::seek_internal(double p_time) {
-	bool preserve_preroll = false;
+	if (decoder.is_null()) {
+		return;
+	}
+	bool preserve_preroll = paused;
 #ifndef GDEXTENSION
-	preserve_preroll = !playback_clock.is_null();
+	preserve_preroll |= !playback_clock.is_null();
 	clock_initialized = false;
 #endif
 	decoder->seek(MAX(0.0, p_time * 1000.0), false, preserve_preroll);
@@ -655,7 +718,7 @@ void FFmpegVideoStreamPlayback::seek_internal(double p_time) {
 }
 
 double FFmpegVideoStreamPlayback::get_length_internal() const {
-	return decoder->get_duration() / 1000.0f;
+	return decoder.is_valid() ? decoder->get_duration() / 1000.0f : 0.0;
 }
 
 Ref<Texture2D> FFmpegVideoStreamPlayback::get_texture_internal() const {
@@ -679,11 +742,11 @@ double FFmpegVideoStreamPlayback::get_playback_position_internal() const {
 }
 
 int FFmpegVideoStreamPlayback::get_mix_rate_internal() const {
-	return decoder->get_audio_mix_rate();
+	return decoder.is_valid() ? decoder->get_audio_mix_rate() : 0;
 }
 
 int FFmpegVideoStreamPlayback::get_channels_internal() const {
-	return decoder->get_audio_channel_count();
+	return decoder.is_valid() ? decoder->get_audio_channel_count() : 0;
 }
 
 FFmpegVideoStreamPlayback::FFmpegVideoStreamPlayback() {

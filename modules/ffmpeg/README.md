@@ -19,6 +19,31 @@ Follow these steps:
 
 ## Engine module FFmpeg builds
 
+### Priming a visible frame while paused
+
+FFmpeg playback can collect decoded frames and upload the frame covering its
+current position while paused. Enable paused processing on the player:
+
+```gdscript
+video_player.process_while_paused = true
+video_player.play()
+video_player.paused = true
+```
+
+The player keeps calling playback updates until a frame is ready. The current
+frame becomes visible and decode-ahead stays bounded.
+Paused updates do not advance time, sample an external playback clock, mix audio,
+or finish playback. Seeking while paused primes the frame covering the new
+position, including when the position falls between frame timestamps.
+
+`process_while_paused` defaults to `false`. On builds without this player property,
+call `video_player.get_stream_playback().update(0.0)` each processing frame while
+paused instead. The node must be allowed to process by its scene-tree processing
+mode; stopped playback is not primed.
+Use the safe rendering-thread mode for Vulkan output: with the experimental
+separate rendering thread, the existing `Texture2DRD` changed callback can call
+`VideoStreamPlayer.queue_redraw()` off the main thread and prevent visible updates.
+
 ### Synchronizing background video to music
 
 The engine module supports a per-playback music clock. Configure it **after
@@ -139,6 +164,43 @@ The player refreshes its texture and audio resampler for the new backend.
 A brief freeze is possible; rendering-device loss is not guaranteed recoverable.
 Once on software, a playback instance does not automatically retry GPU decoding.
 Recreate playback to retry.
+
+### GPU failure notification
+
+`FFmpegVideoStreamPlayback` emits `gpu_playback_failed(reason: String)` once per
+playback instance when GPU initialization, decoding, or conversion fails.
+The signal is deferred to the main thread, so callers can connect immediately
+after assigning the stream, even if initialization has already failed:
+
+```gdscript
+video_player.stream = stream
+var playback = video_player.get_stream_playback()
+if playback != null:
+    playback.gpu_playback_failed.connect(func(reason: String):
+        print("GPU video unavailable: ", reason)
+        if playback.has_playback_failed():
+            # Strict GPU playback has stopped; choose another game behavior.
+            pass
+    )
+    video_player.play()
+```
+
+`has_gpu_playback_failed()` and `get_gpu_failure_reason()` retain the failure
+immediately, even before signal delivery or if a listener connects later.
+Successful GPU playback and software-only decoding do not report GPU failure.
+These methods describe this playback attempt, not a device-wide capability test.
+
+With **Prefer GPU**, the signal also fires when software fallback succeeds;
+`has_playback_failed()` remains `false` in that case. The GPU failure reason
+remains available after switching to software.
+
+With **Require GPU** (or strict **Existing behavior**), GPU initialization failure
+now returns a valid, failed playback instead of `null`. It remains inert: no
+texture, audio, or decoding; play/stop/seek are safe and cannot restart it.
+Runtime strict failures likewise stop and release their decoder/output.
+Neither emits `VideoStreamPlayer.finished` nor triggers automatic looping.
+Recreate playback to retry. Non-GPU initialization failures, such as an unreadable
+file, can still return `null`.
 
 These controls are engine-module-only; GDExtension behavior is unchanged.
 See [`tests/decode_policy`](tests/decode_policy/README.md).

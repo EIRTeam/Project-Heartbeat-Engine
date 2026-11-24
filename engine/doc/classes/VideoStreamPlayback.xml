@@ -91,6 +91,12 @@
 				Ticks video playback for [param delta] seconds. Called every frame as long as both [method _is_paused] and [method _is_playing] return [code]true[/code].
 			</description>
 		</method>
+		<method name="has_playback_failed" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns [code]true[/code] if playback has stopped because of an unrecoverable failure rather than reaching the end of the stream. Failed playback does not trigger [signal VideoStreamPlayer.finished] or automatic looping. Returns [code]false[/code] by default.
+			</description>
+		</method>
 		<method name="mix_audio">
 			<return type="int" />
 			<param index="0" name="num_frames" type="int" />
