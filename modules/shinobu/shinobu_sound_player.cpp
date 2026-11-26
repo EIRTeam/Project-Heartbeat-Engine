@@ -175,7 +175,8 @@ void ShinobuSoundPlayer::_notification(int p_notification) {
 
 Error ShinobuSoundPlayer::seek(int64_t to_time_msec) {
 	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), ERR_UNCONFIGURED);
-	// Seeking is deferred to the mixing thread so stopping isn't needed for safety, it's kept to preserve existing behavior.
+	// Seeking is deferred to the mixing thread so stopping isn't needed for safety,
+	// but the game relies on seek() leaving the sound stopped (e.g. the editor's paused scrubbing).
 	if (ma_sound_is_playing(&sound) == MA_TRUE) {
 		ma_sound_stop(&sound);
 	}
