@@ -370,11 +370,11 @@ MA_API ma_result ma_pitch_shift_node_init(ma_node_graph *pNodeGraph, const ma_pi
 }
 
 MA_API void ma_pitch_shift_node_set_pitch_scale(ma_pitch_shift_node *node, float pitchScale) {
-	c89atomic_exchange_f32(&node->pitchScale, pitchScale);
+	ma_atomic_exchange_f32(&node->pitchScale, pitchScale);
 }
 
 MA_API float ma_pitch_shift_node_get_pitch_scale(ma_pitch_shift_node *node) {
-	return c89atomic_load_f32((float *)&node->pitchScale);
+	return ma_atomic_load_f32((float *)&node->pitchScale);
 }
 
 MA_API void ma_pitch_shift_node_uninit(ma_pitch_shift_node *pPitchShiftNode, const ma_allocation_callbacks *pAllocationCallbacks) {

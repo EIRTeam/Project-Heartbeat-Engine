@@ -22,7 +22,7 @@
 /* clang-format on */
 
 #include "core/os/os.h"
-#include "miniaudio/extras/miniaudio_libvorbis.h"
+#include "miniaudio/extras/decoders/libvorbis/miniaudio_libvorbis.h"
 #include "shinobu_macros.h"
 
 Shinobu *Shinobu::singleton = nullptr;
@@ -53,28 +53,6 @@ String Shinobu::get_initialization_error() const {
 	return "";
 }
 
-static ma_result ma_decoding_backend_init__libvorbis(void *pUserData, ma_read_proc onRead, ma_seek_proc onSeek, ma_tell_proc onTell, void *pReadSeekTellUserData, const ma_decoding_backend_config *pConfig, const ma_allocation_callbacks *pAllocationCallbacks, ma_data_source **ppBackend) {
-	ma_result result;
-	ma_libvorbis *pVorbis;
-
-	(void)pUserData;
-
-	pVorbis = (ma_libvorbis *)ma_malloc(sizeof(*pVorbis), pAllocationCallbacks);
-	if (pVorbis == NULL) {
-		return MA_OUT_OF_MEMORY;
-	}
-
-	result = ma_libvorbis_init(onRead, onSeek, onTell, pReadSeekTellUserData, pConfig, pAllocationCallbacks, pVorbis);
-	if (result != MA_SUCCESS) {
-		ma_free(pVorbis, pAllocationCallbacks);
-		return result;
-	}
-
-	*ppBackend = pVorbis;
-
-	return MA_SUCCESS;
-}
-
 void *ma_malloc_godot(size_t p_size, void *p_user_data) {
 	return Memory::alloc_static(p_size);
 }
@@ -86,45 +64,6 @@ void *ma_realloc_godot(void *p, size_t p_size, void *p_user_data) {
 void ma_free_godot(void *p, void *p_user_data) {
 	Memory::free_static(p);
 }
-
-static ma_result ma_decoding_backend_init_file__libvorbis(void *pUserData, const char *pFilePath, const ma_decoding_backend_config *pConfig, const ma_allocation_callbacks *pAllocationCallbacks, ma_data_source **ppBackend) {
-	ma_result result;
-	ma_libvorbis *pVorbis;
-
-	(void)pUserData;
-
-	pVorbis = (ma_libvorbis *)ma_malloc(sizeof(*pVorbis), pAllocationCallbacks);
-	if (pVorbis == NULL) {
-		return MA_OUT_OF_MEMORY;
-	}
-
-	result = ma_libvorbis_init_file(pFilePath, pConfig, pAllocationCallbacks, pVorbis);
-	if (result != MA_SUCCESS) {
-		ma_free(pVorbis, pAllocationCallbacks);
-		return result;
-	}
-
-	*ppBackend = pVorbis;
-
-	return MA_SUCCESS;
-}
-
-static void ma_decoding_backend_uninit__libvorbis(void *pUserData, ma_data_source *pBackend, const ma_allocation_callbacks *pAllocationCallbacks) {
-	ma_libvorbis *pVorbis = (ma_libvorbis *)pBackend;
-
-	(void)pUserData;
-
-	ma_libvorbis_uninit(pVorbis, pAllocationCallbacks);
-	ma_free(pVorbis, pAllocationCallbacks);
-}
-
-static ma_decoding_backend_vtable g_ma_decoding_backend_vtable_libvorbis = {
-	ma_decoding_backend_init__libvorbis,
-	ma_decoding_backend_init_file__libvorbis,
-	NULL, /* onInitFileW() */
-	NULL, /* onInitMemory() */
-	ma_decoding_backend_uninit__libvorbis
-};
 
 Error Shinobu::godot_initialize() {
 	return initialize(ma_backend_null);
@@ -253,7 +192,7 @@ Error Shinobu::initialize(ma_backend forced_backend) {
 	Custom backend vtables
 	*/
 	static ma_decoding_backend_vtable *pCustomBackendVTables[] = {
-		&g_ma_decoding_backend_vtable_libvorbis
+		ma_decoding_backend_libvorbis
 	};
 
 	/* Using custom decoding backends requires a resource manager. */
@@ -367,12 +306,12 @@ float Shinobu::get_master_volume() {
 
 uint64_t Shinobu::get_dsp_time() const {
 	ERR_FAIL_COND_V(!initialized, 0);
-	return ma_engine_get_time(&engine) / (float)(ma_engine_get_sample_rate(&engine) / 1000.0f);
+	return ma_engine_get_time_in_pcm_frames(&engine) / (float)(ma_engine_get_sample_rate(&engine) / 1000.0f);
 }
 
 Error Shinobu::set_dsp_time(uint64_t m_new_time_msec) {
 	ERR_FAIL_COND_V(!initialized, ERR_UNCONFIGURED);
-	ma_result result = ma_engine_set_time(&engine, m_new_time_msec * (float)(ma_engine_get_sample_rate(&engine) / 1000.0f));
+	ma_result result = ma_engine_set_time_in_pcm_frames(&engine, m_new_time_msec * (float)(ma_engine_get_sample_rate(&engine) / 1000.0f));
 	MA_ERR_RET(result, "Error setting DSP time");
 	return OK;
 }
