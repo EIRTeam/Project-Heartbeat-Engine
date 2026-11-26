@@ -81,7 +81,7 @@ int64_t ShinobuSoundPlayer::get_playback_position_nsec() {
 	// This allows the return of negative playback time
 	// seconds to nanoseconds = x * 1_000_000_000
 	// milliseconds to nanoseconds = x * 1_000_000
-	uint64_t dsp_time_nsec = (ma_engine_get_time(engine) * 1e+9) / ma_engine_get_sample_rate(engine);
+	uint64_t dsp_time_nsec = (ma_engine_get_time_in_pcm_frames(engine) * 1e+9) / ma_engine_get_sample_rate(engine);
 	uint64_t start_time_nsec = start_time_msec * 1e+6;
 
 	if (!is_playing() && start_time_nsec > dsp_time_nsec) {
@@ -175,7 +175,8 @@ void ShinobuSoundPlayer::_notification(int p_notification) {
 
 Error ShinobuSoundPlayer::seek(int64_t to_time_msec) {
 	ERR_FAIL_COND_V(!initialized || Shinobu::get_singleton() == nullptr || !Shinobu::get_singleton()->is_initialized(), ERR_UNCONFIGURED);
-	// Sound MUST be stopped before seeking or we crash
+	// Seeking is deferred to the mixing thread so stopping isn't needed for safety,
+	// but the game relies on seek() leaving the sound stopped (e.g. the editor's paused scrubbing).
 	if (ma_sound_is_playing(&sound) == MA_TRUE) {
 		ma_sound_stop(&sound);
 	}

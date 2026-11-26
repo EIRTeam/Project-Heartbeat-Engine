@@ -1,17 +1,7 @@
-/*
-This implements a data source that decodes Vorbis streams via libvorbis + libvorbisfile
+#ifndef miniaudio_libvorbis_c
+#define miniaudio_libvorbis_c
 
-This object can be plugged into any `ma_data_source_*()` API and can also be used as a custom
-decoding backend. See the custom_decoder example.
-
-You need to include this file after miniaudio.h.
-*/
-#ifndef miniaudio_libvorbis_h
-#define miniaudio_libvorbis_h
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "miniaudio_libvorbis.h"
 
 #if !defined(MA_NO_LIBVORBIS)
 #ifndef OV_EXCLUDE_STATIC_CALLBACKS
@@ -20,34 +10,8 @@ extern "C" {
 #include <vorbis/vorbisfile.h>
 #endif
 
-typedef struct
-{
-    ma_data_source_base ds;     /* The libvorbis decoder can be used independently as a data source. */
-    ma_read_proc onRead;
-    ma_seek_proc onSeek;
-    ma_tell_proc onTell;
-    void* pReadSeekTellUserData;
-    ma_format format;           /* Will be either f32 or s16. */
-#if !defined(MA_NO_LIBVORBIS)
-    OggVorbis_File vf;
-#endif
-} ma_libvorbis;
-
-MA_API ma_result ma_libvorbis_init(ma_read_proc onRead, ma_seek_proc onSeek, ma_tell_proc onTell, void* pReadSeekTellUserData, const ma_decoding_backend_config* pConfig, const ma_allocation_callbacks* pAllocationCallbacks, ma_libvorbis* pVorbis);
-MA_API ma_result ma_libvorbis_init_file(const char* pFilePath, const ma_decoding_backend_config* pConfig, const ma_allocation_callbacks* pAllocationCallbacks, ma_libvorbis* pVorbis);
-MA_API void ma_libvorbis_uninit(ma_libvorbis* pVorbis, const ma_allocation_callbacks* pAllocationCallbacks);
-MA_API ma_result ma_libvorbis_read_pcm_frames(ma_libvorbis* pVorbis, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead);
-MA_API ma_result ma_libvorbis_seek_to_pcm_frame(ma_libvorbis* pVorbis, ma_uint64 frameIndex);
-MA_API ma_result ma_libvorbis_get_data_format(ma_libvorbis* pVorbis, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate, ma_channel* pChannelMap, size_t channelMapCap);
-MA_API ma_result ma_libvorbis_get_cursor_in_pcm_frames(ma_libvorbis* pVorbis, ma_uint64* pCursor);
-MA_API ma_result ma_libvorbis_get_length_in_pcm_frames(ma_libvorbis* pVorbis, ma_uint64* pLength);
-
-#ifdef __cplusplus
-}
-#endif
-#endif
-
-#if defined(MINIAUDIO_IMPLEMENTATION) || defined(MA_IMPLEMENTATION)
+#include <string.h> /* For memset(). */
+#include <assert.h>
 
 static ma_result ma_libvorbis_ds_read(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead)
 {
@@ -80,7 +44,9 @@ static ma_data_source_vtable g_ma_libvorbis_ds_vtable =
     ma_libvorbis_ds_seek,
     ma_libvorbis_ds_get_data_format,
     ma_libvorbis_ds_get_cursor,
-    ma_libvorbis_ds_get_length
+    ma_libvorbis_ds_get_length,
+    NULL,   /* onSetLooping */
+    0       /* flags */
 };
 
 
@@ -99,6 +65,10 @@ static size_t ma_libvorbis_vf_callback__read(void* pBufferOut, size_t size, size
 
     bytesToRead = size * count;
     result = pVorbis->onRead(pVorbis->pReadSeekTellUserData, pBufferOut, bytesToRead, &bytesRead);
+    if (result != MA_SUCCESS) {
+        /* Not entirely sure what to return here. What if an error occurs, but some data was read and bytesRead is > 0? */
+        return 0;
+    }
 
     return bytesRead / size;
 }
@@ -140,16 +110,13 @@ static long ma_libvorbis_vf_callback__tell(void* pUserData)
 }
 #endif
 
-static ma_result ma_libvorbis_init_internal(const ma_decoding_backend_config* pConfig, ma_libvorbis* pVorbis)
+static ma_result ma_libvorbis_init_internal(const ma_decoding_backend_config* pConfig, const ma_allocation_callbacks* pAllocationCallbacks, ma_libvorbis* pVorbis)
 {
-    ma_result result;
-    ma_data_source_config dataSourceConfig;
-
     if (pVorbis == NULL) {
         return MA_INVALID_ARGS;
     }
 
-    MA_ZERO_OBJECT(pVorbis);
+    memset(pVorbis, 0, sizeof(*pVorbis));
     pVorbis->format = ma_format_f32;    /* f32 by default. */
 
     if (pConfig != NULL && (pConfig->preferredFormat == ma_format_f32 || pConfig->preferredFormat == ma_format_s16)) {
@@ -158,15 +125,35 @@ static ma_result ma_libvorbis_init_internal(const ma_decoding_backend_config* pC
         /* Getting here means something other than f32 and s16 was specified. Just leave this unset to use the default format. */
     }
 
-    dataSourceConfig = ma_data_source_config_init();
-    dataSourceConfig.vtable = &g_ma_libvorbis_ds_vtable;
+    #if !defined(MA_NO_LIBVORBIS)
+    {
+        ma_result result;
+        ma_data_source_config dataSourceConfig;
 
-    result = ma_data_source_init(&dataSourceConfig, &pVorbis->ds);
-    if (result != MA_SUCCESS) {
-        return result;  /* Failed to initialize the base data source. */
+        dataSourceConfig = ma_data_source_config_init();
+        dataSourceConfig.vtable = &g_ma_libvorbis_ds_vtable;
+
+        result = ma_data_source_init(&dataSourceConfig, &pVorbis->ds);
+        if (result != MA_SUCCESS) {
+            return result;  /* Failed to initialize the base data source. */
+        }
+
+        pVorbis->vf = (OggVorbis_File*)ma_malloc(sizeof(OggVorbis_File), pAllocationCallbacks);
+        if (pVorbis->vf == NULL) {
+            ma_data_source_uninit(&pVorbis->ds);
+            return MA_OUT_OF_MEMORY;
+        }
+
+        return MA_SUCCESS;
     }
-
-    return MA_SUCCESS;
+    #else
+    {
+        /* libvorbis is disabled. */
+        (void)g_ma_libvorbis_ds_vtable;
+        (void)pAllocationCallbacks;
+        return MA_NOT_IMPLEMENTED;
+    }
+    #endif
 }
 
 MA_API ma_result ma_libvorbis_init(ma_read_proc onRead, ma_seek_proc onSeek, ma_tell_proc onTell, void* pReadSeekTellUserData, const ma_decoding_backend_config* pConfig, const ma_allocation_callbacks* pAllocationCallbacks, ma_libvorbis* pVorbis)
@@ -174,14 +161,14 @@ MA_API ma_result ma_libvorbis_init(ma_read_proc onRead, ma_seek_proc onSeek, ma_
     ma_result result;
 
     (void)pAllocationCallbacks; /* Can't seem to find a way to configure memory allocations in libvorbis. */
-    
-    result = ma_libvorbis_init_internal(pConfig, pVorbis);
-    if (result != MA_SUCCESS) {
-        return result;
-    }
 
     if (onRead == NULL || onSeek == NULL) {
         return MA_INVALID_ARGS; /* onRead and onSeek are mandatory. */
+    }
+    
+    result = ma_libvorbis_init_internal(pConfig, pAllocationCallbacks, pVorbis);
+    if (result != MA_SUCCESS) {
+        return result;
     }
 
     pVorbis->onRead = onRead;
@@ -200,8 +187,10 @@ MA_API ma_result ma_libvorbis_init(ma_read_proc onRead, ma_seek_proc onSeek, ma_
         libvorbisCallbacks.close_func = NULL;
         libvorbisCallbacks.tell_func  = ma_libvorbis_vf_callback__tell;
 
-        libvorbisResult = ov_open_callbacks(pVorbis, &pVorbis->vf, NULL, 0, libvorbisCallbacks);
+        libvorbisResult = ov_open_callbacks(pVorbis, (OggVorbis_File*)pVorbis->vf, NULL, 0, libvorbisCallbacks);
         if (libvorbisResult < 0) {
+            ma_data_source_uninit(&pVorbis->ds);
+            ma_free(pVorbis->vf, pAllocationCallbacks);
             return MA_INVALID_FILE;
         }
 
@@ -221,7 +210,7 @@ MA_API ma_result ma_libvorbis_init_file(const char* pFilePath, const ma_decoding
 
     (void)pAllocationCallbacks; /* Can't seem to find a way to configure memory allocations in libvorbis. */
 
-    result = ma_libvorbis_init_internal(pConfig, pVorbis);
+    result = ma_libvorbis_init_internal(pConfig, pAllocationCallbacks, pVorbis);
     if (result != MA_SUCCESS) {
         return result;
     }
@@ -230,8 +219,10 @@ MA_API ma_result ma_libvorbis_init_file(const char* pFilePath, const ma_decoding
     {
         int libvorbisResult;
 
-        libvorbisResult = ov_fopen(pFilePath, &pVorbis->vf);
+        libvorbisResult = ov_fopen(pFilePath, (OggVorbis_File*)pVorbis->vf);
         if (libvorbisResult < 0) {
+            ma_data_source_uninit(&pVorbis->ds);
+            ma_free(pVorbis->vf, pAllocationCallbacks);
             return MA_INVALID_FILE;
         }
 
@@ -256,16 +247,17 @@ MA_API void ma_libvorbis_uninit(ma_libvorbis* pVorbis, const ma_allocation_callb
 
     #if !defined(MA_NO_LIBVORBIS)
     {
-        ov_clear(&pVorbis->vf);
+        ov_clear((OggVorbis_File*)pVorbis->vf);
     }
     #else
     {
         /* libvorbis is disabled. Should never hit this since initialization would have failed. */
-        MA_ASSERT(MA_FALSE);
+        assert(MA_FALSE);
     }
     #endif
 
     ma_data_source_uninit(&pVorbis->ds);
+    ma_free(pVorbis->vf, pAllocationCallbacks);
 }
 
 MA_API ma_result ma_libvorbis_read_pcm_frames(ma_libvorbis* pVorbis, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead)
@@ -295,19 +287,19 @@ MA_API ma_result ma_libvorbis_read_pcm_frames(ma_libvorbis* pVorbis, void* pFram
         totalFramesRead = 0;
         while (totalFramesRead < frameCount) {
             long libvorbisResult;
-            int framesToRead;
+            ma_uint64 framesToRead;
             ma_uint64 framesRemaining;
 
             framesRemaining = (frameCount - totalFramesRead);
             framesToRead = 1024;
             if (framesToRead > framesRemaining) {
-                framesToRead = (int)framesRemaining;
+                framesToRead = framesRemaining;
             }
 
             if (format == ma_format_f32) {
                 float** ppFramesF32;
 
-                libvorbisResult = ov_read_float(&pVorbis->vf, &ppFramesF32, framesToRead, NULL);
+                libvorbisResult = ov_read_float((OggVorbis_File*)pVorbis->vf, &ppFramesF32, (int)framesToRead, NULL);
                 if (libvorbisResult < 0) {
                     result = MA_ERROR;  /* Error while decoding. */
                     break;
@@ -322,7 +314,7 @@ MA_API ma_result ma_libvorbis_read_pcm_frames(ma_libvorbis* pVorbis, void* pFram
                     }
                 }
             } else {
-                libvorbisResult = ov_read(&pVorbis->vf, (char*)ma_offset_pcm_frames_ptr(pFramesOut, totalFramesRead, format, channels), framesToRead * ma_get_bytes_per_frame(format, channels), 0, 2, 1, NULL);
+                libvorbisResult = ov_read((OggVorbis_File*)pVorbis->vf, (char*)ma_offset_pcm_frames_ptr(pFramesOut, totalFramesRead, format, channels), (int)(framesToRead * ma_get_bytes_per_frame(format, channels)), 0, 2, 1, NULL);
                 if (libvorbisResult < 0) {
                     result = MA_ERROR;  /* Error while decoding. */
                     break;
@@ -351,7 +343,7 @@ MA_API ma_result ma_libvorbis_read_pcm_frames(ma_libvorbis* pVorbis, void* pFram
     #else
     {
         /* libvorbis is disabled. Should never hit this since initialization would have failed. */
-        MA_ASSERT(MA_FALSE);
+        assert(MA_FALSE);
 
         (void)pFramesOut;
         (void)frameCount;
@@ -370,7 +362,7 @@ MA_API ma_result ma_libvorbis_seek_to_pcm_frame(ma_libvorbis* pVorbis, ma_uint64
 
     #if !defined(MA_NO_LIBVORBIS)
     {
-        int libvorbisResult = ov_pcm_seek(&pVorbis->vf, (ogg_int64_t)frameIndex);
+        int libvorbisResult = ov_pcm_seek((OggVorbis_File*)pVorbis->vf, (ogg_int64_t)frameIndex);
         if (libvorbisResult != 0) {
             if (libvorbisResult == OV_ENOSEEK) {
                 return MA_INVALID_OPERATION;    /* Not seekable. */
@@ -386,7 +378,7 @@ MA_API ma_result ma_libvorbis_seek_to_pcm_frame(ma_libvorbis* pVorbis, ma_uint64
     #else
     {
         /* libvorbis is disabled. Should never hit this since initialization would have failed. */
-        MA_ASSERT(MA_FALSE);
+        assert(MA_FALSE);
 
         (void)frameIndex;
 
@@ -408,7 +400,7 @@ MA_API ma_result ma_libvorbis_get_data_format(ma_libvorbis* pVorbis, ma_format* 
         *pSampleRate = 0;
     }
     if (pChannelMap != NULL) {
-        MA_ZERO_MEMORY(pChannelMap, sizeof(*pChannelMap) * channelMapCap);
+        memset(pChannelMap, 0, sizeof(*pChannelMap) * channelMapCap);
     }
 
     if (pVorbis == NULL) {
@@ -421,7 +413,7 @@ MA_API ma_result ma_libvorbis_get_data_format(ma_libvorbis* pVorbis, ma_format* 
 
     #if !defined(MA_NO_LIBVORBIS)
     {
-        vorbis_info* pInfo = ov_info(&pVorbis->vf, 0);
+        vorbis_info* pInfo = ov_info((OggVorbis_File*)pVorbis->vf, 0);
         if (pInfo == NULL) {
             return MA_INVALID_OPERATION;
         }
@@ -435,7 +427,7 @@ MA_API ma_result ma_libvorbis_get_data_format(ma_libvorbis* pVorbis, ma_format* 
         }
 
         if (pChannelMap != NULL) {
-            ma_channel_map_init_standard(ma_standard_channel_map_default, pChannelMap, channelMapCap, pInfo->channels);
+            ma_channel_map_init_standard(ma_standard_channel_map_vorbis, pChannelMap, channelMapCap, pInfo->channels);
         }
 
         return MA_SUCCESS;
@@ -443,7 +435,7 @@ MA_API ma_result ma_libvorbis_get_data_format(ma_libvorbis* pVorbis, ma_format* 
     #else
     {
         /* libvorbis is disabled. Should never hit this since initialization would have failed. */
-        MA_ASSERT(MA_FALSE);
+        assert(MA_FALSE);
         return MA_NOT_IMPLEMENTED;
     }
     #endif
@@ -463,7 +455,7 @@ MA_API ma_result ma_libvorbis_get_cursor_in_pcm_frames(ma_libvorbis* pVorbis, ma
 
     #if !defined(MA_NO_LIBVORBIS)
     {
-        ogg_int64_t offset = ov_pcm_tell(&pVorbis->vf);
+        ogg_int64_t offset = ov_pcm_tell((OggVorbis_File*)pVorbis->vf);
         if (offset < 0) {
             return MA_INVALID_FILE;
         }
@@ -475,7 +467,7 @@ MA_API ma_result ma_libvorbis_get_cursor_in_pcm_frames(ma_libvorbis* pVorbis, ma
     #else
     {
         /* libvorbis is disabled. Should never hit this since initialization would have failed. */
-        MA_ASSERT(MA_FALSE);
+        assert(MA_FALSE);
         return MA_NOT_IMPLEMENTED;
     }
     #endif
@@ -495,17 +487,106 @@ MA_API ma_result ma_libvorbis_get_length_in_pcm_frames(ma_libvorbis* pVorbis, ma
 
     #if !defined(MA_NO_LIBVORBIS)
     {
-        /* I don't know how to reliably retrieve the length in frames using libvorbis, so returning 0 for now. */
-        *pLength = ov_pcm_total(&pVorbis->vf, -1);
+        /*
+        Will work in the supermajority of cases where a file has a single logical bitstream. Concatenated streams
+        are much harder to determine the length of since they can have sample rate changes, but they should be
+        extremely rare outside of unseekable livestreams anyway.
+        */
+        if (ov_streams((OggVorbis_File*)pVorbis->vf) == 1) {
+            ogg_int64_t length = ov_pcm_total((OggVorbis_File*)pVorbis->vf, 0);
+            if(length != OV_EINVAL) {
+                *pLength = (ma_uint64)length;
+            } else {
+                /* Unseekable. */
+            }
+        } else {
+            /* Concatenated stream. */
+        }
+
         return MA_SUCCESS;
     }
     #else
     {
         /* libvorbis is disabled. Should never hit this since initialization would have failed. */
-        MA_ASSERT(MA_FALSE);
+        assert(MA_FALSE);
         return MA_NOT_IMPLEMENTED;
     }
     #endif
 }
 
+
+/*
+The code below defines the vtable that you'll plug into your `ma_decoder_config` object.
+*/
+#if !defined(MA_NO_LIBVORBIS)
+static ma_result ma_decoding_backend_init__libvorbis(void* pUserData, ma_read_proc onRead, ma_seek_proc onSeek, ma_tell_proc onTell, void* pReadSeekTellUserData, const ma_decoding_backend_config* pConfig, const ma_allocation_callbacks* pAllocationCallbacks, ma_data_source** ppBackend)
+{
+    ma_result result;
+    ma_libvorbis* pVorbis;
+
+    (void)pUserData;
+
+    pVorbis = (ma_libvorbis*)ma_malloc(sizeof(*pVorbis), pAllocationCallbacks);
+    if (pVorbis == NULL) {
+        return MA_OUT_OF_MEMORY;
+    }
+
+    result = ma_libvorbis_init(onRead, onSeek, onTell, pReadSeekTellUserData, pConfig, pAllocationCallbacks, pVorbis);
+    if (result != MA_SUCCESS) {
+        ma_free(pVorbis, pAllocationCallbacks);
+        return result;
+    }
+
+    *ppBackend = pVorbis;
+
+    return MA_SUCCESS;
+}
+
+static ma_result ma_decoding_backend_init_file__libvorbis(void* pUserData, const char* pFilePath, const ma_decoding_backend_config* pConfig, const ma_allocation_callbacks* pAllocationCallbacks, ma_data_source** ppBackend)
+{
+    ma_result result;
+    ma_libvorbis* pVorbis;
+
+    (void)pUserData;
+
+    pVorbis = (ma_libvorbis*)ma_malloc(sizeof(*pVorbis), pAllocationCallbacks);
+    if (pVorbis == NULL) {
+        return MA_OUT_OF_MEMORY;
+    }
+
+    result = ma_libvorbis_init_file(pFilePath, pConfig, pAllocationCallbacks, pVorbis);
+    if (result != MA_SUCCESS) {
+        ma_free(pVorbis, pAllocationCallbacks);
+        return result;
+    }
+
+    *ppBackend = pVorbis;
+
+    return MA_SUCCESS;
+}
+
+static void ma_decoding_backend_uninit__libvorbis(void* pUserData, ma_data_source* pBackend, const ma_allocation_callbacks* pAllocationCallbacks)
+{
+    ma_libvorbis* pVorbis = (ma_libvorbis*)pBackend;
+
+    (void)pUserData;
+
+    ma_libvorbis_uninit(pVorbis, pAllocationCallbacks);
+    ma_free(pVorbis, pAllocationCallbacks);
+}
+
+
+static ma_decoding_backend_vtable ma_gDecodingBackendVTable_libvorbis =
+{
+    ma_decoding_backend_init__libvorbis,
+    ma_decoding_backend_init_file__libvorbis,
+    NULL, /* onInitFileW() */
+    NULL, /* onInitMemory() */
+    ma_decoding_backend_uninit__libvorbis
+};
+ma_decoding_backend_vtable* ma_decoding_backend_libvorbis = &ma_gDecodingBackendVTable_libvorbis;
+#else
+ma_decoding_backend_vtable* ma_decoding_backend_libvorbis = NULL;
 #endif
+
+#endif /* miniaudio_libvorbis_c */
